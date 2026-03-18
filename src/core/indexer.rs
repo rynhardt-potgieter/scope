@@ -27,6 +27,25 @@ pub struct IndexStats {
     pub language_stats: Vec<LanguageStats>,
 }
 
+/// Statistics from an incremental indexing run.
+#[derive(Debug, Default)]
+pub struct IncrementalStats {
+    /// Files that were modified.
+    pub modified: Vec<String>,
+    /// Files that were added.
+    pub added: Vec<String>,
+    /// Files that were deleted.
+    pub deleted: Vec<String>,
+    /// Total symbols after update.
+    pub symbol_count: usize,
+    /// Total edges after update.
+    pub edge_count: usize,
+    /// Duration of the indexing run.
+    pub duration: std::time::Duration,
+    /// True if nothing changed (index up to date).
+    pub up_to_date: bool,
+}
+
 /// Per-language statistics from an indexing run.
 #[derive(Debug)]
 pub struct LanguageStats {
@@ -120,6 +139,95 @@ impl Indexer {
             edge_count: total_edges,
             duration,
             language_stats,
+        })
+    }
+
+    /// Perform an incremental index of the project.
+    ///
+    /// Compares file hashes to detect added, modified, and deleted files.
+    /// Only re-parses changed files. Returns early if nothing changed.
+    pub fn index_incremental(
+        &mut self,
+        project_root: &Path,
+        config: &ProjectConfig,
+        graph: &mut Graph,
+    ) -> Result<IncrementalStats> {
+        let start = Instant::now();
+
+        // Collect all current files and compute hashes
+        let files = self.collect_files(project_root, config)?;
+        let mut current_hashes: HashMap<String, String> = HashMap::new();
+        let mut file_map: HashMap<String, (std::path::PathBuf, SupportedLanguage)> = HashMap::new();
+
+        for (rel_path, abs_path, lang) in &files {
+            let source = std::fs::read_to_string(abs_path)
+                .with_context(|| format!("Failed to read {}", abs_path.display()))?;
+            let hash = compute_hash(&source);
+            current_hashes.insert(rel_path.clone(), hash);
+            file_map.insert(rel_path.clone(), (abs_path.clone(), *lang));
+        }
+
+        // Compare against stored hashes
+        let changed = graph.get_changed_files(&current_hashes)?;
+
+        if changed.is_empty() {
+            return Ok(IncrementalStats {
+                up_to_date: true,
+                duration: start.elapsed(),
+                ..Default::default()
+            });
+        }
+
+        // Process deleted files
+        for file_path in &changed.deleted {
+            graph.delete_file_data(file_path)?;
+        }
+
+        // Process modified and added files
+        let files_to_reindex: Vec<String> = changed
+            .modified
+            .iter()
+            .chain(changed.added.iter())
+            .cloned()
+            .collect();
+
+        let mut updated_hashes: HashMap<String, String> = HashMap::new();
+
+        for rel_path in &files_to_reindex {
+            let (abs_path, lang) = file_map
+                .get(rel_path)
+                .ok_or_else(|| anyhow::anyhow!("File {} not found in file map", rel_path))?;
+
+            let source = std::fs::read_to_string(abs_path)
+                .with_context(|| format!("Failed to read {}", abs_path.display()))?;
+
+            let symbols = self.parser.extract_symbols(rel_path, &source, *lang)?;
+            let edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+
+            // Atomic per-file update: delete old data, insert new
+            graph.insert_file_data(rel_path, &symbols, &edges)?;
+
+            // Track the hash for this file
+            if let Some(hash) = current_hashes.get(rel_path) {
+                updated_hashes.insert(rel_path.clone(), hash.clone());
+            }
+        }
+
+        // Update file hashes for changed/added files
+        graph.update_file_hashes(&updated_hashes)?;
+
+        // Remove hashes for deleted files (already done by delete_file_data)
+
+        let duration = start.elapsed();
+
+        Ok(IncrementalStats {
+            modified: changed.modified,
+            added: changed.added,
+            deleted: changed.deleted,
+            symbol_count: graph.symbol_count()?,
+            edge_count: graph.edge_count()?,
+            duration,
+            up_to_date: false,
         })
     }
 

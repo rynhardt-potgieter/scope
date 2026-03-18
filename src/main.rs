@@ -171,7 +171,7 @@ fn main() -> Result<()> {
         Commands::Refs(args) => commands::refs::run(args, &project_root),
         Commands::Deps(args) => commands::deps::run(args, &project_root),
         Commands::Rdeps(args) => commands::rdeps::run(args),
-        Commands::Impact(args) => commands::impact::run(args),
+        Commands::Impact(args) => commands::impact::run(args, &project_root),
         Commands::Find(args) => commands::find::run(args),
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),

@@ -9,7 +9,9 @@
 
 use std::collections::HashMap;
 
-use crate::core::graph::{CallerInfo, ClassRelationships, Dependency, Reference, Symbol};
+use crate::core::graph::{
+    CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol,
+};
 
 /// The separator line used between header and body in all command output.
 pub const SEPARATOR: &str =
@@ -506,6 +508,123 @@ pub fn print_file_deps(file_path: &str, deps: &[Dependency], max_depth: usize) {
 
         println!();
     }
+}
+
+/// Print an impact analysis result.
+///
+/// Format:
+/// ```text
+/// Impact analysis: processPayment
+/// ──────────────────────────────────────────────────────────────────────────────
+/// Direct callers (11):
+///   OrderController.checkout          src/controllers/order.ts
+///   SubscriptionService.renew         src/services/subscription.ts
+///   ... (9 more)
+///
+/// Second-degree (3):
+///   src/api/routes/checkout.ts        → imports OrderController
+///
+/// Test files affected: 6
+///   tests/unit/payment.test.ts
+///   tests/unit/order.test.ts
+///   ... (4 more)
+/// ```
+pub fn print_impact(symbol_name: &str, result: &ImpactResult) {
+    println!("Impact analysis: {symbol_name}");
+    println!("{SEPARATOR}");
+
+    if result.nodes_by_depth.is_empty() && result.test_files.is_empty() {
+        println!("(no impact detected)");
+        return;
+    }
+
+    for (depth, nodes) in &result.nodes_by_depth {
+        let depth_label = impact_depth_label(*depth);
+        println!("{depth_label} ({}):", nodes.len());
+
+        let max_display = 10;
+        let display_nodes = if nodes.len() > max_display {
+            &nodes[..max_display]
+        } else {
+            nodes
+        };
+
+        for node in display_nodes {
+            let path = normalize_path(&node.file_path);
+            println!("  {:<40}{}", node.name, path);
+        }
+
+        if nodes.len() > max_display {
+            println!("  ... ({} more)", nodes.len() - max_display);
+        }
+
+        println!();
+    }
+
+    if !result.test_files.is_empty() {
+        println!("Test files affected: {}", result.test_files.len());
+
+        let max_display = 10;
+        let display_tests = if result.test_files.len() > max_display {
+            &result.test_files[..max_display]
+        } else {
+            &result.test_files
+        };
+
+        for node in display_tests {
+            let path = normalize_path(&node.file_path);
+            println!("  {path}");
+        }
+
+        if result.test_files.len() > max_display {
+            println!("  ... ({} more)", result.test_files.len() - max_display);
+        }
+    }
+}
+
+/// Human-readable label for an impact depth level.
+fn impact_depth_label(depth: usize) -> &'static str {
+    match depth {
+        1 => "Direct callers",
+        2 => "Second-degree",
+        3 => "Third-degree",
+        _ => "Further impact",
+    }
+}
+
+/// Print incremental indexing results.
+///
+/// Format:
+/// ```text
+/// 3 files changed. Re-indexing...
+///   Modified: src/payments/processor.ts
+///   Added:    src/payments/refund.ts
+/// Updated in 0.3s.
+/// ```
+pub fn print_incremental_result(
+    modified: &[String],
+    added: &[String],
+    deleted: &[String],
+    duration_secs: f64,
+) {
+    let total = modified.len() + added.len() + deleted.len();
+    eprintln!(
+        "{} file{} changed. Re-indexing...",
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+
+    for path in modified {
+        eprintln!("  Modified: {}", normalize_path(path));
+    }
+    for path in added {
+        eprintln!("  Added:    {}", normalize_path(path));
+    }
+    for path in deleted {
+        eprintln!("  Deleted:  {}", normalize_path(path));
+    }
+
+    eprintln!("Updated in {duration_secs:.1}s.");
 }
 
 /// Convert an edge kind string to a human-readable label for grouped output.

@@ -115,6 +115,32 @@ pub struct Reference {
     pub context: String,
 }
 
+/// A node in an impact analysis result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImpactNode {
+    /// Symbol ID.
+    pub id: String,
+    /// Symbol name.
+    pub name: String,
+    /// File path where this symbol is defined.
+    pub file_path: String,
+    /// Symbol kind (function, class, method, etc.).
+    pub kind: String,
+    /// Depth in the impact graph (1 = direct caller).
+    pub depth: usize,
+}
+
+/// Result of an impact analysis query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImpactResult {
+    /// Nodes grouped by depth level: `(depth, nodes_at_that_depth)`.
+    pub nodes_by_depth: Vec<(usize, Vec<ImpactNode>)>,
+    /// Test files that are affected (separated from main results).
+    pub test_files: Vec<ImpactNode>,
+    /// Total number of distinct affected symbols (excluding test files).
+    pub total_affected: usize,
+}
+
 /// A dependency of a symbol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dependency {
@@ -996,6 +1022,158 @@ impl Graph {
             .unwrap_or(false))
     }
 
+    /// Find the transitive impact (blast radius) of changing a symbol.
+    ///
+    /// Performs a recursive reverse dependency traversal: finds all symbols
+    /// that directly or transitively depend on the given symbol. Results are
+    /// grouped by depth and test files are separated.
+    ///
+    /// Uses the same name-matching pattern as `find_refs` (exact name, exact
+    /// ID, or `LIKE '%::Name'`) to match `to_id` in the edges table.
+    pub fn find_impact(&self, symbol_name: &str, max_depth: usize) -> Result<ImpactResult> {
+        let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Symbol '{}' not found in index.\n\
+                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                symbol_name,
+                symbol_name
+            )
+        })?;
+
+        // Collect all IDs to seed the impact traversal
+        let mut seed_ids = vec![symbol.id.clone()];
+
+        // For classes, also include child methods as seeds
+        if symbol.kind == "class" || symbol.kind == "struct" || symbol.kind == "interface" {
+            let methods = self.get_methods(&symbol.id)?;
+            for m in &methods {
+                seed_ids.push(m.id.clone());
+            }
+        }
+
+        self.run_impact_query(&seed_ids, max_depth)
+    }
+
+    /// Find the impact of changing any symbol in a file.
+    ///
+    /// Collects all symbols in the file and runs impact analysis for each,
+    /// deduplicating results.
+    pub fn find_file_impact(&self, file_path: &str, max_depth: usize) -> Result<ImpactResult> {
+        let symbols = self.get_file_symbols(file_path)?;
+        if symbols.is_empty() {
+            anyhow::bail!(
+                "No symbols found for file '{}'.\n\
+                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                file_path
+            );
+        }
+
+        let seed_ids: Vec<String> = symbols.iter().map(|s| s.id.clone()).collect();
+        self.run_impact_query(&seed_ids, max_depth)
+    }
+
+    /// Execute the recursive CTE impact query for a set of seed symbol IDs.
+    fn run_impact_query(&self, seed_ids: &[String], max_depth: usize) -> Result<ImpactResult> {
+        // Build seed conditions: for each seed ID, match edges where
+        // to_id equals the ID exactly, matches the name, or ends with ::Name
+        let mut seed_unions: Vec<String> = Vec::new();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        let mut idx = 1usize;
+
+        for seed_id in seed_ids {
+            // Extract the bare name from the ID
+            let bare_name = self.symbol_name_from_id(seed_id);
+            let like_pattern = format!("%::{bare_name}");
+
+            seed_unions.push(format!(
+                "SELECT e.from_id, 1, CAST(e.from_id AS TEXT) \
+                 FROM edges e WHERE (e.to_id = ?{idx} OR e.to_id = ?{} OR e.to_id LIKE ?{})",
+                idx + 1,
+                idx + 2
+            ));
+            param_values.push(Box::new(seed_id.clone()));
+            param_values.push(Box::new(bare_name));
+            param_values.push(Box::new(like_pattern));
+            idx += 3;
+        }
+
+        let seed_sql = seed_unions.join(" UNION ALL ");
+        let depth_param = idx;
+        param_values.push(Box::new(max_depth as i64));
+
+        let sql = format!(
+            "WITH RECURSIVE impact(id, depth, path) AS (
+                {seed_sql}
+                UNION ALL
+                SELECT e.from_id, i.depth + 1, i.path || ',' || e.from_id
+                FROM edges e
+                JOIN impact i ON e.to_id = i.id
+                WHERE i.depth < ?{depth_param}
+                  AND (',' || i.path || ',') NOT LIKE '%,' || e.from_id || ',%'
+            )
+            SELECT DISTINCT i.id, MIN(i.depth) as min_depth, s.name, s.file_path, s.kind
+            FROM impact i
+            JOIN symbols s ON s.id = i.id
+            GROUP BY i.id
+            ORDER BY min_depth, s.file_path"
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params_ref: Vec<&dyn rusqlite::ToSql> = param_values
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
+            Ok(ImpactNode {
+                id: row.get(0)?,
+                depth: row.get::<_, i64>(1)? as usize,
+                name: row.get(2)?,
+                file_path: row.get(3)?,
+                kind: row.get(4)?,
+            })
+        })?;
+
+        let mut all_nodes: Vec<ImpactNode> = Vec::new();
+        for row in rows {
+            let node = row?;
+            // Skip seed IDs from appearing in the results
+            if seed_ids.contains(&node.id) {
+                continue;
+            }
+            all_nodes.push(node);
+        }
+
+        // Separate test files from non-test files
+        let mut test_files: Vec<ImpactNode> = Vec::new();
+        let mut non_test_nodes: Vec<ImpactNode> = Vec::new();
+
+        for node in all_nodes {
+            if is_test_file(&node.file_path) {
+                test_files.push(node);
+            } else {
+                non_test_nodes.push(node);
+            }
+        }
+
+        let total_affected = non_test_nodes.len();
+
+        // Group non-test nodes by depth
+        let mut depth_map: std::collections::BTreeMap<usize, Vec<ImpactNode>> =
+            std::collections::BTreeMap::new();
+        for node in non_test_nodes {
+            depth_map.entry(node.depth).or_default().push(node);
+        }
+
+        let nodes_by_depth: Vec<(usize, Vec<ImpactNode>)> = depth_map.into_iter().collect();
+
+        Ok(ImpactResult {
+            nodes_by_depth,
+            test_files,
+            total_affected,
+        })
+    }
+
     /// Insert a batch of symbols and edges within a single transaction.
     ///
     /// Used during indexing to efficiently store all extracted data for a file.
@@ -1181,4 +1359,20 @@ impl Graph {
         )?;
         Ok(())
     }
+}
+
+/// Check if a file path belongs to a test file.
+///
+/// Heuristic: returns `true` if the lowercase path contains common test path
+/// segments or test file naming patterns.
+pub fn is_test_file(file_path: &str) -> bool {
+    let lower = file_path.to_lowercase().replace('\\', "/");
+    lower.contains("/test/")
+        || lower.contains("/tests/")
+        || lower.contains(".test.")
+        || lower.contains(".spec.")
+        || lower.contains("_test.")
+        || lower.contains("_spec.")
+        || lower.starts_with("test/")
+        || lower.starts_with("tests/")
 }

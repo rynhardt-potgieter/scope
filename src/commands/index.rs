@@ -2,6 +2,9 @@
 ///
 /// Walks the project's source files, parses them with tree-sitter,
 /// and stores symbols and edges in the SQLite graph database.
+///
+/// By default, runs incrementally: only re-indexes changed files.
+/// Use `--full` to force a complete rebuild.
 use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
@@ -9,6 +12,7 @@ use std::path::Path;
 use crate::config::ProjectConfig;
 use crate::core::graph::Graph;
 use crate::core::indexer::Indexer;
+use crate::output::formatter;
 
 /// Arguments for the `sc index` command.
 #[derive(Args, Debug)]
@@ -37,17 +41,30 @@ pub fn run(args: &IndexArgs, project_root: &Path) -> Result<()> {
     let db_path = scope_dir.join("graph.db");
     let mut graph = Graph::open(&db_path)?;
 
-    if !args.full {
-        eprintln!("Note: incremental indexing not yet available, performing full index.");
-    }
-
-    // Create indexer and run
+    // Create indexer
     let mut indexer = Indexer::new()?;
-    let stats = indexer.index_full(project_root, &config, &mut graph)?;
+
+    if args.full {
+        run_full_index(args, &mut indexer, project_root, &config, &mut graph)
+    } else {
+        run_incremental_index(args, &mut indexer, project_root, &config, &mut graph)
+    }
+}
+
+/// Run a full index rebuild.
+fn run_full_index(
+    args: &IndexArgs,
+    indexer: &mut Indexer,
+    project_root: &Path,
+    config: &ProjectConfig,
+    graph: &mut Graph,
+) -> Result<()> {
+    let stats = indexer.index_full(project_root, config, graph)?;
 
     if args.json {
         let output = serde_json::json!({
             "command": "index",
+            "mode": "full",
             "file_count": stats.file_count,
             "symbol_count": stats.symbol_count,
             "edge_count": stats.edge_count,
@@ -73,6 +90,55 @@ pub fn run(args: &IndexArgs, project_root: &Path) -> Result<()> {
             stats.duration.as_secs_f64(),
             stats.symbol_count,
             stats.edge_count
+        );
+    }
+
+    Ok(())
+}
+
+/// Run an incremental index (default).
+fn run_incremental_index(
+    args: &IndexArgs,
+    indexer: &mut Indexer,
+    project_root: &Path,
+    config: &ProjectConfig,
+    graph: &mut Graph,
+) -> Result<()> {
+    let stats = indexer.index_incremental(project_root, config, graph)?;
+
+    if stats.up_to_date {
+        if args.json {
+            let output = serde_json::json!({
+                "command": "index",
+                "mode": "incremental",
+                "up_to_date": true,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Index up to date.");
+        }
+        return Ok(());
+    }
+
+    if args.json {
+        let output = serde_json::json!({
+            "command": "index",
+            "mode": "incremental",
+            "up_to_date": false,
+            "modified": stats.modified,
+            "added": stats.added,
+            "deleted": stats.deleted,
+            "symbol_count": stats.symbol_count,
+            "edge_count": stats.edge_count,
+            "duration_secs": stats.duration.as_secs_f64(),
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_incremental_result(
+            &stats.modified,
+            &stats.added,
+            &stats.deleted,
+            stats.duration.as_secs_f64(),
         );
     }
 
