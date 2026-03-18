@@ -98,6 +98,38 @@ pub struct CallerInfo {
     pub count: usize,
 }
 
+/// A reference to a symbol from elsewhere in the codebase.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reference {
+    /// The ID of the symbol making the reference.
+    pub from_id: String,
+    /// The human-readable name of the referencing symbol.
+    pub from_name: String,
+    /// The kind of reference (calls, imports, extends, etc.).
+    pub kind: String,
+    /// File path where the reference occurs.
+    pub file_path: String,
+    /// Line number of the reference, if known.
+    pub line: Option<i64>,
+    /// Context string (caller name or description).
+    pub context: String,
+}
+
+/// A dependency of a symbol.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dependency {
+    /// The name of the dependency.
+    pub name: String,
+    /// File path of the dependency, if it exists in the index.
+    pub file_path: Option<String>,
+    /// Kind of dependency relationship (imports, calls, extends, etc.).
+    pub kind: String,
+    /// True if the dependency is not in the index (external package).
+    pub is_external: bool,
+    /// Depth in the dependency tree (1 = direct).
+    pub depth: usize,
+}
+
 impl Symbol {
     /// Build a `Symbol` from a rusqlite row.
     pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
@@ -133,6 +165,7 @@ impl Graph {
             PRAGMA cache_size = -64000;
             PRAGMA temp_store = MEMORY;
             PRAGMA foreign_keys = ON;
+            PRAGMA case_sensitive_like = ON;
         ",
         )?;
 
@@ -429,6 +462,538 @@ impl Graph {
                 self.symbol_name_from_id(from_id)
             }
         }
+    }
+
+    /// Find all references to a symbol, with optional kind filtering and limit.
+    ///
+    /// Returns `(references, total_count)` where `total_count` is the untruncated
+    /// count used for displaying "N more" in truncated output.
+    ///
+    /// Matches edges where `to_id` is either:
+    /// - The exact symbol ID (e.g. `src/payments/service.ts::PaymentService::class`)
+    /// - The bare symbol name (e.g. `PaymentService`)
+    /// - A relative-path qualified name ending with `::SymbolName`
+    pub fn find_refs(
+        &self,
+        symbol_name: &str,
+        kinds: Option<&[&str]>,
+        limit: usize,
+    ) -> Result<(Vec<Reference>, usize)> {
+        let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Symbol '{}' not found in index.\n\
+                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                symbol_name,
+                symbol_name
+            )
+        })?;
+
+        // Collect all names to match against to_id
+        let mut match_names = vec![symbol.name.clone(), symbol.id.clone()];
+
+        // For classes, also include child method names
+        if symbol.kind == "class" || symbol.kind == "struct" || symbol.kind == "interface" {
+            let methods = self.get_methods(&symbol.id)?;
+            for m in &methods {
+                match_names.push(m.name.clone());
+                match_names.push(m.id.clone());
+            }
+        }
+
+        // Build the to_id matching clause:
+        // Match exact name, exact ID, or to_id ending with ::Name
+        let match_conditions = self.build_to_id_match_clause(&match_names, 1);
+        let next_param = match_names.len() * 2 + 1; // each name uses 2 params (exact + LIKE)
+
+        let (kind_clause, kind_values): (String, Vec<String>) = if let Some(k) = kinds {
+            let placeholders: Vec<String> = (next_param..next_param + k.len())
+                .map(|i| format!("?{i}"))
+                .collect();
+            (
+                format!("AND e.kind IN ({})", placeholders.join(", ")),
+                k.iter().map(|s| s.to_string()).collect(),
+            )
+        } else {
+            (String::new(), Vec::new())
+        };
+
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for name in &match_names {
+            param_values.push(Box::new(name.clone()));
+            param_values.push(Box::new(format!("%::{name}")));
+        }
+        for kv in &kind_values {
+            param_values.push(Box::new(kv.clone()));
+        }
+
+        // Count total
+        let count_sql =
+            format!("SELECT COUNT(*) FROM edges e WHERE ({match_conditions}) {kind_clause}");
+        let mut count_stmt = self.conn.prepare(&count_sql)?;
+        let params_ref: Vec<&dyn rusqlite::ToSql> = param_values
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+        let total: i64 = count_stmt.query_row(params_ref.as_slice(), |row| row.get(0))?;
+        let total = total as usize;
+
+        // Fetch refs with limit
+        let limit_idx = param_values.len() + 1;
+        let fetch_sql = format!(
+            "SELECT e.from_id, e.kind, e.file_path, e.line
+             FROM edges e
+             WHERE ({match_conditions}) {kind_clause}
+             ORDER BY e.kind, e.file_path, e.line
+             LIMIT ?{limit_idx}"
+        );
+        let mut stmt = self.conn.prepare(&fetch_sql)?;
+
+        let mut fetch_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for name in &match_names {
+            fetch_params.push(Box::new(name.clone()));
+            fetch_params.push(Box::new(format!("%::{name}")));
+        }
+        for kv in &kind_values {
+            fetch_params.push(Box::new(kv.clone()));
+        }
+        fetch_params.push(Box::new(limit as i64));
+        let fetch_ref: Vec<&dyn rusqlite::ToSql> = fetch_params
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(fetch_ref.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })?;
+
+        let mut refs = Vec::new();
+        for row in rows {
+            let (from_id, kind, file_path, line) = row?;
+            let context = self.caller_display_name(&from_id);
+            let from_name = self.symbol_name_from_id(&from_id);
+            refs.push(Reference {
+                from_id,
+                from_name,
+                kind,
+                file_path,
+                line,
+                context,
+            });
+        }
+
+        Ok((refs, total))
+    }
+
+    /// Build a SQL clause matching `to_id` against a set of symbol names.
+    ///
+    /// For each name, matches: `e.to_id = ?N OR e.to_id LIKE ?N` (pattern `%::Name`).
+    /// `start_param` is the 1-based parameter index to begin with.
+    fn build_to_id_match_clause(&self, names: &[String], start_param: usize) -> String {
+        let mut conditions = Vec::new();
+        let mut idx = start_param;
+        for _name in names {
+            conditions.push(format!("e.to_id = ?{idx} OR e.to_id LIKE ?{}", idx + 1));
+            idx += 2;
+        }
+        conditions.join(" OR ")
+    }
+
+    /// Find references to a symbol, grouped by kind.
+    ///
+    /// Used for class symbols where refs should be displayed in groups
+    /// (instantiated, extended, used as type, imported).
+    #[allow(clippy::type_complexity)]
+    pub fn find_refs_grouped(
+        &self,
+        symbol_name: &str,
+        limit: usize,
+    ) -> Result<(Vec<(String, Vec<Reference>)>, usize)> {
+        let (refs, total) = self.find_refs(symbol_name, None, limit)?;
+
+        // Group by kind, preserving insertion order
+        let mut groups: Vec<(String, Vec<Reference>)> = Vec::new();
+        for r in refs {
+            if let Some(group) = groups.iter_mut().find(|(k, _)| *k == r.kind) {
+                group.1.push(r);
+            } else {
+                let kind = r.kind.clone();
+                groups.push((kind, vec![r]));
+            }
+        }
+
+        Ok((groups, total))
+    }
+
+    /// Find all references to symbols in a file.
+    ///
+    /// Aggregates refs to every symbol defined in the given file path.
+    pub fn find_file_refs(
+        &self,
+        file_path: &str,
+        kinds: Option<&[&str]>,
+        limit: usize,
+    ) -> Result<(Vec<Reference>, usize)> {
+        let symbols = self.get_file_symbols(file_path)?;
+        if symbols.is_empty() {
+            anyhow::bail!(
+                "No symbols found for file '{}'.\n\
+                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                file_path
+            );
+        }
+
+        // Collect all names and IDs to match against to_id
+        let mut match_names: Vec<String> = Vec::new();
+        for sym in &symbols {
+            match_names.push(sym.name.clone());
+            match_names.push(sym.id.clone());
+        }
+
+        let match_conditions = self.build_to_id_match_clause(&match_names, 1);
+        let next_param = match_names.len() * 2 + 1;
+
+        let (kind_clause, kind_values): (String, Vec<String>) = if let Some(k) = kinds {
+            let placeholders: Vec<String> = (next_param..next_param + k.len())
+                .map(|i| format!("?{i}"))
+                .collect();
+            (
+                format!("AND e.kind IN ({})", placeholders.join(", ")),
+                k.iter().map(|s| s.to_string()).collect(),
+            )
+        } else {
+            (String::new(), Vec::new())
+        };
+
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for name in &match_names {
+            param_values.push(Box::new(name.clone()));
+            param_values.push(Box::new(format!("%::{name}")));
+        }
+        for kv in &kind_values {
+            param_values.push(Box::new(kv.clone()));
+        }
+
+        // Count
+        let count_sql =
+            format!("SELECT COUNT(*) FROM edges e WHERE ({match_conditions}) {kind_clause}");
+        let mut count_stmt = self.conn.prepare(&count_sql)?;
+        let params_ref: Vec<&dyn rusqlite::ToSql> = param_values
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+        let total: i64 = count_stmt.query_row(params_ref.as_slice(), |row| row.get(0))?;
+        let total = total as usize;
+
+        // Fetch
+        let limit_idx = param_values.len() + 1;
+        let fetch_sql = format!(
+            "SELECT e.from_id, e.kind, e.file_path, e.line
+             FROM edges e
+             WHERE ({match_conditions}) {kind_clause}
+             ORDER BY e.kind, e.file_path, e.line
+             LIMIT ?{limit_idx}"
+        );
+        let mut stmt = self.conn.prepare(&fetch_sql)?;
+        let mut fetch_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for name in &match_names {
+            fetch_params.push(Box::new(name.clone()));
+            fetch_params.push(Box::new(format!("%::{name}")));
+        }
+        for kv in &kind_values {
+            fetch_params.push(Box::new(kv.clone()));
+        }
+        fetch_params.push(Box::new(limit as i64));
+        let fetch_ref: Vec<&dyn rusqlite::ToSql> = fetch_params
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(fetch_ref.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })?;
+
+        let mut refs = Vec::new();
+        for row in rows {
+            let (from_id, kind, file_path, line) = row?;
+            let context = self.caller_display_name(&from_id);
+            let from_name = self.symbol_name_from_id(&from_id);
+            refs.push(Reference {
+                from_id,
+                from_name,
+                kind,
+                file_path,
+                line,
+                context,
+            });
+        }
+
+        Ok((refs, total))
+    }
+
+    /// Find dependencies of a symbol (outgoing edges).
+    ///
+    /// For depth 1: returns direct dependencies.
+    /// For depth > 1: uses a recursive CTE to traverse transitive dependencies.
+    /// For classes: includes dependencies from all child methods.
+    ///
+    /// Also includes edges from the `__module__` synthetic node for the symbol's
+    /// file, since tree-sitter extractors often attribute edges to the module level.
+    pub fn find_deps(&self, symbol_name: &str, max_depth: usize) -> Result<Vec<Dependency>> {
+        let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Symbol '{}' not found in index.\n\
+                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                symbol_name,
+                symbol_name
+            )
+        })?;
+
+        // Collect source IDs: symbol itself, child methods, and __module__ synthetic IDs
+        let mut source_ids = vec![symbol.id.clone()];
+        if symbol.kind == "class" || symbol.kind == "struct" || symbol.kind == "interface" {
+            let methods = self.get_methods(&symbol.id)?;
+            for m in &methods {
+                source_ids.push(m.id.clone());
+            }
+        }
+
+        // Also include the __module__ synthetic ID for the symbol's file,
+        // since many edges use it as from_id
+        let module_id = format!("{}::__module__::function", symbol.file_path);
+        if !source_ids.contains(&module_id) {
+            source_ids.push(module_id);
+        }
+
+        if max_depth <= 1 {
+            self.find_direct_deps(&source_ids)
+        } else {
+            self.find_transitive_deps(&source_ids, max_depth)
+        }
+    }
+
+    /// Find dependencies of all symbols in a file.
+    pub fn find_file_deps(&self, file_path: &str, max_depth: usize) -> Result<Vec<Dependency>> {
+        let symbols = self.get_file_symbols(file_path)?;
+        if symbols.is_empty() {
+            anyhow::bail!(
+                "No symbols found for file '{}'.\n\
+                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                file_path
+            );
+        }
+
+        let mut source_ids: Vec<String> = symbols.iter().map(|s| s.id.clone()).collect();
+
+        // Also include the __module__ synthetic ID for this file
+        let module_id = format!("{file_path}::__module__::function");
+        if !source_ids.contains(&module_id) {
+            source_ids.push(module_id);
+        }
+
+        if max_depth <= 1 {
+            self.find_direct_deps(&source_ids)
+        } else {
+            self.find_transitive_deps(&source_ids, max_depth)
+        }
+    }
+
+    /// Get direct (depth-1) dependencies from a set of source symbol IDs.
+    fn find_direct_deps(&self, source_ids: &[String]) -> Result<Vec<Dependency>> {
+        let placeholders: Vec<String> = (1..=source_ids.len()).map(|i| format!("?{i}")).collect();
+        let id_clause = placeholders.join(", ");
+
+        let sql = format!(
+            "SELECT DISTINCT e.to_id, e.kind
+             FROM edges e
+             WHERE e.from_id IN ({id_clause})
+             ORDER BY e.kind, e.to_id"
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> = source_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(params.as_slice(), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        let mut deps = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for row in rows {
+            let (to_id, kind) = row?;
+
+            // Skip self-references
+            if source_ids.contains(&to_id) {
+                continue;
+            }
+
+            // Dedup by (name, kind) to avoid listing same dep multiple times
+            let name = self.symbol_name_from_id(&to_id);
+            let key = format!("{name}::{kind}");
+            if !seen.insert(key) {
+                continue;
+            }
+
+            // Check if the dep exists in the index — try by ID first, then by name
+            let sym_info = self.resolve_dep_symbol(&to_id, &name)?;
+
+            let (dep_name, file_path, is_external) = match sym_info {
+                Some((n, fp)) => (n, Some(fp), false),
+                None => (name, None, true),
+            };
+
+            deps.push(Dependency {
+                name: dep_name,
+                file_path,
+                kind,
+                is_external,
+                depth: 1,
+            });
+        }
+
+        Ok(deps)
+    }
+
+    /// Resolve a dependency target to a symbol in the index.
+    ///
+    /// Tries: exact ID match, then name match (for relative-path style to_ids).
+    fn resolve_dep_symbol(
+        &self,
+        to_id: &str,
+        extracted_name: &str,
+    ) -> Result<Option<(String, String)>> {
+        // Try exact ID match
+        let by_id: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT name, file_path FROM symbols WHERE id = ?1",
+                params![to_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+
+        if by_id.is_some() {
+            return Ok(by_id);
+        }
+
+        // Try by name — prefer top-level symbols (no parent)
+        let by_name: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT name, file_path FROM symbols WHERE name = ?1
+                 ORDER BY (CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END)
+                 LIMIT 1",
+                params![extracted_name],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+
+        Ok(by_name)
+    }
+
+    /// Get transitive dependencies using a recursive CTE.
+    fn find_transitive_deps(
+        &self,
+        source_ids: &[String],
+        max_depth: usize,
+    ) -> Result<Vec<Dependency>> {
+        // We need a temp table approach since CTEs can't easily take dynamic IN clauses
+        // for recursive seeds. Instead, build the seed UNION for all source IDs.
+        let seed_conditions: Vec<String> = (1..=source_ids.len())
+            .map(|i| format!("SELECT e.to_id, e.kind, 1 FROM edges e WHERE e.from_id = ?{i}"))
+            .collect();
+        let seed_union = seed_conditions.join(" UNION ALL ");
+
+        let depth_param_idx = source_ids.len() + 1;
+        let sql = format!(
+            "WITH RECURSIVE deps(id, kind, depth) AS (
+                {seed_union}
+                UNION
+                SELECT e.to_id, e.kind, d.depth + 1
+                FROM edges e
+                JOIN deps d ON e.from_id = d.id
+                WHERE d.depth < ?{depth_param_idx}
+            )
+            SELECT DISTINCT d.id, d.kind, MIN(d.depth) as min_depth
+            FROM deps d
+            GROUP BY d.id, d.kind
+            ORDER BY min_depth, d.kind, d.id"
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for id in source_ids {
+            param_values.push(Box::new(id.clone()));
+        }
+        param_values.push(Box::new(max_depth as i64));
+        let params_ref: Vec<&dyn rusqlite::ToSql> = param_values
+            .iter()
+            .map(|b| b.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+
+        let mut deps = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for row in rows {
+            let (to_id, kind, depth) = row?;
+
+            // Skip self-references
+            if source_ids.contains(&to_id) {
+                continue;
+            }
+
+            let name = self.symbol_name_from_id(&to_id);
+            let key = format!("{name}::{kind}");
+            if !seen.insert(key) {
+                continue;
+            }
+
+            let sym_info = self.resolve_dep_symbol(&to_id, &name)?;
+
+            let (dep_name, file_path, is_external) = match sym_info {
+                Some((n, fp)) => (n, Some(fp), false),
+                None => (name, None, true),
+            };
+
+            deps.push(Dependency {
+                name: dep_name,
+                file_path,
+                kind,
+                is_external,
+                depth: depth as usize,
+            });
+        }
+
+        Ok(deps)
+    }
+
+    /// Check if a symbol is a class (or struct/interface — types that get grouped refs).
+    pub fn is_class_like(&self, symbol_name: &str) -> Result<bool> {
+        let symbol = self.find_symbol(symbol_name)?;
+        Ok(symbol
+            .map(|s| s.kind == "class" || s.kind == "struct" || s.kind == "interface")
+            .unwrap_or(false))
     }
 
     /// Insert a batch of symbols and edges within a single transaction.

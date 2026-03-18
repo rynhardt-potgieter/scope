@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use crate::core::graph::{CallerInfo, ClassRelationships, Symbol};
+use crate::core::graph::{CallerInfo, ClassRelationships, Dependency, Reference, Symbol};
 
 /// The separator line used between header and body in all command output.
 pub const SEPARATOR: &str =
@@ -284,4 +284,240 @@ fn method_display_line(method: &Symbol) -> String {
         .as_deref()
         .unwrap_or(&method.name)
         .to_string()
+}
+
+/// Print references to a function or method (flat list).
+///
+/// Format:
+/// ```text
+/// processPayment — 11 references
+/// ──────────────────────────────────────────────────────────────────────────────
+/// src/controllers/order.ts:89       OrderController.checkout
+/// src/controllers/order.ts:134      OrderController.retryPayment
+/// ... 8 more (use --limit to show more)
+/// ```
+pub fn print_refs(symbol_name: &str, refs: &[Reference], total: usize) {
+    println!(
+        "{} \u{2014} {} reference{}",
+        symbol_name,
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+    println!("{SEPARATOR}");
+
+    for r in refs {
+        let path = normalize_path(&r.file_path);
+        let location = if let Some(line) = r.line {
+            format!("{path}:{line}")
+        } else {
+            path
+        };
+        println!("{:<40}{}", location, r.context);
+    }
+
+    if refs.len() < total {
+        println!("... {} more (use --limit to show more)", total - refs.len());
+    }
+}
+
+/// Print references to a class symbol, grouped by kind.
+///
+/// Format:
+/// ```text
+/// PaymentService — 18 references
+/// ──────────────────────────────────────────────────────────────────────────────
+/// instantiated (4):
+///   src/controllers/order.ts:23       new PaymentService(config)
+///   ...
+///
+/// extended (1):
+///   src/payments/stripe-service.ts:4  class StripeService extends PaymentService
+/// ```
+pub fn print_refs_grouped(symbol_name: &str, groups: &[(String, Vec<Reference>)], total: usize) {
+    println!(
+        "{} \u{2014} {} reference{}",
+        symbol_name,
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+    println!("{SEPARATOR}");
+
+    let mut shown = 0;
+    for (kind, refs) in groups {
+        let kind_label = humanize_edge_kind(kind);
+        println!("{kind_label} ({}):", refs.len());
+        for r in refs {
+            let path = normalize_path(&r.file_path);
+            let location = if let Some(line) = r.line {
+                format!("{path}:{line}")
+            } else {
+                path
+            };
+            println!("  {:<38}{}", location, r.context);
+        }
+        shown += refs.len();
+        println!();
+    }
+
+    if shown < total {
+        println!("... {} more (use --limit to show more)", total - shown);
+    }
+}
+
+/// Print file-level references.
+///
+/// Same as `print_refs` but with the file path as header.
+pub fn print_file_refs(file_path: &str, refs: &[Reference], total: usize) {
+    let path = normalize_path(file_path);
+    println!(
+        "{} \u{2014} {} reference{}",
+        path,
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+    println!("{SEPARATOR}");
+
+    for r in refs {
+        let rpath = normalize_path(&r.file_path);
+        let location = if let Some(line) = r.line {
+            format!("{rpath}:{line}")
+        } else {
+            rpath
+        };
+        println!("{:<40}{}", location, r.context);
+    }
+
+    if refs.len() < total {
+        println!("... {} more (use --limit to show more)", total - refs.len());
+    }
+}
+
+/// Print dependencies of a symbol.
+///
+/// Format:
+/// ```text
+/// PaymentService — direct dependencies
+/// ──────────────────────────────────────────────────────────────────────────────
+/// imports:
+///   StripeClient            src/clients/stripe.ts
+///   Decimal                 (external)
+///
+/// calls:
+///   stripe.charges.create   (external)
+/// ```
+pub fn print_deps(symbol_name: &str, deps: &[Dependency], max_depth: usize) {
+    let depth_label = if max_depth <= 1 {
+        "direct dependencies".to_string()
+    } else {
+        format!("transitive dependencies (depth {max_depth})")
+    };
+
+    println!("{} \u{2014} {}", symbol_name, depth_label);
+    println!("{SEPARATOR}");
+
+    if deps.is_empty() {
+        println!("(no dependencies found)");
+        return;
+    }
+
+    // Group by kind
+    let mut groups: Vec<(String, Vec<&Dependency>)> = Vec::new();
+    for dep in deps {
+        if let Some(group) = groups.iter_mut().find(|(k, _)| *k == dep.kind) {
+            group.1.push(dep);
+        } else {
+            let kind = dep.kind.clone();
+            groups.push((kind, vec![dep]));
+        }
+    }
+
+    for (kind, group_deps) in &groups {
+        // Check if all deps in this group are external
+        let all_external = group_deps.iter().all(|d| d.is_external);
+        let kind_label = if all_external {
+            format!("{kind} (external):")
+        } else {
+            format!("{kind}:")
+        };
+        println!("{kind_label}");
+
+        for dep in group_deps {
+            if dep.is_external {
+                println!("  {:<24}(external)", dep.name);
+            } else if let Some(fp) = &dep.file_path {
+                let path = normalize_path(fp);
+                println!("  {:<24}{}", dep.name, path);
+            } else {
+                println!("  {}", dep.name);
+            }
+        }
+
+        println!();
+    }
+}
+
+/// Print file-level dependencies.
+pub fn print_file_deps(file_path: &str, deps: &[Dependency], max_depth: usize) {
+    let path = normalize_path(file_path);
+    let depth_label = if max_depth <= 1 {
+        "direct dependencies".to_string()
+    } else {
+        format!("transitive dependencies (depth {max_depth})")
+    };
+
+    println!("{} \u{2014} {}", path, depth_label);
+    println!("{SEPARATOR}");
+
+    if deps.is_empty() {
+        println!("(no dependencies found)");
+        return;
+    }
+
+    // Group by kind
+    let mut groups: Vec<(String, Vec<&Dependency>)> = Vec::new();
+    for dep in deps {
+        if let Some(group) = groups.iter_mut().find(|(k, _)| *k == dep.kind) {
+            group.1.push(dep);
+        } else {
+            let kind = dep.kind.clone();
+            groups.push((kind, vec![dep]));
+        }
+    }
+
+    for (kind, group_deps) in &groups {
+        let all_external = group_deps.iter().all(|d| d.is_external);
+        let kind_label = if all_external {
+            format!("{kind} (external):")
+        } else {
+            format!("{kind}:")
+        };
+        println!("{kind_label}");
+
+        for dep in group_deps {
+            if dep.is_external {
+                println!("  {:<24}(external)", dep.name);
+            } else if let Some(fp) = &dep.file_path {
+                let fpath = normalize_path(fp);
+                println!("  {:<24}{}", dep.name, fpath);
+            } else {
+                println!("  {}", dep.name);
+            }
+        }
+
+        println!();
+    }
+}
+
+/// Convert an edge kind string to a human-readable label for grouped output.
+fn humanize_edge_kind(kind: &str) -> &str {
+    match kind {
+        "instantiates" => "instantiated",
+        "extends" => "extended",
+        "implements" => "implemented",
+        "references_type" => "used as type",
+        "imports" => "imported",
+        "calls" => "called",
+        "references" => "referenced",
+        _ => kind,
+    }
 }

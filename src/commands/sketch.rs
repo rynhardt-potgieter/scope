@@ -38,19 +38,7 @@ pub struct SketchArgs {
 }
 
 /// Returns true if the input looks like a file path rather than a symbol name.
-fn looks_like_file_path(input: &str) -> bool {
-    input.contains('/')
-        || input.contains('\\')
-        || input.ends_with(".ts")
-        || input.ends_with(".tsx")
-        || input.ends_with(".js")
-        || input.ends_with(".jsx")
-        || input.ends_with(".cs")
-        || input.ends_with(".rs")
-        || input.ends_with(".py")
-        || input.ends_with(".go")
-        || input.ends_with(".java")
-}
+use super::looks_like_file_path;
 
 /// Run the `sc sketch` command.
 pub fn run(args: &SketchArgs, project_root: &Path) -> Result<()> {
