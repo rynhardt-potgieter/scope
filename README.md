@@ -215,17 +215,36 @@ The full snippet is also at [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet).
 
 ---
 
-## How It Works
+## Built With
 
-Scope builds a local index in `.scope/` using:
+```
+                 ┌─────────────────────────────────────────┐
+                 │               sc binary                 │
+                 │           (Rust, single binary)         │
+                 └──────┬──────────┬──────────┬────────────┘
+                        │          │          │
+              ┌─────────▼──┐ ┌────▼─────┐ ┌──▼───────────┐
+              │ tree-sitter │ │  SQLite  │ │ SQLite FTS5  │
+              │   (parser)  │ │ (graph)  │ │   (search)   │
+              └─────────────┘ └──────────┘ └──────────────┘
+```
 
-- **tree-sitter** for AST parsing -- extracts symbols (classes, methods, interfaces, functions) and relationships (calls, imports, extends, implements)
-- **SQLite** for the dependency graph -- symbols and edges, queried with recursive CTEs for transitive analysis
-- **SQLite FTS5** for semantic search -- indexes symbol names, signatures, and docstrings with BM25 ranking
+| Layer | Technology | Role |
+|-------|-----------|------|
+| **Language** | Rust | Single statically-linked binary. No runtime, no VM, no interpreter. `curl \| sh` and you're done. |
+| **CLI** | [clap](https://crates.io/crates/clap) | Derive-based argument parsing with auto-generated `--help` written for LLM readers. |
+| **Parsing** | [tree-sitter](https://tree-sitter.github.io/) | Incremental, error-tolerant AST parsing. Extracts symbols and relationships from source using `.scm` query files per language. |
+| **Graph storage** | [SQLite](https://sqlite.org/) via [rusqlite](https://crates.io/crates/rusqlite) | Embedded dependency graph. Symbols and edges stored in tables, queried with recursive CTEs for transitive analysis (impact, deps). WAL mode, 64MB cache. |
+| **Semantic search** | SQLite FTS5 | Full-text search over symbol names, signatures, and docstrings. BM25 ranking with porter stemming. CamelCase splitting so `processPayment` matches a search for "payment". |
+| **File watching** | SHA-256 hashing | Incremental indexing compares file hashes against stored state. Only changed files are re-parsed. |
+| **Output** | Human-readable + JSON | Every command supports `--json` for programmatic consumption. Human output designed for LLM token efficiency. |
 
-Indexing is incremental by default. After the first full build, `sc index` only re-processes changed files using SHA-256 hash comparison. Re-indexing a single file completes in under a second.
+### Design principles
 
-Everything runs locally. No network calls, no server process, no API keys required.
+- **No server, no network, no Docker.** A binary on disk. Works with any agent that can run a shell command.
+- **Everything in `.scope/`.** The entire index lives in the project directory. No global state, no home directory pollution.
+- **Offline-only.** Zero network calls at runtime. No telemetry, no updates, no API keys (unless you opt into an external embedding provider later).
+- **Output is the API.** LLMs infer the data model from output format. Every output change is treated as a breaking change.
 
 ---
 
