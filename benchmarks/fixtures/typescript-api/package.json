@@ -1,0 +1,11 @@
+{
+  "name": "typescript-api-fixture",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "echo 'Tests pass'"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

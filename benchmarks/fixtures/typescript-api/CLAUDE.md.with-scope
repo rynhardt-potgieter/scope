@@ -1,0 +1,4 @@
+## Code Navigation
+This project uses Scope for structural code navigation.
+Before editing: `sc sketch <symbol>`, `sc refs <symbol>`, `sc impact <symbol>`
+Finding code: `sc find "<description>"`
