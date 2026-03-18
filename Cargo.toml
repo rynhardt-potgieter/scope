@@ -67,3 +67,15 @@ path = "tests/integration/test_impact.rs"
 [[test]]
 name = "test_incremental"
 path = "tests/integration/test_incremental.rs"
+
+[[test]]
+name = "test_errors"
+path = "tests/integration/test_errors.rs"
+
+[[test]]
+name = "test_edge_cases"
+path = "tests/integration/test_edge_cases.rs"
+
+[[test]]
+name = "test_json"
+path = "tests/integration/test_json.rs"
