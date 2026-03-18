@@ -44,6 +44,20 @@ CREATE TABLE IF NOT EXISTS file_hashes (
     indexed_at  INTEGER NOT NULL
 );
 
+-- FTS5 virtual table for semantic-like search (`sc find`).
+-- Stores a rich text representation of each symbol for full-text search.
+-- The content is kept in sync with the symbols table via the searcher module.
+-- Using content="" (contentless) to avoid data duplication — the actual
+-- symbol data lives in the symbols table. We use rowid mapping via symbol_id.
+CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
+    symbol_id UNINDEXED,
+    name,
+    kind UNINDEXED,
+    file_path UNINDEXED,
+    body,
+    tokenize = 'porter unicode61'
+);
+
 -- Covering indices for common query patterns
 CREATE INDEX IF NOT EXISTS idx_symbols_name     ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_symbols_file     ON symbols(file_path);

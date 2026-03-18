@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use crate::core::graph::{
     CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol,
 };
+use crate::core::searcher::SearchResult;
 
 /// The separator line used between header and body in all command output.
 pub const SEPARATOR: &str =
@@ -625,6 +626,35 @@ pub fn print_incremental_result(
     }
 
     eprintln!("Updated in {duration_secs:.1}s.");
+}
+
+/// Print search results from `sc find`.
+///
+/// Format:
+/// ```text
+/// Results for: "handles authentication errors"
+/// ──────────────────────────────────────────────────────────────────────────────
+/// 0.91  AuthMiddleware.handleUnauthorized    src/middleware/auth.ts:34      method
+/// 0.88  errorHandler (auth branch)           src/api/middleware/errors.ts:67  function
+/// 0.85  TokenValidator.onExpired             src/auth/token.ts:112          method
+/// ```
+pub fn print_find_results(query: &str, results: &[SearchResult]) {
+    println!("Results for: \"{query}\"");
+    println!("{SEPARATOR}");
+
+    if results.is_empty() {
+        println!("(no results found)");
+        return;
+    }
+
+    for result in results {
+        let path = normalize_path(&result.file_path);
+        let location = format!("{path}:{}", result.line_start);
+        println!(
+            "{:.2}  {:<40}{:<36}{}",
+            result.score, result.name, location, result.kind
+        );
+    }
 }
 
 /// Convert an edge kind string to a human-readable label for grouped output.

@@ -12,6 +12,7 @@ use std::path::Path;
 use crate::config::ProjectConfig;
 use crate::core::graph::Graph;
 use crate::core::indexer::Indexer;
+use crate::core::searcher::Searcher;
 use crate::output::formatter;
 
 /// Arguments for the `sc index` command.
@@ -44,10 +45,33 @@ pub fn run(args: &IndexArgs, project_root: &Path) -> Result<()> {
     // Create indexer
     let mut indexer = Indexer::new()?;
 
+    // Open search index (FTS5) — optional, skip with warning if it fails
+    let searcher = match Searcher::open(&db_path) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            tracing::warn!("Search index unavailable: {e}");
+            None
+        }
+    };
+
     if args.full {
-        run_full_index(args, &mut indexer, project_root, &config, &mut graph)
+        run_full_index(
+            args,
+            &mut indexer,
+            project_root,
+            &config,
+            &mut graph,
+            searcher.as_ref(),
+        )
     } else {
-        run_incremental_index(args, &mut indexer, project_root, &config, &mut graph)
+        run_incremental_index(
+            args,
+            &mut indexer,
+            project_root,
+            &config,
+            &mut graph,
+            searcher.as_ref(),
+        )
     }
 }
 
@@ -58,8 +82,9 @@ fn run_full_index(
     project_root: &Path,
     config: &ProjectConfig,
     graph: &mut Graph,
+    searcher: Option<&Searcher>,
 ) -> Result<()> {
-    let stats = indexer.index_full(project_root, config, graph)?;
+    let stats = indexer.index_full(project_root, config, graph, searcher)?;
 
     if args.json {
         let output = serde_json::json!({
@@ -103,8 +128,9 @@ fn run_incremental_index(
     project_root: &Path,
     config: &ProjectConfig,
     graph: &mut Graph,
+    searcher: Option<&Searcher>,
 ) -> Result<()> {
-    let stats = indexer.index_incremental(project_root, config, graph)?;
+    let stats = indexer.index_incremental(project_root, config, graph, searcher)?;
 
     if stats.up_to_date {
         if args.json {

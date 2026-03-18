@@ -172,7 +172,7 @@ fn main() -> Result<()> {
         Commands::Deps(args) => commands::deps::run(args, &project_root),
         Commands::Rdeps(args) => commands::rdeps::run(args),
         Commands::Impact(args) => commands::impact::run(args, &project_root),
-        Commands::Find(args) => commands::find::run(args),
+        Commands::Find(args) => commands::find::run(args, &project_root),
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),
         Commands::Status(args) => commands::status::run(args),

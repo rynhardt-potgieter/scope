@@ -11,6 +11,7 @@ use std::time::Instant;
 use crate::config::ProjectConfig;
 use crate::core::graph::Graph;
 use crate::core::parser::{CodeParser, SupportedLanguage};
+use crate::core::searcher::Searcher;
 
 /// Statistics from an indexing run.
 #[derive(Debug, Default)]
@@ -72,16 +73,23 @@ impl Indexer {
     /// Perform a full index of the project.
     ///
     /// Clears all existing data and re-indexes every supported file.
+    /// If a `Searcher` is provided, symbols are also indexed for full-text search.
     pub fn index_full(
         &mut self,
         project_root: &Path,
         config: &ProjectConfig,
         graph: &mut Graph,
+        searcher: Option<&Searcher>,
     ) -> Result<IndexStats> {
         let start = Instant::now();
 
         // Clear existing data
         graph.clear_all()?;
+        if let Some(s) = searcher {
+            if let Err(e) = s.clear_all() {
+                tracing::warn!("Failed to clear search index: {e}");
+            }
+        }
 
         // Walk the file tree
         let files = self.collect_files(project_root, config)?;
@@ -110,6 +118,13 @@ impl Indexer {
 
             // Store in graph
             graph.insert_file_data(rel_path, &symbols, &edges)?;
+
+            // Index symbols for full-text search
+            if let Some(s) = searcher {
+                if let Err(e) = s.index_symbols(&symbols) {
+                    tracing::warn!("Failed to index symbols for search in {rel_path}: {e}");
+                }
+            }
 
             total_symbols += sym_count;
             total_edges += edge_count;
@@ -146,11 +161,13 @@ impl Indexer {
     ///
     /// Compares file hashes to detect added, modified, and deleted files.
     /// Only re-parses changed files. Returns early if nothing changed.
+    /// If a `Searcher` is provided, the search index is updated in sync.
     pub fn index_incremental(
         &mut self,
         project_root: &Path,
         config: &ProjectConfig,
         graph: &mut Graph,
+        searcher: Option<&Searcher>,
     ) -> Result<IncrementalStats> {
         let start = Instant::now();
 
@@ -181,6 +198,11 @@ impl Indexer {
         // Process deleted files
         for file_path in &changed.deleted {
             graph.delete_file_data(file_path)?;
+            if let Some(s) = searcher {
+                if let Err(e) = s.delete_file(file_path) {
+                    tracing::warn!("Failed to remove search entries for {file_path}: {e}");
+                }
+            }
         }
 
         // Process modified and added files
@@ -206,6 +228,16 @@ impl Indexer {
 
             // Atomic per-file update: delete old data, insert new
             graph.insert_file_data(rel_path, &symbols, &edges)?;
+
+            // Update search index for this file
+            if let Some(s) = searcher {
+                if let Err(e) = s.delete_file(rel_path) {
+                    tracing::warn!("Failed to clear search entries for {rel_path}: {e}");
+                }
+                if let Err(e) = s.index_symbols(&symbols) {
+                    tracing::warn!("Failed to index symbols for search in {rel_path}: {e}");
+                }
+            }
 
             // Track the hash for this file
             if let Some(hash) = current_hashes.get(rel_path) {
