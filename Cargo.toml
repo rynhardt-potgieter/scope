@@ -58,3 +58,11 @@ path = "tests/integration/test_refs.rs"
 [[test]]
 name = "test_deps"
 path = "tests/integration/test_deps.rs"
+
+[[test]]
+name = "test_impact"
+path = "tests/integration/test_impact.rs"
+
+[[test]]
+name = "test_incremental"
+path = "tests/integration/test_incremental.rs"

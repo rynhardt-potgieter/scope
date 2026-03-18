@@ -1,0 +1,7 @@
+---
+source: tests/integration/test_impact.rs
+expression: normalized
+---
+Impact analysis: PaymentService
+──────────────────────────────────────────────────────────────────────────────
+(no impact detected)
