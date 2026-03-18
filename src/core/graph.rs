@@ -313,11 +313,19 @@ impl Graph {
     pub fn get_class_relationships(&self, class_id: &str) -> Result<ClassRelationships> {
         let mut rels = ClassRelationships::default();
 
+        // Build the set of source IDs to check: the class itself and the
+        // __module__::class synthetic ID (used by edge extraction when the
+        // enclosing class name is not available at query time).
+        let file_path = class_id.split("::").next().unwrap_or("");
+        let module_class_id = format!("{file_path}::__module__::class");
+
         // Get 'extends' edges from this class
         let mut stmt = self
             .conn
-            .prepare("SELECT to_id FROM edges WHERE from_id = ?1 AND kind = 'extends'")?;
-        let rows = stmt.query_map(params![class_id], |row| row.get::<_, String>(0))?;
+            .prepare("SELECT to_id FROM edges WHERE from_id IN (?1, ?2) AND kind = 'extends'")?;
+        let rows = stmt.query_map(params![class_id, module_class_id], |row| {
+            row.get::<_, String>(0)
+        })?;
         for row in rows {
             let to_id = row?;
             rels.extends.push(self.symbol_name_from_id(&to_id));
@@ -326,8 +334,10 @@ impl Graph {
         // Get 'implements' edges from this class
         let mut stmt = self
             .conn
-            .prepare("SELECT to_id FROM edges WHERE from_id = ?1 AND kind = 'implements'")?;
-        let rows = stmt.query_map(params![class_id], |row| row.get::<_, String>(0))?;
+            .prepare("SELECT to_id FROM edges WHERE from_id IN (?1, ?2) AND kind = 'implements'")?;
+        let rows = stmt.query_map(params![class_id, module_class_id], |row| {
+            row.get::<_, String>(0)
+        })?;
         for row in rows {
             let to_id = row?;
             rels.implements.push(self.symbol_name_from_id(&to_id));

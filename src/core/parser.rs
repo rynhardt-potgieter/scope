@@ -8,6 +8,7 @@ use std::path::Path;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 use crate::core::graph::{Edge, Symbol};
+use crate::languages::csharp;
 use crate::languages::typescript;
 
 /// Supported programming languages.
@@ -92,6 +93,20 @@ impl CodeParser {
             extensions: vec!["ts", "tsx"],
         };
         languages.insert(SupportedLanguage::TypeScript, ts_config);
+
+        // C#
+        let cs_lang = tree_sitter_c_sharp::language();
+        let cs_symbol_query = Query::new(&cs_lang, include_str!("../queries/csharp/symbols.scm"))
+            .context("Failed to compile C# symbol query")?;
+        let cs_edge_query = Query::new(&cs_lang, include_str!("../queries/csharp/edges.scm"))
+            .context("Failed to compile C# edge query")?;
+        let cs_config = LanguageConfig {
+            language: cs_lang,
+            symbol_query: cs_symbol_query,
+            edge_query: cs_edge_query,
+            extensions: vec!["cs"],
+        };
+        languages.insert(SupportedLanguage::CSharp, cs_config);
 
         Ok(Self { parser, languages })
     }
@@ -191,6 +206,7 @@ impl CodeParser {
             // Extract metadata using language-specific logic
             let metadata = match lang {
                 SupportedLanguage::TypeScript => typescript::extract_metadata(&def, source, &kind)?,
+                SupportedLanguage::CSharp => csharp::extract_metadata(&def, source, &kind)?,
                 _ => "{}".to_string(),
             };
 
@@ -267,7 +283,7 @@ impl CodeParser {
                 captures_map.insert(capture_name, (text, line));
             }
 
-            let extracted = extract_edge_from_pattern(pattern, &captures_map, file_path);
+            let extracted = extract_edge_from_pattern(lang, pattern, &captures_map, file_path);
             edges.extend(extracted);
         }
 
@@ -278,6 +294,7 @@ impl CodeParser {
 /// Infer the symbol kind from the tree-sitter node type.
 fn infer_symbol_kind(node_kind: &str) -> String {
     match node_kind {
+        // TypeScript / JavaScript
         "function_declaration" => "function".to_string(),
         "class_declaration" => "class".to_string(),
         "method_definition" => "method".to_string(),
@@ -285,8 +302,14 @@ fn infer_symbol_kind(node_kind: &str) -> String {
         "enum_declaration" => "enum".to_string(),
         "type_alias_declaration" => "type".to_string(),
         "public_field_definition" => "property".to_string(),
-        // Arrow functions / function expressions assigned to variables
         "lexical_declaration" | "arrow_function" | "function_expression" => "function".to_string(),
+        // C#
+        "method_declaration" => "method".to_string(),
+        "constructor_declaration" => "method".to_string(),
+        "property_declaration" => "property".to_string(),
+        "struct_declaration" => "struct".to_string(),
+        "record_declaration" => "class".to_string(),
+        "delegate_declaration" => "type".to_string(),
         _ => "function".to_string(),
     }
 }
@@ -324,16 +347,28 @@ fn extract_docstring(node: &tree_sitter::Node, source: &str) -> Option<String> {
     }
 }
 
+/// Parent container node types that hold methods/properties.
+const CLASS_BODY_NODES: &[&str] = &["class_body", "declaration_list"];
+
+/// Parent declaration node types that define classes/structs/interfaces.
+const CLASS_DECL_NODES: &[&str] = &[
+    "class_declaration",
+    "struct_declaration",
+    "interface_declaration",
+    "record_declaration",
+];
+
 /// Find the parent class for a method or property node.
 fn find_parent_class(node: &tree_sitter::Node, source: &str, file_path: &str) -> Option<String> {
     let mut current = node.parent();
     while let Some(parent) = current {
-        if parent.kind() == "class_body" {
+        if CLASS_BODY_NODES.contains(&parent.kind()) {
             if let Some(class_node) = parent.parent() {
-                if class_node.kind() == "class_declaration" {
+                if CLASS_DECL_NODES.contains(&class_node.kind()) {
                     if let Some(name_node) = class_node.child_by_field_name("name") {
                         let class_name = name_node.utf8_text(source.as_bytes()).ok()?;
-                        return Some(format!("{file_path}::{class_name}::class"));
+                        let kind = infer_symbol_kind(class_node.kind());
+                        return Some(format!("{file_path}::{class_name}::{kind}"));
                     }
                 }
             }
@@ -344,7 +379,24 @@ fn find_parent_class(node: &tree_sitter::Node, source: &str, file_path: &str) ->
 }
 
 /// Extract edges from a query match pattern.
+///
+/// Pattern indices correspond to the order of patterns in the `.scm` query file,
+/// so they differ per language.
 fn extract_edge_from_pattern(
+    lang: SupportedLanguage,
+    pattern: usize,
+    captures: &HashMap<String, (String, u32)>,
+    file_path: &str,
+) -> Vec<Edge> {
+    match lang {
+        SupportedLanguage::TypeScript => extract_ts_edge(pattern, captures, file_path),
+        SupportedLanguage::CSharp => extract_cs_edge(pattern, captures, file_path),
+        _ => Vec::new(),
+    }
+}
+
+/// TypeScript edge extraction by pattern index.
+fn extract_ts_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
     file_path: &str,
@@ -436,6 +488,107 @@ fn extract_edge_from_pattern(
                     from_id: format!("{file_path}::__module__::function"),
                     to_id: type_ref.clone(),
                     kind: "references_type".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    edges
+}
+
+/// C# edge extraction by pattern index.
+fn extract_cs_edge(
+    pattern: usize,
+    captures: &HashMap<String, (String, u32)>,
+    file_path: &str,
+) -> Vec<Edge> {
+    let mut edges = Vec::new();
+
+    match pattern {
+        // Using directive with identifier
+        0 => {
+            if let Some((imported_name, line)) = captures.get("imported_name") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: imported_name.clone(),
+                    kind: "imports".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Using directive with qualified name
+        1 => {
+            if let Some((imported_name, line)) = captures.get("imported_name") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: imported_name.clone(),
+                    kind: "imports".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Member access call (e.g. _logger.Info(...))
+        2 => {
+            if let (Some((object, line)), Some((method, _))) =
+                (captures.get("object"), captures.get("method"))
+            {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: format!("{object}.{method}"),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Direct call (e.g. DoSomething(...))
+        3 => {
+            if let Some((callee, line)) = captures.get("callee") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: callee.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Object creation (new ...)
+        4 => {
+            if let Some((class_name, line)) = captures.get("class_name") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: class_name.clone(),
+                    kind: "instantiates".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Base list with identifier (implements/extends)
+        5 => {
+            if let Some((base_type, line)) = captures.get("base_type") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::class"),
+                    to_id: base_type.clone(),
+                    kind: "implements".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Base list with qualified name
+        6 => {
+            if let Some((base_type, line)) = captures.get("base_type") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::class"),
+                    to_id: base_type.clone(),
+                    kind: "implements".to_string(),
                     file_path: file_path.to_string(),
                     line: Some(*line),
                 });

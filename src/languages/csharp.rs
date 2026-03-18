@@ -1,0 +1,214 @@
+/// C#-specific metadata extraction.
+///
+/// Extracts access modifiers (public, private, protected, internal),
+/// C#-specific modifiers (async, static, abstract, virtual, override, sealed, readonly),
+/// return type, and parameters from C# AST nodes.
+use anyhow::Result;
+use serde::Serialize;
+
+use crate::core::graph::Symbol;
+
+/// Structured metadata for a C# symbol.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct CSharpMetadata {
+    /// Access modifier: public, private, protected, internal, or protected internal.
+    /// C# defaults to private for class members, internal for top-level types.
+    pub access: String,
+    /// Whether the symbol is async.
+    pub is_async: bool,
+    /// Whether the symbol is static.
+    pub is_static: bool,
+    /// Whether the symbol is abstract.
+    pub is_abstract: bool,
+    /// Whether the symbol is virtual.
+    pub is_virtual: bool,
+    /// Whether the symbol is an override.
+    pub is_override: bool,
+    /// Whether the symbol is sealed.
+    pub is_sealed: bool,
+    /// Whether the symbol is readonly.
+    pub is_readonly: bool,
+    /// Whether the symbol is partial (relevant for partial classes).
+    pub is_partial: bool,
+    /// Return type, if present (for methods, properties).
+    pub return_type: Option<String>,
+    /// Parameter list with names, types, and optionality.
+    pub parameters: Vec<CSharpParameterInfo>,
+}
+
+/// Information about a single C# method/constructor parameter.
+#[derive(Debug, Clone, Serialize)]
+pub struct CSharpParameterInfo {
+    /// Parameter name.
+    pub name: String,
+    /// Type annotation.
+    #[serde(rename = "type")]
+    pub type_annotation: Option<String>,
+    /// Whether the parameter has a default value (optional).
+    pub optional: bool,
+}
+
+/// Extract metadata from a C# AST node.
+///
+/// Returns a JSON string suitable for the `metadata` column.
+pub fn extract_metadata(node: &tree_sitter::Node, source: &str, kind: &str) -> Result<String> {
+    let mut meta = CSharpMetadata::default();
+
+    // Walk direct children to find modifiers
+    let mut child_cursor = node.walk();
+    for child in node.children(&mut child_cursor) {
+        if child.kind() == "modifier" {
+            if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                match text {
+                    "public" => meta.access = "public".to_string(),
+                    "private" => meta.access = "private".to_string(),
+                    "protected" => {
+                        // Could be "protected internal" — check if access already set
+                        if meta.access == "internal" {
+                            meta.access = "protected internal".to_string();
+                        } else {
+                            meta.access = "protected".to_string();
+                        }
+                    }
+                    "internal" => {
+                        if meta.access == "protected" {
+                            meta.access = "protected internal".to_string();
+                        } else {
+                            meta.access = "internal".to_string();
+                        }
+                    }
+                    "async" => meta.is_async = true,
+                    "static" => meta.is_static = true,
+                    "abstract" => meta.is_abstract = true,
+                    "virtual" => meta.is_virtual = true,
+                    "override" => meta.is_override = true,
+                    "sealed" => meta.is_sealed = true,
+                    "readonly" => meta.is_readonly = true,
+                    "partial" => meta.is_partial = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Default access if none was set
+    if meta.access.is_empty() {
+        meta.access = match kind {
+            "class" | "interface" | "struct" | "enum" => "internal".to_string(),
+            _ => "private".to_string(),
+        };
+    }
+
+    // Extract return type from the `returns` field (method_declaration)
+    if let Some(returns_node) = node.child_by_field_name("returns") {
+        if let Ok(text) = returns_node.utf8_text(source.as_bytes()) {
+            meta.return_type = Some(text.trim().to_string());
+        }
+    }
+    // For properties, the type is in the `type` field
+    if kind == "property" {
+        if let Some(type_node) = node.child_by_field_name("type") {
+            if let Ok(text) = type_node.utf8_text(source.as_bytes()) {
+                meta.return_type = Some(text.trim().to_string());
+            }
+        }
+    }
+
+    // Extract parameters
+    if kind == "function" || kind == "method" || kind == "constructor" {
+        if let Some(params_node) = node.child_by_field_name("parameters") {
+            meta.parameters = extract_parameters(&params_node, source);
+        }
+    }
+
+    let json = serde_json::to_string(&meta)?;
+    Ok(json)
+}
+
+/// Extract parameter info from a parameter_list node.
+fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<CSharpParameterInfo> {
+    let mut params = Vec::new();
+    let mut cursor = params_node.walk();
+
+    for child in params_node.children(&mut cursor) {
+        if child.kind() == "parameter" {
+            let name = child
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                .unwrap_or_default()
+                .to_string();
+
+            let type_annotation = child
+                .child_by_field_name("type")
+                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                .map(|t| t.trim().to_string());
+
+            // Check if parameter has a default value (= expression child)
+            let mut param_cursor = child.walk();
+            let has_default = child
+                .children(&mut param_cursor)
+                .any(|c| c.kind() == "equals_value_clause");
+            let optional = has_default;
+
+            if !name.is_empty() {
+                params.push(CSharpParameterInfo {
+                    name,
+                    type_annotation,
+                    optional,
+                });
+            }
+        }
+    }
+
+    params
+}
+
+/// Merge partial C# classes that are split across multiple files.
+///
+/// Groups symbols by class name, keeps the first as primary, and re-parents
+/// methods from secondary definitions to the primary class symbol.
+/// Returns the IDs of symbols that should be removed (secondary class definitions).
+pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
+    use std::collections::HashMap;
+
+    let mut removals = Vec::new();
+
+    // Group class symbols by name
+    let mut class_groups: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, symbol) in symbols.iter().enumerate() {
+        if symbol.kind == "class" {
+            // Only merge if the class is marked partial
+            let is_partial = symbol.metadata.contains("\"is_partial\":true");
+            if is_partial {
+                class_groups.entry(symbol.name.clone()).or_default().push(i);
+            }
+        }
+    }
+
+    // For each class with multiple definitions, merge them
+    for indices in class_groups.values() {
+        if indices.len() <= 1 {
+            continue;
+        }
+
+        let primary_id = symbols[indices[0]].id.clone();
+        let secondary_ids: Vec<String> = indices[1..]
+            .iter()
+            .map(|&i| symbols[i].id.clone())
+            .collect();
+
+        // Re-parent methods from secondary classes to primary
+        for symbol in symbols.iter_mut() {
+            if let Some(ref parent) = symbol.parent_id {
+                if secondary_ids.contains(parent) {
+                    symbol.parent_id = Some(primary_id.clone());
+                }
+            }
+        }
+
+        // Mark secondary class symbols for removal
+        removals.extend(secondary_ids);
+    }
+
+    removals
+}
