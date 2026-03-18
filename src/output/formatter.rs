@@ -657,6 +657,53 @@ pub fn print_find_results(query: &str, results: &[SearchResult]) {
     }
 }
 
+/// Print index status.
+///
+/// Format:
+/// ```text
+/// Index status: up to date
+///   Symbols:    6,764
+///   Files:      847
+///   Edges:      12,340
+///   Last index: 2 minutes ago
+/// ```
+pub fn print_status(
+    status_label: &str,
+    symbol_count: usize,
+    file_count: usize,
+    edge_count: usize,
+    last_indexed: Option<&str>,
+) {
+    println!("Index status: {status_label}");
+    println!("  Symbols:    {}", format_number(symbol_count));
+    println!("  Files:      {}", format_number(file_count));
+    println!("  Edges:      {}", format_number(edge_count));
+    if let Some(relative) = last_indexed {
+        println!("  Last index: {relative}");
+    } else {
+        println!("  Last index: never");
+    }
+}
+
+/// Format a number with comma separators (e.g. 6764 -> "6,764").
+fn format_number(n: usize) -> String {
+    let s = n.to_string();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    if len <= 3 {
+        return s;
+    }
+
+    let mut result = String::with_capacity(len + len / 3);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (len - i).is_multiple_of(3) {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
+}
+
 /// Convert an edge kind string to a human-readable label for grouped output.
 fn humanize_edge_kind(kind: &str) -> &str {
     match kind {

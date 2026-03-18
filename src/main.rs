@@ -175,7 +175,7 @@ fn main() -> Result<()> {
         Commands::Find(args) => commands::find::run(args, &project_root),
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),
-        Commands::Status(args) => commands::status::run(args),
+        Commands::Status(args) => commands::status::run(args, &project_root),
     }
 }
 

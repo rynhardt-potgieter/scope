@@ -1361,6 +1361,26 @@ impl Graph {
         Ok(())
     }
 
+    /// Get the most recent `indexed_at` timestamp from file_hashes.
+    ///
+    /// Returns `None` if no files have been indexed yet.
+    pub fn last_indexed_at(&self) -> Result<Option<i64>> {
+        let ts: Option<i64> =
+            self.conn
+                .query_row("SELECT MAX(indexed_at) FROM file_hashes", [], |row| {
+                    row.get(0)
+                })?;
+        Ok(ts)
+    }
+
+    /// Get the number of tracked files in the file_hashes table.
+    pub fn indexed_file_count(&self) -> Result<usize> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM file_hashes", [], |row| row.get(0))?;
+        Ok(count as usize)
+    }
+
     /// Delete a file hash entry.
     pub fn delete_file_hash(&self, file_path: &str) -> Result<()> {
         self.conn.execute(
