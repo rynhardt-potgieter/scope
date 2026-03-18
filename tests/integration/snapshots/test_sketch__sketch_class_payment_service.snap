@@ -1,0 +1,16 @@
+---
+source: tests/integration/test_sketch.rs
+assertion_line: 211
+expression: normalized
+---
+PaymentService                                    class  src/payments/service.ts:4-24
+──────────────────────────────────────────────────────────────────────────────
+
+methods:
+  constructor(logger: Logger)                                       [internal]
+  async processPayment(request: PaymentRequest): Promise<PaymentResult>[internal]
+  async refundPayment(transactionId: string): Promise<boolean>      [internal]
+  private validateAmount(amount: number): boolean                   [internal]
+
+fields:
+  private logger: Logger

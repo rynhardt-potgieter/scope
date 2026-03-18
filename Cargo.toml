@@ -46,3 +46,7 @@ insta = "1"
 [[test]]
 name = "test_index"
 path = "tests/integration/test_index.rs"
+
+[[test]]
+name = "test_sketch"
+path = "tests/integration/test_sketch.rs"
