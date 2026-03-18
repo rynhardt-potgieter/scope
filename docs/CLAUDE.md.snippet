@@ -22,4 +22,9 @@ editing any non-trivial code.
 Always run `sc sketch` before `sc source`. Only call `sc source` when you're
 ready to read or edit the implementation.
 
+**Keeping the index fresh:**
+- Run `sc status` to check if the index is stale
+- Run `sc index` after making edits -- incremental, takes < 1s for a few files
+- Line numbers in Scope output reflect the last index run. If they look wrong, re-index first.
+
 Run `sc --help` for full usage.

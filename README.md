@@ -163,6 +163,22 @@ sc status
 
 ---
 
+## Stale Line Numbers
+
+Line numbers in Scope output reflect the index state at the last `sc index` run. If files have been edited since then, line numbers may be off. This matters because agents use these line numbers for targeted edits.
+
+**The workflow:**
+
+1. Run `sc status` to check freshness before a session
+2. If files have changed, run `sc index` to refresh (incremental -- takes < 1s for a few files)
+3. After making edits during a session, `sc index` again before querying
+
+In practice: run `sc index` whenever you switch tasks or after a batch of edits. It's cheap. The incremental indexer only re-parses changed files.
+
+**For the CLAUDE.md snippet below**, consider adding: *"Run `sc index` before querying if you've made edits since the last index."*
+
+---
+
 ## Add to Your Project's CLAUDE.md
 
 Paste this into your `CLAUDE.md` so Claude Code uses Scope automatically:
@@ -186,6 +202,11 @@ editing any non-trivial code.
 
 Always run `sc sketch` before reading full source. Only read implementation when
 you know exactly which file and line range you need.
+
+**Keeping the index fresh:**
+- Run `sc status` to check if the index is stale
+- Run `sc index` after making edits -- it's incremental and takes < 1s for a few files
+- Line numbers in Scope output reflect the last index run. If they seem off, re-index first.
 
 Run `sc --help` for full usage.
 ```
