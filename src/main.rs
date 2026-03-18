@@ -167,7 +167,7 @@ fn main() -> Result<()> {
     match &cli.command {
         Commands::Init(args) => commands::init::run(args, &project_root),
         Commands::Index(args) => commands::index::run(args, &project_root),
-        Commands::Sketch(args) => commands::sketch::run(args),
+        Commands::Sketch(args) => commands::sketch::run(args, &project_root),
         Commands::Refs(args) => commands::refs::run(args),
         Commands::Deps(args) => commands::deps::run(args),
         Commands::Rdeps(args) => commands::rdeps::run(args),
