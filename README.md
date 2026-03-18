@@ -259,6 +259,111 @@ These are acceptance criteria, not aspirational targets. A command that misses i
 
 ---
 
+## Benchmarks
+
+Scope ships with a benchmark harness that measures whether it actually reduces token consumption for coding agents. The harness runs real coding tasks with and without Scope enabled, comparing token usage, correctness, and navigation efficiency.
+
+### What gets measured
+
+Three metrics, always reported together:
+
+1. **Input token consumption** -- total tokens the agent consumed across the task
+2. **Task correctness** -- compilation pass, tests pass, caller coverage score
+3. **Navigation efficiency** -- number of full source file reads (fewer = better)
+
+### Task suite
+
+20 tasks across 5 categories, for both TypeScript and C#:
+
+| Category | What it tests | Example |
+|----------|--------------|---------|
+| Signature refactoring | Find and update all callers | Refactor `processPayment` to accept a `PaymentRequest` object |
+| Cross-cutting changes | Breadth of navigation | Add structured logging to all public methods in a service |
+| Dependency understanding | Comprehend what a class needs | Replace `PaymentProcessor` with a new `PaymentGateway` |
+| Impact-aware refactoring | Get the blast radius right | Make `findById` async and update everything downstream |
+| Discovery | Find code by intent | Find where payment retry logic lives and add exponential backoff |
+
+### Fixtures
+
+Two benchmark fixtures with known, deterministic dependency graphs:
+
+- `benchmarks/fixtures/typescript-api/` -- 20-symbol TypeScript project. `processPayment` has exactly 7 callers across 4 files.
+- `benchmarks/fixtures/csharp-api/` -- 20-symbol .NET 8 Web API. Same ground truth structure, C# idioms (interfaces, DI, async/await).
+
+### Running the benchmarks
+
+```sh
+# Build the runner
+cd benchmarks/runner
+cargo build --release
+
+# Run all tasks, comparing Scope-enabled vs baseline
+cargo run --release -- run --all --compare --reps 5
+
+# Run a single task
+cargo run --release -- run --task ts-cat-a-01 --compare
+
+# Run only TypeScript tasks
+cargo run --release -- run --language typescript --compare
+
+# Run only C# tasks
+cargo run --release -- run --language csharp --compare
+
+# Generate a report from existing results
+cargo run --release -- report --input ../../benchmarks/results/v0.1.0/ --output markdown
+```
+
+**Prerequisites:** The runner invokes Claude Code (`claude --print`) to execute tasks. You need:
+- Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
+- `ANTHROPIC_API_KEY` set in your environment
+- The Scope binary (`sc`) on your PATH
+
+### Results format
+
+Results are committed per release in `benchmarks/results/vX.Y.Z/`:
+
+```
+benchmarks/results/v0.1.0/
+  full_results.json      # raw data -- every run, every metric
+  summary.md             # human-readable tables for release notes
+  environment.json       # machine spec, tool versions, rep count
+```
+
+### Adding your own tasks
+
+Create a TOML file in `benchmarks/tasks/<language>/`:
+
+```toml
+[task]
+id = "ts-custom-01"
+category = "signature-refactoring"
+language = "typescript"
+corpus = "fixture"
+description = "Your task description"
+
+[prompt]
+text = """
+The exact prompt sent to the coding agent.
+"""
+
+[target]
+symbol = "PaymentService.processPayment"
+file = "src/payments/service.ts"
+
+[correctness]
+require_compilation = true
+require_tests_pass = true
+require_caller_coverage = true
+caller_coverage_threshold = 1.0
+
+[scope]
+expected_commands = ["sc refs", "sc sketch"]
+```
+
+Then run it: `cargo run -- run --task ts-custom-01 --compare`
+
+---
+
 ## License
 
 MIT
