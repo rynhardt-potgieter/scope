@@ -50,3 +50,11 @@ path = "tests/integration/test_index.rs"
 [[test]]
 name = "test_sketch"
 path = "tests/integration/test_sketch.rs"
+
+[[test]]
+name = "test_refs"
+path = "tests/integration/test_refs.rs"
+
+[[test]]
+name = "test_deps"
+path = "tests/integration/test_deps.rs"

@@ -1,0 +1,14 @@
+---
+source: tests/integration/test_deps.rs
+expression: normalized
+---
+PaymentService — direct dependencies
+──────────────────────────────────────────────────────────────────────────────
+imports:
+  Logger                  src/utils/logger.ts
+  PaymentRequest          src/payments/types.ts
+  PaymentResult           src/payments/types.ts
+
+references_type:
+  Logger                  src/utils/logger.ts
+  PaymentRequest          src/payments/types.ts

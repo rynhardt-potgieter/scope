@@ -1,0 +1,13 @@
+---
+source: tests/integration/test_refs.rs
+expression: normalized
+---
+PaymentService — 4 references
+──────────────────────────────────────────────────────────────────────────────
+imported (2):
+  src/controllers/order.ts:1            order
+  src/controllers/refund.ts:1           refund
+
+used as type (2):
+  src/controllers/order.ts:5            order
+  src/controllers/refund.ts:4           refund
