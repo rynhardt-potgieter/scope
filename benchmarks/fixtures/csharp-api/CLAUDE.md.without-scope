@@ -1,0 +1,4 @@
+## Development
+Standard .NET 8 Web API. Use grep and file reading to navigate code.
+Build: dotnet build
+Test: dotnet test

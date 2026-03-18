@@ -138,6 +138,12 @@ mod tests {
             "Expected at least one task file in {}",
             tasks_dir.display()
         );
+        assert_eq!(
+            tasks.len(),
+            20,
+            "Expected 20 tasks (10 TypeScript + 10 C#), found {}",
+            tasks.len()
+        );
 
         for task in &tasks {
             assert!(!task.task.id.is_empty(), "Task has empty id");

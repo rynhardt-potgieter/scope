@@ -1,0 +1,15 @@
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.GeneratedMSBuildEditorConfig.editorconfig
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.AssemblyInfoInputs.cache
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.AssemblyInfo.cs
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.csproj.CoreCompileInputs.cache
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.sourcelink.json
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\bin\Debug\net8.0\CSharpApi.exe
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\bin\Debug\net8.0\CSharpApi.deps.json
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\bin\Debug\net8.0\CSharpApi.runtimeconfig.json
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\bin\Debug\net8.0\CSharpApi.dll
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\bin\Debug\net8.0\CSharpApi.pdb
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.dll
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\refint\CSharpApi.dll
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.pdb
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\CSharpApi.genruntimeconfig.cache
+D:\Users\rynha\repos\scope\benchmarks\fixtures\csharp-api\obj\Debug\net8.0\ref\CSharpApi.dll

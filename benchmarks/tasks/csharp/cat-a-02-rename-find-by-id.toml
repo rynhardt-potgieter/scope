@@ -1,0 +1,28 @@
+[task]
+id = "cs-cat-a-02"
+category = "signature-refactoring"
+language = "csharp"
+corpus = "fixture"
+description = "Rename UserRepository.FindById to GetUserByIdAsync"
+
+[prompt]
+text = """
+Rename the FindById method in UserRepository to GetUserByIdAsync. \
+Update the IUserRepository interface and all callers throughout the codebase. \
+The method should remain synchronous for now — just rename it. \
+Make sure the project still compiles.
+"""
+
+[target]
+symbol = "UserRepository.FindById"
+file = "src/Users/UserRepository.cs"
+
+[correctness]
+require_compilation = true
+require_tests_pass = true
+require_caller_coverage = true
+caller_coverage_threshold = 1.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["sc refs", "sc sketch"]
