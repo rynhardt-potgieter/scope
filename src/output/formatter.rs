@@ -628,7 +628,7 @@ pub fn print_incremental_result(
     eprintln!("Updated in {duration_secs:.1}s.");
 }
 
-/// Print search results from `sc find`.
+/// Print search results from `scope find`.
 ///
 /// Format:
 /// ```text

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-reference git diff against sc refs --json ground truth.
+"""Cross-reference git diff against scope refs --json ground truth.
 
 Usage:
     python verify_caller_coverage.py \
@@ -7,7 +7,7 @@ Usage:
         --ground-truth ground_truth_callers.json \
         --output coverage_report.json
 
-The ground truth file should be the JSON output of `sc refs <symbol> --json`,
+The ground truth file should be the JSON output of `scope refs <symbol> --json`,
 containing a `data` array with objects that have `file_path` and `line` fields.
 
 The diff file should be the output of `git diff HEAD`.
@@ -122,7 +122,7 @@ def main() -> int:
     parser.add_argument(
         "--ground-truth",
         required=True,
-        help="Path to the ground truth JSON file (output of sc refs --json)",
+        help="Path to the ground truth JSON file (output of scope refs --json)",
     )
     parser.add_argument(
         "--output",

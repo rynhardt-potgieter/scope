@@ -1,11 +1,11 @@
-/// `sc rdeps <symbol>` — show what depends on a symbol (reverse dependencies).
+/// `scope rdeps <symbol>` — show what depends on a symbol (reverse dependencies).
 ///
 /// Critical before any refactor or deletion. Shows all symbols and files
 /// that depend on the given symbol.
 use anyhow::Result;
 use clap::Args;
 
-/// Arguments for the `sc rdeps` command.
+/// Arguments for the `scope rdeps` command.
 #[derive(Args, Debug)]
 pub struct RdepsArgs {
     /// Symbol name to show reverse dependencies for.
@@ -20,7 +20,7 @@ pub struct RdepsArgs {
     pub json: bool,
 }
 
-/// Run the `sc rdeps` command (stub).
+/// Run the `scope rdeps` command (stub).
 pub fn run(args: &RdepsArgs) -> Result<()> {
     eprintln!("rdeps command not yet implemented. Symbol: {}", args.symbol);
     Ok(())

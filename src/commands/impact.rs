@@ -1,12 +1,12 @@
-/// `sc impact <symbol>` — analyse blast radius if a symbol changes.
+/// `scope impact <symbol>` — analyse blast radius if a symbol changes.
 ///
 /// Performs transitive reverse dependency traversal, showing direct callers,
 /// second-degree dependents, and affected test files.
 ///
 /// Examples:
-///   sc impact processPayment             — who breaks if this changes
-///   sc impact PaymentConfig              — blast radius of config change
-///   sc impact src/types/payment.ts       — impact of changing a types file
+///   scope impact processPayment             — who breaks if this changes
+///   scope impact PaymentConfig              — blast radius of config change
+///   scope impact src/types/payment.ts       — impact of changing a types file
 use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
@@ -15,7 +15,7 @@ use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
-/// Arguments for the `sc impact` command.
+/// Arguments for the `scope impact` command.
 #[derive(Args, Debug)]
 pub struct ImpactArgs {
     /// Symbol name or file path to analyse impact for.
@@ -39,17 +39,17 @@ pub struct ImpactArgs {
 
 use super::looks_like_file_path;
 
-/// Run the `sc impact` command.
+/// Run the `scope impact` command.
 pub fn run(args: &ImpactArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'sc init' first.");
+        bail!("No .scope/ directory found. Run 'scope init' first.");
     }
 
     let db_path = scope_dir.join("graph.db");
     if !db_path.exists() {
-        bail!("No index found. Run 'sc index' to build one first.");
+        bail!("No index found. Run 'scope index' to build one first.");
     }
 
     let graph = Graph::open(&db_path)?;

@@ -9,11 +9,13 @@ use thiserror::Error;
 #[allow(dead_code)]
 pub enum ScopeError {
     /// The `.scope/` directory or index database was not found.
-    #[error("No index found. Run 'sc init' to initialise, then 'sc index' to build the index.")]
+    #[error(
+        "No index found. Run 'scope init' to initialise, then 'scope index' to build the index."
+    )]
     IndexNotFound,
 
     /// A symbol name was not found in the index.
-    #[error("Symbol '{0}' not found in index. Run 'sc index' if this is a new file.")]
+    #[error("Symbol '{0}' not found in index. Run 'scope index' if this is a new file.")]
     SymbolNotFound(String),
 
     /// tree-sitter failed to parse a source file.

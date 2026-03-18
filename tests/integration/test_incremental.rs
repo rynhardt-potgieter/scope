@@ -1,12 +1,12 @@
-/// Integration tests for incremental indexing (`sc index` without `--full`).
+/// Integration tests for incremental indexing (`scope index` without `--full`).
 ///
 /// Each test copies the TypeScript fixture to a temporary directory, builds a
-/// full index, then mutates files (add / modify / delete) and runs `sc index`
+/// full index, then mutates files (add / modify / delete) and runs `scope index`
 /// to exercise the incremental code path.
 ///
 /// The incremental indexer reports changes to stderr (the progress channel).
 /// Tests assert against `stderr` for file-change messages and against
-/// `sc sketch` output to confirm the graph was updated correctly.
+/// `scope sketch` output to confirm the graph was updated correctly.
 use assert_cmd::Command;
 use predicates::str::contains;
 use std::path::{Path, PathBuf};
@@ -35,8 +35,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test — bind it with
 /// `let _dir = ...` or `let (dir, root) = ...` so the destructor does not
@@ -47,7 +47,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     copy_dir_all(fixture, dir.path());
 
     // Initialise scope config.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -55,7 +55,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
         .success();
 
     // Build the full index so there is a baseline to compare against.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -72,7 +72,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
 
 /// Adding a new source file is detected by the incremental indexer.
 ///
-/// After adding `src/utils/helper.ts`, `sc index` should report the file as
+/// After adding `src/utils/helper.ts`, `scope index` should report the file as
 /// "Added" in stderr and the new `helper` symbol should be queryable.
 #[test]
 fn test_incremental_detects_added_file() {
@@ -88,7 +88,7 @@ fn test_incremental_detects_added_file() {
     .unwrap();
 
     // Run incremental index and verify the added file appears in stderr.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("index")
         .current_dir(&root)
@@ -98,7 +98,7 @@ fn test_incremental_detects_added_file() {
         .stderr(contains("helper.ts"));
 
     // The new symbol must now be in the index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "helper"])
         .current_dir(&root)
@@ -110,7 +110,7 @@ fn test_incremental_detects_added_file() {
 /// Modifying an existing source file is detected by the incremental indexer.
 ///
 /// Overwriting `src/utils/logger.ts` with new content causes the hash to
-/// change. `sc index` should report the file as "Modified" in stderr.
+/// change. `scope index` should report the file as "Modified" in stderr.
 #[test]
 fn test_incremental_detects_modified_file() {
     let (_dir, root) = setup_indexed_fixture();
@@ -136,7 +136,7 @@ fn test_incremental_detects_modified_file() {
     .unwrap();
 
     // Run incremental index and verify the modified file appears in stderr.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("index")
         .current_dir(&root)
@@ -149,7 +149,7 @@ fn test_incremental_detects_modified_file() {
 /// Deleting a source file is detected by the incremental indexer.
 ///
 /// Removing `src/utils/logger.ts` from the working tree causes the indexer to
-/// recognise the file as deleted. `sc index` should report "Deleted" in stderr.
+/// recognise the file as deleted. `scope index` should report "Deleted" in stderr.
 #[test]
 fn test_incremental_detects_deleted_file() {
     let (_dir, root) = setup_indexed_fixture();
@@ -159,7 +159,7 @@ fn test_incremental_detects_deleted_file() {
     std::fs::remove_file(&logger_path).unwrap();
 
     // Run incremental index and verify the deleted file appears in stderr.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("index")
         .current_dir(&root)
@@ -171,14 +171,14 @@ fn test_incremental_detects_deleted_file() {
 
 /// When no files have changed, incremental indexing reports the index as up to date.
 ///
-/// Running `sc index` a second time immediately after a full build should
+/// Running `scope index` a second time immediately after a full build should
 /// detect zero changes and emit "up to date" in stderr.
 #[test]
 fn test_incremental_no_changes() {
     let (_dir, root) = setup_indexed_fixture();
 
     // No mutations — run incremental index on an already-up-to-date index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("index")
         .current_dir(&root)
@@ -187,7 +187,7 @@ fn test_incremental_no_changes() {
         .stderr(contains("up to date"));
 }
 
-/// `sc index --full` can be run a second time and rebuilds the index cleanly.
+/// `scope index --full` can be run a second time and rebuilds the index cleanly.
 ///
 /// Verifies that running a full rebuild on an already-indexed project exits 0
 /// and emits the symbol/file count summary to stderr.
@@ -196,7 +196,7 @@ fn test_full_index_rebuilds_everything() {
     let (_dir, root) = setup_indexed_fixture();
 
     // Full rebuild on an already-indexed fixture must succeed.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -225,7 +225,7 @@ fn test_incremental_performance() {
 
     let start = Instant::now();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("index")
         .current_dir(&root)

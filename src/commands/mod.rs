@@ -1,6 +1,6 @@
 /// CLI subcommand implementations for Scope.
 ///
-/// Each module corresponds to one `sc` subcommand.
+/// Each module corresponds to one `scope` subcommand.
 pub mod deps;
 pub mod find;
 pub mod impact;

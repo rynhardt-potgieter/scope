@@ -1,8 +1,8 @@
-/// Integration and snapshot tests for `sc impact`.
+/// Integration and snapshot tests for `scope impact`.
 ///
 /// Each test copies the TypeScript fixture to a temporary directory (to avoid
-/// modifying the committed fixture), runs `sc init` + `sc index --full`, and
-/// then drives `sc impact` via assert_cmd.
+/// modifying the committed fixture), runs `scope init` + `scope index --full`, and
+/// then drives `scope impact` via assert_cmd.
 ///
 /// Note on impact data sparsity: the current edge extraction uses `__module__`
 /// synthetic IDs for `from_id` on import edges, which means the recursive CTE
@@ -40,8 +40,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test — bind it with
 /// `let _dir = ...` or `let (dir, root) = ...` so the destructor does not run
@@ -52,7 +52,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     copy_dir_all(fixture, dir.path());
 
     // Initialise scope config.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -60,7 +60,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
         .success();
 
     // Build the full index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -85,12 +85,12 @@ fn normalize_paths(output: &str, root: &Path) -> String {
 // Integration tests
 // ---------------------------------------------------------------------------
 
-/// sc impact processPayment should succeed and produce an "Impact analysis" header.
+/// scope impact processPayment should succeed and produce an "Impact analysis" header.
 #[test]
 fn test_impact_shows_analysis() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "processPayment"])
         .current_dir(&root)
@@ -99,13 +99,13 @@ fn test_impact_shows_analysis() {
         .stdout(contains("Impact analysis"));
 }
 
-/// sc impact UnknownThing must fail with a non-zero exit code and include
+/// scope impact UnknownThing must fail with a non-zero exit code and include
 /// "not found" in stderr so the caller knows what went wrong.
 #[test]
 fn test_impact_unknown_symbol_fails() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "UnknownThing"])
         .current_dir(&root)
@@ -114,12 +114,12 @@ fn test_impact_unknown_symbol_fails() {
         .stderr(contains("not found"));
 }
 
-/// sc impact PaymentService --json must emit valid JSON with command="impact".
+/// scope impact PaymentService --json must emit valid JSON with command="impact".
 #[test]
 fn test_impact_json_output() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "PaymentService", "--json"])
         .current_dir(&root)
@@ -142,7 +142,7 @@ fn test_impact_json_output() {
     );
 }
 
-/// sc impact PaymentService --depth 2 should succeed without errors.
+/// scope impact PaymentService --depth 2 should succeed without errors.
 ///
 /// Verifies that the --depth flag is accepted and the command completes
 /// successfully with a valid depth override.
@@ -150,7 +150,7 @@ fn test_impact_json_output() {
 fn test_impact_with_depth() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "PaymentService", "--depth", "2"])
         .current_dir(&root)
@@ -163,14 +163,14 @@ fn test_impact_with_depth() {
 // Snapshot tests — lock the human-readable output format
 // ---------------------------------------------------------------------------
 
-/// Snapshot the full stdout of `sc impact PaymentService`.
+/// Snapshot the full stdout of `scope impact PaymentService`.
 ///
 /// Any change to the impact output format will appear as a snapshot diff.
 #[test]
 fn test_impact_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "PaymentService"])
         .current_dir(&root)

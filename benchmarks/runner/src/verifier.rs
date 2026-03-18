@@ -103,7 +103,7 @@ fn run_tests(corpus_path: &Path, language: &str) -> Result<bool> {
 /// Check caller coverage by comparing the git diff against ground truth callers.
 ///
 /// Uses the Python verification script to cross-reference the diff against
-/// the known callers from `sc refs --json`.
+/// the known callers from `scope refs --json`.
 fn check_caller_coverage(corpus_path: &Path, task: &TaskDef) -> Result<f64> {
     // Generate the diff
     let diff_output = Command::new("git")
@@ -208,7 +208,7 @@ mod tests {
                 pattern_match_threshold: 0.0,
             },
             scope: ScopeDef {
-                expected_commands: vec!["sc refs".to_string()],
+                expected_commands: vec!["scope refs".to_string()],
             },
         }
     }

@@ -1,4 +1,4 @@
-/// Integration tests for error messages produced by every sc command.
+/// Integration tests for error messages produced by every scope command.
 ///
 /// Two classes of error are tested:
 ///   1. No index — commands run in an empty directory with no .scope/
@@ -34,21 +34,21 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let fixture = Path::new(TS_FIXTURE);
     copy_dir_all(fixture, dir.path());
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
         .assert()
         .success();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -68,89 +68,89 @@ fn empty_dir() -> TempDir {
 // No-index error tests — every command must fail with a helpful message
 // ---------------------------------------------------------------------------
 
-/// `sc sketch Foo` in a directory with no .scope/ must fail and tell the user
-/// to run sc init.
+/// `scope sketch Foo` in a directory with no .scope/ must fail and tell the user
+/// to run scope init.
 #[test]
 fn test_sketch_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "Foo"])
         .current_dir(dir.path())
         .assert()
         .failure()
-        .stderr(contains(".scope/").or(contains("sc init")));
+        .stderr(contains(".scope/").or(contains("scope init")));
 }
 
-/// `sc refs Foo` in a directory with no .scope/ must fail and tell the user
-/// to run sc init.
+/// `scope refs Foo` in a directory with no .scope/ must fail and tell the user
+/// to run scope init.
 #[test]
 fn test_refs_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "Foo"])
         .current_dir(dir.path())
         .assert()
         .failure()
-        .stderr(contains(".scope/").or(contains("sc init")));
+        .stderr(contains(".scope/").or(contains("scope init")));
 }
 
-/// `sc deps Foo` in a directory with no .scope/ must fail and tell the user
-/// to run sc init.
+/// `scope deps Foo` in a directory with no .scope/ must fail and tell the user
+/// to run scope init.
 #[test]
 fn test_deps_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "Foo"])
         .current_dir(dir.path())
         .assert()
         .failure()
-        .stderr(contains(".scope/").or(contains("sc init")));
+        .stderr(contains(".scope/").or(contains("scope init")));
 }
 
-/// `sc impact Foo` in a directory with no .scope/ must fail and tell the user
-/// to run sc init.
+/// `scope impact Foo` in a directory with no .scope/ must fail and tell the user
+/// to run scope init.
 #[test]
 fn test_impact_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "Foo"])
         .current_dir(dir.path())
         .assert()
         .failure()
-        .stderr(contains(".scope/").or(contains("sc init")));
+        .stderr(contains(".scope/").or(contains("scope init")));
 }
 
-/// `sc find "payment"` in a directory with no .scope/ must fail and tell the
-/// user to run sc init.
+/// `scope find "payment"` in a directory with no .scope/ must fail and tell the
+/// user to run scope init.
 #[test]
 fn test_find_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["find", "payment"])
         .current_dir(dir.path())
         .assert()
         .failure()
-        .stderr(contains(".scope/").or(contains("sc init")));
+        .stderr(contains(".scope/").or(contains("scope init")));
 }
 
-/// `sc status` in a directory with no .scope/ must exit with status 0 and
+/// `scope status` in a directory with no .scope/ must exit with status 0 and
 /// indicate that the project has not been initialised (the command is a health
 /// check, not a query, so it reports "no index" rather than failing hard).
 #[test]
 fn test_status_no_index() {
     let dir = empty_dir();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["status"])
         .current_dir(dir.path())
@@ -158,27 +158,27 @@ fn test_status_no_index() {
         .success()
         .stdout(
             contains("not initialised")
-                .or(contains("sc init"))
+                .or(contains("scope init"))
                 .or(contains(".scope")),
         );
 }
 
 // ---------------------------------------------------------------------------
-// Unknown-symbol error tests — suggest sc find in the error message
+// Unknown-symbol error tests — suggest scope find in the error message
 // ---------------------------------------------------------------------------
 
-/// `sc sketch Unknown` against a valid index must fail with "not found" and
-/// suggest using `sc find` for semantic search.
+/// `scope sketch Unknown` against a valid index must fail with "not found" and
+/// suggest using `scope find` for semantic search.
 #[test]
 fn test_sketch_unknown_symbol_suggests_find() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "Unknown"])
         .current_dir(&root)
         .assert()
         .failure()
         .stderr(contains("not found"))
-        .stderr(contains("sc find"));
+        .stderr(contains("scope find"));
 }

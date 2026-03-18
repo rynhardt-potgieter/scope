@@ -44,7 +44,7 @@ pub fn backup_scope_index(corpus_path: &Path) -> Result<PathBuf> {
     let scope_dir = corpus_path.join(".scope");
     if !scope_dir.is_dir() {
         anyhow::bail!(
-            "No .scope/ directory found in {}. Build the index first with 'sc index'.",
+            "No .scope/ directory found in {}. Build the index first with 'scope index'.",
             corpus_path.display()
         );
     }

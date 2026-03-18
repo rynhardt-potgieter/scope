@@ -1,4 +1,4 @@
-/// `sc init` — initialise Scope for a project.
+/// `scope init` — initialise Scope for a project.
 ///
 /// Creates the `.scope/` directory with a default `config.toml` and `.gitignore`.
 /// Auto-detects languages from project markers (tsconfig.json, .csproj, etc.).
@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::config::ProjectConfig;
 
-/// Arguments for the `sc init` command.
+/// Arguments for the `scope init` command.
 #[derive(Args, Debug)]
 pub struct InitArgs {
     /// Output as JSON instead of human-readable format
@@ -16,7 +16,7 @@ pub struct InitArgs {
     pub json: bool,
 }
 
-/// Run the `sc init` command.
+/// Run the `scope init` command.
 pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
@@ -95,7 +95,7 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         } else {
             println!("Detected languages: {}", lang_display.join(", "));
         }
-        println!("Run `sc index` to build the index.");
+        println!("Run `scope index` to build the index.");
     }
 
     Ok(())

@@ -24,4 +24,4 @@ caller_coverage_threshold = 1.0
 pattern_match_threshold = 0.0
 
 [scope]
-expected_commands = ["sc refs", "sc sketch"]
+expected_commands = ["scope refs", "scope sketch"]

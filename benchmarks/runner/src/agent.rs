@@ -16,7 +16,7 @@ pub struct AgentRun {
     pub output_tokens: u64,
     /// Number of full source file reads during the task
     pub file_reads: u32,
-    /// Which sc commands the agent called (e.g. ["sc refs", "sc sketch"])
+    /// Which scope commands the agent called (e.g. ["scope refs", "scope sketch"])
     pub scope_commands_called: Vec<String>,
     /// Wall clock duration of the agent run in milliseconds
     pub duration_ms: u64,

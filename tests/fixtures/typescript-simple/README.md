@@ -21,7 +21,7 @@ tsconfig.json
 
 ## Index Ground Truth
 
-These numbers are what tests assert against. Verified by running `sc index --full` followed
+These numbers are what tests assert against. Verified by running `scope index --full` followed
 by the queries below.
 
 ### Symbol Counts
@@ -32,7 +32,7 @@ by the queries below.
 | Total symbols | 21 |
 | Total edges | 17 |
 
-### `sc sketch PaymentService`
+### `scope sketch PaymentService`
 
 - Kind: `class`
 - File: `src/payments/service.ts:4-24`
@@ -40,33 +40,33 @@ by the queries below.
 - Fields: `private logger: Logger` (1 field)
 - All methods show `[internal]` caller count (no external callers in the fixture)
 
-### `sc refs PaymentService`
+### `scope refs PaymentService`
 
 - Total references: **4**
 - `imported` (2): `src/controllers/order.ts:1`, `src/controllers/refund.ts:1`
 - `used as type` (2): `src/controllers/order.ts:5`, `src/controllers/refund.ts:4`
 
-### `sc refs processPayment`
+### `scope refs processPayment`
 
 - Total references: **0** (calls are on the paymentService field, not the class method directly)
 
-### `sc refs Logger`
+### `scope refs Logger`
 
 - Total references: **2**
 - `imported` (1): `src/payments/service.ts:2`
 - `used as type` (1): `src/payments/service.ts:5`
 
-### `sc deps PaymentService`
+### `scope deps PaymentService`
 
 Groups:
 - `imports`: Logger (logger.ts), PaymentRequest (types.ts), PaymentResult (types.ts)
 - `references_type`: Logger (logger.ts), PaymentRequest (types.ts)
 
-### `sc impact PaymentService`
+### `scope impact PaymentService`
 
 - Result: `(no impact detected)` — no reverse-call edges reach PaymentService in this fixture.
 
-### `sc find "payment"`
+### `scope find "payment"`
 
 Returns results in score order, top entries:
 1. `processPayment` — score `1.00` — method
@@ -75,13 +75,13 @@ Returns results in score order, top entries:
 4. `PaymentRequest` — score `0.93` — interface
 5. `PaymentResult` — score `0.93` — interface
 
-### `sc sketch Logger`
+### `scope sketch Logger`
 
 - Kind: `class`
 - File: `src/utils/logger.ts:1-9`
 - Methods: `info`, `error` (2 methods)
 
-### `sc sketch PaymentRequest`
+### `scope sketch PaymentRequest`
 
 - Kind: `interface`
 - File: `src/payments/types.ts:1-5`
@@ -91,8 +91,8 @@ Returns results in score order, top entries:
 Run from the `tests/fixtures/typescript-simple/` directory:
 
 ```bash
-sc init    # only if .scope/ does not already exist
-sc index --full
+scope init    # only if .scope/ does not already exist
+scope index --full
 ```
 
 After a schema change commit the new `.scope/graph.db` and `.scope/file_hashes.db`.

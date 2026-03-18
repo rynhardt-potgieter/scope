@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/rynhardt-engelbrecht/scope"
 
 [[bin]]
-name = "sc"
+name = "scope"
 path = "src/main.rs"
 
 [dependencies]

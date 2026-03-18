@@ -1,12 +1,12 @@
-/// `sc status` — show index status and freshness.
+/// `scope status` — show index status and freshness.
 ///
 /// Quick health check: is the index built? How many symbols and files?
 /// When was the last index run? Use this to check if the index is stale
 /// before running queries.
 ///
 /// Examples:
-///   sc status          — show index health
-///   sc status --json   — machine-readable output
+///   scope status          — show index health
+///   scope status --json   — machine-readable output
 use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
@@ -16,7 +16,7 @@ use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
-/// Arguments for the `sc status` command.
+/// Arguments for the `scope status` command.
 #[derive(Args, Debug)]
 pub struct StatusArgs {
     /// Output as JSON instead of human-readable format
@@ -24,7 +24,7 @@ pub struct StatusArgs {
     pub json: bool,
 }
 
-/// Data payload for the JSON output of `sc status`.
+/// Data payload for the JSON output of `scope status`.
 #[derive(Debug, Serialize)]
 pub struct StatusData {
     /// Whether the index exists and is queryable.
@@ -41,7 +41,7 @@ pub struct StatusData {
     pub edge_count: usize,
 }
 
-/// Run the `sc status` command.
+/// Run the `scope status` command.
 pub fn run(args: &StatusArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
@@ -65,7 +65,7 @@ pub fn run(args: &StatusArgs, project_root: &Path) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
             println!("Index status: not initialised");
-            println!("  Run 'sc init' to set up Scope for this project.");
+            println!("  Run 'scope init' to set up Scope for this project.");
         }
         return Ok(());
     }
@@ -91,7 +91,7 @@ pub fn run(args: &StatusArgs, project_root: &Path) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
             println!("Index status: not built");
-            println!("  Run 'sc index' to build the index.");
+            println!("  Run 'scope index' to build the index.");
         }
         return Ok(());
     }

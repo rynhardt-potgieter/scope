@@ -1,4 +1,4 @@
-/// `sc index` — build or refresh the code index.
+/// `scope index` — build or refresh the code index.
 ///
 /// Walks the project's source files, parses them with tree-sitter,
 /// and stores symbols and edges in the SQLite graph database.
@@ -15,7 +15,7 @@ use crate::core::indexer::Indexer;
 use crate::core::searcher::Searcher;
 use crate::output::formatter;
 
-/// Arguments for the `sc index` command.
+/// Arguments for the `scope index` command.
 #[derive(Args, Debug)]
 pub struct IndexArgs {
     /// Force a full rebuild of the index (ignore incremental cache)
@@ -27,12 +27,12 @@ pub struct IndexArgs {
     pub json: bool,
 }
 
-/// Run the `sc index` command.
+/// Run the `scope index` command.
 pub fn run(args: &IndexArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'sc init' first.");
+        bail!("No .scope/ directory found. Run 'scope init' first.");
     }
 
     // Load config

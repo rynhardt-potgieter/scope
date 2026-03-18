@@ -4,7 +4,7 @@
 set -e
 
 REPO="Rayne182/scope"
-BINARY="sc"
+BINARY="scope"
 
 # Determine OS and architecture
 detect_platform() {
@@ -101,7 +101,7 @@ install() {
             ;;
     esac
 
-    echo "Run 'sc --help' to get started."
+    echo "Run 'scope --help' to get started."
 }
 
 install

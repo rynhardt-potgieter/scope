@@ -1,11 +1,11 @@
-/// `sc source <symbol>` — fetch full source of a specific symbol.
+/// `scope source <symbol>` — fetch full source of a specific symbol.
 ///
 /// Returns the exact source code of the symbol, including its full definition.
 /// Only call this when ready to read or edit the implementation.
 use anyhow::Result;
 use clap::Args;
 
-/// Arguments for the `sc source` command.
+/// Arguments for the `scope source` command.
 #[derive(Args, Debug)]
 pub struct SourceArgs {
     /// Symbol name to fetch source for.
@@ -18,7 +18,7 @@ pub struct SourceArgs {
     pub json: bool,
 }
 
-/// Run the `sc source` command (stub).
+/// Run the `scope source` command (stub).
 pub fn run(args: &SourceArgs) -> Result<()> {
     eprintln!(
         "source command not yet implemented. Symbol: {}",

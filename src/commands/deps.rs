@@ -1,13 +1,13 @@
-/// `sc deps <symbol>` — show what a symbol depends on.
+/// `scope deps <symbol>` — show what a symbol depends on.
 ///
 /// Lists direct imports, calls, and type references. Use `--depth 2`
 /// for transitive dependencies. Pass a file path to see dependencies
 /// of all symbols in that file.
 ///
 /// Examples:
-///   sc deps PaymentService               — direct dependencies of a class
-///   sc deps PaymentService --depth 2     — transitive dependencies
-///   sc deps src/payments/service.ts      — dependencies of a whole file
+///   scope deps PaymentService               — direct dependencies of a class
+///   scope deps PaymentService --depth 2     — transitive dependencies
+///   scope deps src/payments/service.ts      — dependencies of a whole file
 use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
@@ -16,7 +16,7 @@ use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
-/// Arguments for the `sc deps` command.
+/// Arguments for the `scope deps` command.
 #[derive(Args, Debug)]
 pub struct DepsArgs {
     /// Symbol name or file path to show dependencies for.
@@ -38,17 +38,17 @@ pub struct DepsArgs {
 
 use super::looks_like_file_path;
 
-/// Run the `sc deps` command.
+/// Run the `scope deps` command.
 pub fn run(args: &DepsArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'sc init' first.");
+        bail!("No .scope/ directory found. Run 'scope init' first.");
     }
 
     let db_path = scope_dir.join("graph.db");
     if !db_path.exists() {
-        bail!("No index found. Run 'sc index' to build one first.");
+        bail!("No index found. Run 'scope index' to build one first.");
     }
 
     let graph = Graph::open(&db_path)?;

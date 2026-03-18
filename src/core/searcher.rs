@@ -1,6 +1,6 @@
 //! Full-text search over symbol embeddings using SQLite FTS5.
 //!
-//! Provides BM25-ranked search for `sc find`. Symbols are indexed with
+//! Provides BM25-ranked search for `scope find`. Symbols are indexed with
 //! their name, signature, docstring, and parent context. Queries use
 //! FTS5 MATCH syntax with porter stemming and unicode tokenisation.
 //!

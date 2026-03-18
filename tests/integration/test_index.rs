@@ -1,4 +1,4 @@
-/// Integration tests for `sc init` and `sc index --full`.
+/// Integration tests for `scope init` and `scope index --full`.
 ///
 /// Each test copies the TypeScript fixture to a temporary directory to avoid
 /// modifying the committed fixture, then drives the binary via assert_cmd.
@@ -41,18 +41,18 @@ fn setup_ts_fixture() -> TempDir {
     dir
 }
 
-/// Run `sc init` in `dir` and return the Command assertion handle.
+/// Run `scope init` in `dir` and return the Command assertion handle.
 fn sc_init(dir: &Path) -> assert_cmd::assert::Assert {
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir)
         .assert()
 }
 
-/// Run `sc index --full` in `dir` and return the Command assertion handle.
+/// Run `scope index --full` in `dir` and return the Command assertion handle.
 fn sc_index_full(dir: &Path) -> assert_cmd::assert::Assert {
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir)
@@ -60,7 +60,7 @@ fn sc_index_full(dir: &Path) -> assert_cmd::assert::Assert {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — sc init
+// Tests — scope init
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -106,7 +106,7 @@ fn test_init_fails_if_scope_exists() {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — sc index
+// Tests — scope index
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -131,11 +131,11 @@ fn test_index_full_on_typescript_fixture() {
 fn test_index_requires_init_first() {
     let dir = TempDir::new().unwrap();
 
-    // No `sc init` — index must fail.
+    // No `scope init` — index must fail.
     sc_index_full(dir.path())
         .failure()
         .code(1)
-        .stderr(contains("sc init").or(contains(".scope")));
+        .stderr(contains("scope init").or(contains(".scope")));
 }
 
 // ---------------------------------------------------------------------------

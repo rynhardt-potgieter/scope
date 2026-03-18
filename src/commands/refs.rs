@@ -1,4 +1,4 @@
-/// `sc refs <symbol>` — find all references to a symbol.
+/// `scope refs <symbol>` — find all references to a symbol.
 ///
 /// Returns all call sites, imports, type annotations, and other references
 /// across the codebase. Use before changing a function signature to find all callers.
@@ -7,10 +7,10 @@
 /// imported, used as type). For functions/methods, a flat list is shown.
 ///
 /// Examples:
-///   sc refs processPayment              — all references to a function
-///   sc refs PaymentService              — grouped references to a class
-///   sc refs PaymentService --kind calls — only call sites
-///   sc refs src/payments/service.ts     — all refs to symbols in a file
+///   scope refs processPayment              — all references to a function
+///   scope refs PaymentService              — grouped references to a class
+///   scope refs PaymentService --kind calls — only call sites
+///   scope refs src/payments/service.ts     — all refs to symbols in a file
 use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
@@ -19,7 +19,7 @@ use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
-/// Arguments for the `sc refs` command.
+/// Arguments for the `scope refs` command.
 #[derive(Args, Debug)]
 pub struct RefsArgs {
     /// Symbol name or file path to find references for.
@@ -46,17 +46,17 @@ pub struct RefsArgs {
 
 use super::looks_like_file_path;
 
-/// Run the `sc refs` command.
+/// Run the `scope refs` command.
 pub fn run(args: &RefsArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'sc init' first.");
+        bail!("No .scope/ directory found. Run 'scope init' first.");
     }
 
     let db_path = scope_dir.join("graph.db");
     if !db_path.exists() {
-        bail!("No index found. Run 'sc index' to build one first.");
+        bail!("No index found. Run 'scope index' to build one first.");
     }
 
     let graph = Graph::open(&db_path)?;

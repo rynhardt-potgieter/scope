@@ -1,12 +1,12 @@
-/// `sc sketch <symbol>` — show structural overview of a symbol.
+/// `scope sketch <symbol>` — show structural overview of a symbol.
 ///
 /// Returns the class/function signature, dependencies, methods with caller counts,
-/// and type information. Use this before `sc source` to understand structure first.
+/// and type information. Use this before `scope source` to understand structure first.
 ///
 /// Examples:
-///   sc sketch PaymentService              — sketch a class
-///   sc sketch PaymentService.processPayment  — sketch a method
-///   sc sketch src/payments/service.ts     — sketch a whole file
+///   scope sketch PaymentService              — sketch a class
+///   scope sketch PaymentService.processPayment  — sketch a method
+///   scope sketch src/payments/service.ts     — sketch a whole file
 use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
@@ -15,7 +15,7 @@ use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
-/// Arguments for the `sc sketch` command.
+/// Arguments for the `scope sketch` command.
 #[derive(Args, Debug)]
 pub struct SketchArgs {
     /// Symbol name or file path to sketch.
@@ -40,17 +40,17 @@ pub struct SketchArgs {
 /// Returns true if the input looks like a file path rather than a symbol name.
 use super::looks_like_file_path;
 
-/// Run the `sc sketch` command.
+/// Run the `scope sketch` command.
 pub fn run(args: &SketchArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'sc init' first.");
+        bail!("No .scope/ directory found. Run 'scope init' first.");
     }
 
     let db_path = scope_dir.join("graph.db");
     if !db_path.exists() {
-        bail!("No index found. Run 'sc index' to build one first.");
+        bail!("No index found. Run 'scope index' to build one first.");
     }
 
     let graph = Graph::open(&db_path)?;
@@ -67,7 +67,7 @@ fn run_symbol_sketch(args: &SketchArgs, graph: &Graph) -> Result<()> {
     let symbol = graph.find_symbol(&args.symbol)?.ok_or_else(|| {
         anyhow::anyhow!(
             "Symbol '{}' not found in index.\n\
-             Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+             Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
             args.symbol,
             args.symbol
         )
@@ -205,7 +205,7 @@ fn run_file_sketch(args: &SketchArgs, graph: &Graph) -> Result<()> {
     if symbols.is_empty() {
         bail!(
             "No symbols found for file '{}'.\n\
-             Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+             Tip: Check the path is relative to the project root. Run 'scope index' if the file is new.",
             file_path
         );
     }

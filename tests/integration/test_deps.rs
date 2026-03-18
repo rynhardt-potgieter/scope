@@ -1,8 +1,8 @@
-/// Integration and snapshot tests for `sc deps`.
+/// Integration and snapshot tests for `scope deps`.
 ///
 /// Each test copies the TypeScript fixture to a temporary directory (to avoid
-/// modifying the committed fixture), runs `sc init` + `sc index --full`, and
-/// then drives `sc deps` via assert_cmd.
+/// modifying the committed fixture), runs `scope init` + `scope index --full`, and
+/// then drives `scope deps` via assert_cmd.
 ///
 /// Snapshot tests use `insta`. On first run they create files under
 /// `tests/integration/snapshots/`. Run `cargo insta review` to accept new
@@ -35,8 +35,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test — bind it with
 /// `let _dir = ...` or `let (dir, root) = ...` so the destructor does not run
@@ -47,7 +47,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     copy_dir_all(fixture, dir.path());
 
     // Initialise scope config.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -55,7 +55,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
         .success();
 
     // Build the full index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -80,7 +80,7 @@ fn normalize_paths(output: &str, root: &Path) -> String {
 // Integration tests
 // ---------------------------------------------------------------------------
 
-/// sc deps PaymentService should succeed and list its dependencies.
+/// scope deps PaymentService should succeed and list its dependencies.
 ///
 /// The fixture's PaymentService imports Logger and types from the payments
 /// module, so the output must contain at least one dependency entry and the
@@ -89,7 +89,7 @@ fn normalize_paths(output: &str, root: &Path) -> String {
 fn test_deps_shows_dependencies() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "PaymentService"])
         .current_dir(&root)
@@ -98,7 +98,7 @@ fn test_deps_shows_dependencies() {
         .stdout(contains("PaymentService"));
 }
 
-/// sc deps PaymentService --depth 2 should succeed and show transitive deps.
+/// scope deps PaymentService --depth 2 should succeed and show transitive deps.
 ///
 /// The header changes to "transitive dependencies (depth 2)" when --depth is
 /// greater than 1, so we assert on that label as well.
@@ -106,7 +106,7 @@ fn test_deps_shows_dependencies() {
 fn test_deps_with_depth() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "PaymentService", "--depth", "2"])
         .current_dir(&root)
@@ -116,7 +116,7 @@ fn test_deps_with_depth() {
         .stdout(contains("transitive"));
 }
 
-/// sc deps src/payments/service.ts should succeed showing file-level deps.
+/// scope deps src/payments/service.ts should succeed showing file-level deps.
 ///
 /// Passing a file path triggers the file-level deps path. The output header
 /// uses the normalised file path, so we check for a fragment of it.
@@ -124,7 +124,7 @@ fn test_deps_with_depth() {
 fn test_deps_file_level() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "src/payments/service.ts"])
         .current_dir(&root)
@@ -133,13 +133,13 @@ fn test_deps_file_level() {
         .stdout(contains("service.ts"));
 }
 
-/// sc deps UnknownThing must fail with a non-zero exit code and include
+/// scope deps UnknownThing must fail with a non-zero exit code and include
 /// "not found" in stderr so the caller knows what went wrong.
 #[test]
 fn test_deps_unknown_symbol_fails() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "UnknownThing"])
         .current_dir(&root)
@@ -148,12 +148,12 @@ fn test_deps_unknown_symbol_fails() {
         .stderr(contains("not found"));
 }
 
-/// sc deps PaymentService --json must emit valid JSON with command="deps".
+/// scope deps PaymentService --json must emit valid JSON with command="deps".
 #[test]
 fn test_deps_json_output() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "PaymentService", "--json"])
         .current_dir(&root)
@@ -180,14 +180,14 @@ fn test_deps_json_output() {
 // Snapshot tests — lock the human-readable output format
 // ---------------------------------------------------------------------------
 
-/// Snapshot the full stdout of `sc deps PaymentService`.
+/// Snapshot the full stdout of `scope deps PaymentService`.
 ///
 /// Any change to the deps grouped format will appear as a snapshot diff.
 #[test]
 fn test_deps_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "PaymentService"])
         .current_dir(&root)

@@ -518,7 +518,7 @@ impl Graph {
         let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
             anyhow::anyhow!(
                 "Symbol '{}' not found in index.\n\
-                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                 Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
                 symbol_name,
                 symbol_name
             )
@@ -678,7 +678,7 @@ impl Graph {
         if symbols.is_empty() {
             anyhow::bail!(
                 "No symbols found for file '{}'.\n\
-                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                 Tip: Check the path is relative to the project root. Run 'scope index' if the file is new.",
                 file_path
             );
         }
@@ -788,7 +788,7 @@ impl Graph {
         let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
             anyhow::anyhow!(
                 "Symbol '{}' not found in index.\n\
-                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                 Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
                 symbol_name,
                 symbol_name
             )
@@ -823,7 +823,7 @@ impl Graph {
         if symbols.is_empty() {
             anyhow::bail!(
                 "No symbols found for file '{}'.\n\
-                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                 Tip: Check the path is relative to the project root. Run 'scope index' if the file is new.",
                 file_path
             );
         }
@@ -1044,7 +1044,7 @@ impl Graph {
         let symbol = self.find_symbol(symbol_name)?.ok_or_else(|| {
             anyhow::anyhow!(
                 "Symbol '{}' not found in index.\n\
-                 Tip: Check spelling, or use 'sc find \"{}\"' for semantic search.",
+                 Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
                 symbol_name,
                 symbol_name
             )
@@ -1073,7 +1073,7 @@ impl Graph {
         if symbols.is_empty() {
             anyhow::bail!(
                 "No symbols found for file '{}'.\n\
-                 Tip: Check the path is relative to the project root. Run 'sc index' if the file is new.",
+                 Tip: Check the path is relative to the project root. Run 'scope index' if the file is new.",
                 file_path
             );
         }

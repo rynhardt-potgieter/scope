@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS file_hashes (
     indexed_at  INTEGER NOT NULL
 );
 
--- FTS5 virtual table for semantic-like search (`sc find`).
+-- FTS5 virtual table for semantic-like search (`scope find`).
 -- Stores a rich text representation of each symbol for full-text search.
 -- The content is kept in sync with the symbols table via the searcher module.
 -- Using content="" (contentless) to avoid data duplication — the actual

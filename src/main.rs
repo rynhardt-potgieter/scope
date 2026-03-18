@@ -23,7 +23,7 @@ mod output;
 /// understand structure, dependencies, and blast radius.
 #[derive(Parser, Debug)]
 #[command(
-    name = "sc",
+    name = "scope",
     about = "Code intelligence CLI for LLM coding agents",
     long_about = "Scope builds a local code intelligence index and lets you query \
                   it efficiently. Use it before editing any non-trivial code to \
@@ -47,7 +47,7 @@ pub enum Commands {
     ///
     /// Creates a .scope/ directory with default configuration.
     /// Auto-detects languages from project markers (tsconfig.json, .csproj).
-    /// Run this once per project before running `sc index`.
+    /// Run this once per project before running `scope index`.
     Init(commands::init::InitArgs),
 
     /// Build or refresh the code index.
@@ -60,13 +60,13 @@ pub enum Commands {
     /// Show structural overview of a symbol without reading full source.
     ///
     /// Returns the class/function signature, dependencies, methods with caller
-    /// counts, and type information. Use this before `sc source` to understand
+    /// counts, and type information. Use this before `scope source` to understand
     /// structure first.
     ///
     /// Examples:
-    ///   sc sketch PaymentService              — sketch a class
-    ///   sc sketch PaymentService.processPayment  — sketch a method
-    ///   sc sketch src/payments/service.ts     — sketch a whole file
+    ///   scope sketch PaymentService              — sketch a class
+    ///   scope sketch PaymentService.processPayment  — sketch a method
+    ///   scope sketch src/payments/service.ts     — sketch a whole file
     Sketch(commands::sketch::SketchArgs),
 
     /// Find all references to a symbol across the codebase.
@@ -75,8 +75,8 @@ pub enum Commands {
     /// Use before changing a function signature to find all callers.
     ///
     /// Examples:
-    ///   sc refs processPayment              — all references
-    ///   sc refs PaymentService --kind calls  — only call sites
+    ///   scope refs processPayment              — all references
+    ///   scope refs PaymentService --kind calls  — only call sites
     Refs(commands::refs::RefsArgs),
 
     /// Show what a symbol depends on.
@@ -85,8 +85,8 @@ pub enum Commands {
     /// for transitive dependencies.
     ///
     /// Examples:
-    ///   sc deps PaymentService               — direct dependencies
-    ///   sc deps PaymentService --depth 2     — transitive dependencies
+    ///   scope deps PaymentService               — direct dependencies
+    ///   scope deps PaymentService --depth 2     — transitive dependencies
     Deps(commands::deps::DepsArgs),
 
     /// Show what depends on a symbol (reverse dependencies).
@@ -95,8 +95,8 @@ pub enum Commands {
     /// and files that depend on the given symbol.
     ///
     /// Examples:
-    ///   sc rdeps PaymentService              — what uses this class
-    ///   sc rdeps PaymentConfig --depth 2     — transitive reverse deps
+    ///   scope rdeps PaymentService              — what uses this class
+    ///   scope rdeps PaymentConfig --depth 2     — transitive reverse deps
     Rdeps(commands::rdeps::RdepsArgs),
 
     /// Analyse blast radius if a symbol changes.
@@ -105,8 +105,8 @@ pub enum Commands {
     /// callers, second-degree dependents, and affected test files.
     ///
     /// Examples:
-    ///   sc impact processPayment             — who breaks if this changes
-    ///   sc impact PaymentConfig              — blast radius of config change
+    ///   scope impact processPayment             — who breaks if this changes
+    ///   scope impact PaymentConfig              — blast radius of config change
     Impact(commands::impact::ImpactArgs),
 
     /// Find code by intent using semantic search.
@@ -115,8 +115,8 @@ pub enum Commands {
     /// are called. Returns ranked results with similarity scores.
     ///
     /// Examples:
-    ///   sc find "handles authentication errors"
-    ///   sc find "sends email notifications" --kind function
+    ///   scope find "handles authentication errors"
+    ///   scope find "sends email notifications" --kind function
     Find(commands::find::FindArgs),
 
     /// Find structurally similar symbols.
@@ -125,18 +125,18 @@ pub enum Commands {
     /// Useful for discovering existing implementations before writing new code.
     ///
     /// Examples:
-    ///   sc similar processPayment            — find similar functions
-    ///   sc similar PaymentService --kind class — find similar classes
+    ///   scope similar processPayment            — find similar functions
+    ///   scope similar PaymentService --kind class — find similar classes
     Similar(commands::similar::SimilarArgs),
 
     /// Fetch full source of a specific symbol.
     ///
     /// Returns the exact source code of the symbol. Only call this when
-    /// ready to read or edit the implementation — use `sc sketch` first.
+    /// ready to read or edit the implementation — use `scope sketch` first.
     ///
     /// Examples:
-    ///   sc source processPayment
-    ///   sc source PaymentService.validateCard
+    ///   scope source processPayment
+    ///   scope source PaymentService.validateCard
     Source(commands::source::SourceArgs),
 
     /// Show index status and freshness.

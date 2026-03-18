@@ -1,8 +1,8 @@
-/// Integration and snapshot tests for `sc sketch`.
+/// Integration and snapshot tests for `scope sketch`.
 ///
 /// Each test copies the TypeScript fixture to a temporary directory (to avoid
-/// modifying the committed fixture), runs `sc init` + `sc index --full`, and
-/// then drives `sc sketch` via assert_cmd.
+/// modifying the committed fixture), runs `scope init` + `scope index --full`, and
+/// then drives `scope sketch` via assert_cmd.
 ///
 /// Snapshot tests use `insta`. On first run they create files under
 /// `tests/snapshots/`. Run `cargo insta review` to accept new snapshots.
@@ -34,8 +34,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test — bind it with
 /// `let _dir = ...` or `let (dir, root) = ...` so the destructor does not run
@@ -46,7 +46,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     copy_dir_all(fixture, dir.path());
 
     // Initialise scope config.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -54,7 +54,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
         .success();
 
     // Build the full index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -69,12 +69,12 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
 // Integration tests
 // ---------------------------------------------------------------------------
 
-/// sc sketch PaymentService should show the class name, kind, and file path.
+/// scope sketch PaymentService should show the class name, kind, and file path.
 #[test]
 fn test_sketch_class_shows_name_and_kind() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService"])
         .current_dir(&root)
@@ -85,12 +85,12 @@ fn test_sketch_class_shows_name_and_kind() {
         .stdout(contains("service.ts"));
 }
 
-/// sc sketch PaymentService.processPayment should show "method" and the method name.
+/// scope sketch PaymentService.processPayment should show "method" and the method name.
 #[test]
 fn test_sketch_method_shows_signature() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService.processPayment"])
         .current_dir(&root)
@@ -105,7 +105,7 @@ fn test_sketch_method_shows_signature() {
 fn test_sketch_qualified_method_lookup() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService.refundPayment"])
         .current_dir(&root)
@@ -120,7 +120,7 @@ fn test_sketch_qualified_method_lookup() {
 fn test_sketch_unknown_symbol_fails() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "NonExistentThing"])
         .current_dir(&root)
@@ -134,7 +134,7 @@ fn test_sketch_unknown_symbol_fails() {
 fn test_sketch_file_level() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "src/payments/service.ts"])
         .current_dir(&root)
@@ -143,12 +143,12 @@ fn test_sketch_file_level() {
         .stdout(contains("PaymentService"));
 }
 
-/// sc sketch PaymentRequest should show the interface / type.
+/// scope sketch PaymentRequest should show the interface / type.
 #[test]
 fn test_sketch_interface() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentRequest"])
         .current_dir(&root)
@@ -162,7 +162,7 @@ fn test_sketch_interface() {
 fn test_sketch_json_output_is_valid() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService", "--json"])
         .current_dir(&root)
@@ -189,14 +189,14 @@ fn test_sketch_json_output_is_valid() {
 // Snapshot tests — lock the human-readable output format
 // ---------------------------------------------------------------------------
 
-/// Snapshot the full stdout of `sc sketch PaymentService`.
+/// Snapshot the full stdout of `scope sketch PaymentService`.
 ///
 /// Any change to the class sketch format will appear as a snapshot diff.
 #[test]
 fn test_sketch_class_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService"])
         .current_dir(&root)
@@ -211,12 +211,12 @@ fn test_sketch_class_output_format() {
     assert_snapshot!("sketch_class_payment_service", normalized);
 }
 
-/// Snapshot the full stdout of `sc sketch PaymentService.processPayment`.
+/// Snapshot the full stdout of `scope sketch PaymentService.processPayment`.
 #[test]
 fn test_sketch_method_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService.processPayment"])
         .current_dir(&root)
@@ -229,12 +229,12 @@ fn test_sketch_method_output_format() {
     assert_snapshot!("sketch_method_process_payment", normalized);
 }
 
-/// Snapshot the full stdout of `sc sketch src/payments/service.ts`.
+/// Snapshot the full stdout of `scope sketch src/payments/service.ts`.
 #[test]
 fn test_sketch_file_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "src/payments/service.ts"])
         .current_dir(&root)

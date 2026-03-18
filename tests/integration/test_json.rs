@@ -1,4 +1,4 @@
-/// Integration tests that validate the JSON output envelope for every sc command
+/// Integration tests that validate the JSON output envelope for every scope command
 /// that supports `--json`.
 ///
 /// Every command must:
@@ -36,8 +36,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test.
 fn setup_indexed_fixture() -> (TempDir, PathBuf) {
@@ -45,14 +45,14 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     let fixture = Path::new(TS_FIXTURE);
     copy_dir_all(fixture, dir.path());
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
         .assert()
         .success();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -79,13 +79,13 @@ fn parse_json(stdout: &[u8]) -> serde_json::Value {
 // JSON envelope tests
 // ---------------------------------------------------------------------------
 
-/// `sc sketch PaymentService --json` must emit valid JSON with `command="sketch"`
+/// `scope sketch PaymentService --json` must emit valid JSON with `command="sketch"`
 /// and a non-null `data` field.
 #[test]
 fn test_sketch_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService", "--json"])
         .current_dir(&root)
@@ -108,13 +108,13 @@ fn test_sketch_json_envelope() {
     );
 }
 
-/// `sc refs PaymentService --json` must emit valid JSON with `command="refs"`
+/// `scope refs PaymentService --json` must emit valid JSON with `command="refs"`
 /// and a non-null `data` field.
 #[test]
 fn test_refs_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService", "--json"])
         .current_dir(&root)
@@ -137,13 +137,13 @@ fn test_refs_json_envelope() {
     );
 }
 
-/// `sc deps PaymentService --json` must emit valid JSON with `command="deps"`
+/// `scope deps PaymentService --json` must emit valid JSON with `command="deps"`
 /// and a non-null `data` field.
 #[test]
 fn test_deps_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["deps", "PaymentService", "--json"])
         .current_dir(&root)
@@ -166,13 +166,13 @@ fn test_deps_json_envelope() {
     );
 }
 
-/// `sc impact PaymentService --json` must emit valid JSON with `command="impact"`
+/// `scope impact PaymentService --json` must emit valid JSON with `command="impact"`
 /// and a non-null `data` field.
 #[test]
 fn test_impact_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "PaymentService", "--json"])
         .current_dir(&root)
@@ -195,13 +195,13 @@ fn test_impact_json_envelope() {
     );
 }
 
-/// `sc find "payment" --json` must emit valid JSON with `command="find"`
+/// `scope find "payment" --json` must emit valid JSON with `command="find"`
 /// and a non-null `data` field.
 #[test]
 fn test_find_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["find", "payment", "--json"])
         .current_dir(&root)
@@ -224,14 +224,14 @@ fn test_find_json_envelope() {
     );
 }
 
-/// `sc status --json` must emit valid JSON with `command="status"` and a
+/// `scope status --json` must emit valid JSON with `command="status"` and a
 /// non-null `data` field. This test runs against a fully-indexed fixture so
 /// that `data.index_exists` is `true` and the data object is populated.
 #[test]
 fn test_status_json_envelope() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["status", "--json"])
         .current_dir(&root)
@@ -268,7 +268,7 @@ fn test_status_json_envelope() {
 fn test_sketch_json_data_has_name_and_kind() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService", "--json"])
         .current_dir(&root)
@@ -306,7 +306,7 @@ fn test_sketch_json_data_has_name_and_kind() {
 fn test_refs_json_data_has_groups() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService", "--json"])
         .current_dir(&root)
@@ -331,7 +331,7 @@ fn test_refs_json_data_has_groups() {
 fn test_find_json_data_has_required_fields() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["find", "payment", "--json"])
         .current_dir(&root)
@@ -373,7 +373,7 @@ fn test_find_json_data_has_required_fields() {
 fn test_sketch_json_symbol_field_matches_query() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "PaymentService", "--json"])
         .current_dir(&root)

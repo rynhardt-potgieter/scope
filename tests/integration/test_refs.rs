@@ -1,8 +1,8 @@
-/// Integration and snapshot tests for `sc refs`.
+/// Integration and snapshot tests for `scope refs`.
 ///
 /// Each test copies the TypeScript fixture to a temporary directory (to avoid
-/// modifying the committed fixture), runs `sc init` + `sc index --full`, and
-/// then drives `sc refs` via assert_cmd.
+/// modifying the committed fixture), runs `scope init` + `scope index --full`, and
+/// then drives `scope refs` via assert_cmd.
 ///
 /// Snapshot tests use `insta`. On first run they create files under
 /// `tests/integration/snapshots/`. Run `cargo insta review` to accept new
@@ -35,8 +35,8 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 ///
 /// The `TempDir` must stay alive for the duration of the test — bind it with
 /// `let _dir = ...` or `let (dir, root) = ...` so the destructor does not run
@@ -47,7 +47,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     copy_dir_all(fixture, dir.path());
 
     // Initialise scope config.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -55,7 +55,7 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
         .success();
 
     // Build the full index.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -80,12 +80,12 @@ fn normalize_paths(output: &str, root: &Path) -> String {
 // Integration tests
 // ---------------------------------------------------------------------------
 
-/// sc refs processPayment should succeed and show file references.
+/// scope refs processPayment should succeed and show file references.
 #[test]
 fn test_refs_finds_callers() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "processPayment"])
         .current_dir(&root)
@@ -94,7 +94,7 @@ fn test_refs_finds_callers() {
         .stdout(contains("processPayment"));
 }
 
-/// sc refs PaymentService should show grouped output for a class symbol.
+/// scope refs PaymentService should show grouped output for a class symbol.
 ///
 /// The fixture has PaymentService imported by both order.ts and refund.ts,
 /// so the output should include at least one grouping section.
@@ -104,7 +104,7 @@ fn test_refs_class_shows_grouped_output() {
 
     // For a class with multiple reference kinds (imports, instantiates, etc.)
     // the grouped formatter adds a trailing "(N):" section header.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService"])
         .current_dir(&root)
@@ -113,14 +113,14 @@ fn test_refs_class_shows_grouped_output() {
         .stdout(contains("PaymentService"));
 }
 
-/// sc refs PaymentService --kind imports should only show import-kind refs.
+/// scope refs PaymentService --kind imports should only show import-kind refs.
 #[test]
 fn test_refs_with_kind_filter() {
     let (_dir, root) = setup_indexed_fixture();
 
     // With --kind imports we expect the flat (non-grouped) path with results
     // sourced from the import edges only.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService", "--kind", "imports"])
         .current_dir(&root)
@@ -129,7 +129,7 @@ fn test_refs_with_kind_filter() {
         .stdout(contains("PaymentService"));
 }
 
-/// sc refs PaymentService --kind imports --limit 1 should truncate and show "... N more".
+/// scope refs PaymentService --kind imports --limit 1 should truncate and show "... N more".
 ///
 /// PaymentService is imported by both order.ts and refund.ts (2 import edges).
 /// Filtering by --kind imports forces the flat formatter, and capping at 1
@@ -138,7 +138,7 @@ fn test_refs_with_kind_filter() {
 fn test_refs_with_limit() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args([
             "refs",
@@ -154,13 +154,13 @@ fn test_refs_with_limit() {
         .stdout(contains("more"));
 }
 
-/// sc refs UnknownThing must fail with a non-zero exit code and include
+/// scope refs UnknownThing must fail with a non-zero exit code and include
 /// "not found" in stderr so the caller knows what went wrong.
 #[test]
 fn test_refs_unknown_symbol_fails() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "UnknownThing"])
         .current_dir(&root)
@@ -169,12 +169,12 @@ fn test_refs_unknown_symbol_fails() {
         .stderr(contains("not found"));
 }
 
-/// sc refs PaymentService --json must emit valid JSON with command="refs".
+/// scope refs PaymentService --json must emit valid JSON with command="refs".
 #[test]
 fn test_refs_json_output() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let output = Command::cargo_bin("sc")
+    let output = Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService", "--json"])
         .current_dir(&root)
@@ -201,14 +201,14 @@ fn test_refs_json_output() {
 // Snapshot tests — lock the human-readable output format
 // ---------------------------------------------------------------------------
 
-/// Snapshot the full stdout of `sc refs PaymentService`.
+/// Snapshot the full stdout of `scope refs PaymentService`.
 ///
 /// Any change to the refs grouped format will appear as a snapshot diff.
 #[test]
 fn test_refs_output_format() {
     let (_dir, root) = setup_indexed_fixture();
 
-    let raw = Command::cargo_bin("sc")
+    let raw = Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService"])
         .current_dir(&root)

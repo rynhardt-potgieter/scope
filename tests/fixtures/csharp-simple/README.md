@@ -20,7 +20,7 @@ CSharpSimple.csproj
 
 ## Index Ground Truth
 
-These numbers are what tests assert against. Verified by running `sc index --full` followed
+These numbers are what tests assert against. Verified by running `scope index --full` followed
 by the queries below.
 
 ### Symbol Counts
@@ -31,7 +31,7 @@ by the queries below.
 | Total symbols | 14 |
 | Total edges | 6 |
 
-### `sc sketch PaymentService`
+### `scope sketch PaymentService`
 
 - Kind: `class`
 - File: `src/Payments/PaymentService.cs:5-30`
@@ -39,38 +39,38 @@ by the queries below.
 - Methods: `PaymentService` (constructor), `ProcessPayment`, `RefundPayment`, `ValidateAmount` (4 methods)
 - All methods show `[internal]` caller count
 
-### `sc refs PaymentService`
+### `scope refs PaymentService`
 
 - Total references: **0** — OrderController depends on `IPaymentService` (the interface), not the concrete class.
 
-### `sc refs IPaymentService`
+### `scope refs IPaymentService`
 
 - Total references: **1**
 - `implemented` (1): `src/Payments/PaymentService.cs:5`
 
-### `sc refs Logger`
+### `scope refs Logger`
 
 - Total references: **0** — Logger usage via `_logger.Info` is tracked as an external call edge, not a direct symbol reference.
 
-### `sc deps PaymentService`
+### `scope deps PaymentService`
 
 Groups:
 - `calls (external)`: `_logger.Info` (external)
 - `imports (external)`: `CSharpSimple.Utils` (external)
 
-### `sc sketch IPaymentService`
+### `scope sketch IPaymentService`
 
 - Kind: `interface`
 - File: `src/Payments/IPaymentService.cs:3-7`
 - Methods: `ProcessPayment`, `RefundPayment` (2 method declarations)
 
-### `sc sketch Logger`
+### `scope sketch Logger`
 
 - Kind: `class`
 - File: `src/Utils/Logger.cs:3-7`
 - Methods: `Info`, `Error` (2 methods)
 
-### `sc sketch OrderController`
+### `scope sketch OrderController`
 
 - Kind: `class`
 - File: `src/Controllers/OrderController.cs:5-18`
@@ -81,8 +81,8 @@ Groups:
 Run from the `tests/fixtures/csharp-simple/` directory:
 
 ```bash
-sc init    # only if .scope/ does not already exist
-sc index --full
+scope init    # only if .scope/ does not already exist
+scope index --full
 ```
 
 After a schema change commit the new `.scope/graph.db` and `.scope/file_hashes.db`.

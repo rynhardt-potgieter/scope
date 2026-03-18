@@ -1,12 +1,12 @@
-/// Integration tests for edge cases and robustness of `sc index` and query commands.
+/// Integration tests for edge cases and robustness of `scope index` and query commands.
 ///
 /// Tests cover:
 ///   - Syntax-error tolerance during indexing
 ///   - Empty and comment-only files
 ///   - Querying a symbol whose source file has been deleted
 ///   - Deep --depth values do not hang or OOM
-///   - Empty and no-results queries to `sc find`
-///   - `sc refs --limit 0` is handled gracefully
+///   - Empty and no-results queries to `scope find`
+///   - `scope refs --limit 0` is handled gracefully
 ///
 /// Each test that needs an index creates an isolated TempDir and copies or
 /// constructs the fixture there so tests do not share state.
@@ -37,21 +37,21 @@ fn copy_dir_all(src: &Path, dest: &Path) {
     }
 }
 
-/// Copy the TypeScript fixture into a fresh TempDir, run `sc init` and
-/// `sc index --full`, then return `(TempDir, project_root_path)`.
+/// Copy the TypeScript fixture into a fresh TempDir, run `scope init` and
+/// `scope index --full`, then return `(TempDir, project_root_path)`.
 fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let fixture = Path::new(TS_FIXTURE);
     copy_dir_all(fixture, dir.path());
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
         .assert()
         .success();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(dir.path())
@@ -62,11 +62,11 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     (dir, root)
 }
 
-/// Create a TempDir pre-populated with a `tsconfig.json` so that `sc init`
-/// detects TypeScript, then run `sc init` and return `(TempDir, root)`.
+/// Create a TempDir pre-populated with a `tsconfig.json` so that `scope init`
+/// detects TypeScript, then run `scope init` and return `(TempDir, root)`.
 ///
 /// Language detection happens at init time — the tsconfig.json must already
-/// exist before `sc init` is run.
+/// exist before `scope init` is run.
 fn setup_empty_ts_project() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
 
@@ -77,7 +77,7 @@ fn setup_empty_ts_project() -> (TempDir, PathBuf) {
     )
     .unwrap();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .arg("init")
         .current_dir(dir.path())
@@ -92,7 +92,7 @@ fn setup_empty_ts_project() -> (TempDir, PathBuf) {
 // Syntax-error tolerance
 // ---------------------------------------------------------------------------
 
-/// A TypeScript file with broken syntax must not cause `sc index --full` to crash.
+/// A TypeScript file with broken syntax must not cause `scope index --full` to crash.
 ///
 /// Other valid files in the same project must still be indexed. The command
 /// must succeed (exit 0) even if it logs a parse-error warning.
@@ -116,7 +116,7 @@ fn test_index_file_with_syntax_errors() {
     .unwrap();
 
     // Index must complete without crashing.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -124,7 +124,7 @@ fn test_index_file_with_syntax_errors() {
         .success();
 
     // The valid class must still be discoverable.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "ValidClass"])
         .current_dir(&root)
@@ -133,7 +133,7 @@ fn test_index_file_with_syntax_errors() {
         .stdout(contains("ValidClass"));
 }
 
-/// An empty `.ts` file must not crash `sc index --full`.
+/// An empty `.ts` file must not crash `scope index --full`.
 ///
 /// The file hash must be recorded so the file is tracked, and the command
 /// must exit with status 0.
@@ -144,7 +144,7 @@ fn test_index_empty_file() {
     std::fs::create_dir_all(dir.path().join("src")).unwrap();
     std::fs::write(dir.path().join("src/empty.ts"), "").unwrap();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -153,7 +153,7 @@ fn test_index_empty_file() {
 }
 
 /// A `.ts` file containing only comments (no symbols) must not crash
-/// `sc index --full`. Exit code must be 0.
+/// `scope index --full`. Exit code must be 0.
 #[test]
 fn test_index_file_with_no_symbols() {
     let (dir, root) = setup_empty_ts_project();
@@ -165,7 +165,7 @@ fn test_index_file_with_no_symbols() {
     )
     .unwrap();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -195,7 +195,7 @@ fn test_sketch_after_file_deleted() {
     .unwrap();
 
     // Build index while the file exists.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -203,7 +203,7 @@ fn test_sketch_after_file_deleted() {
         .success();
 
     // Verify the symbol is indexed.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "TemporaryClass"])
         .current_dir(&root)
@@ -215,7 +215,7 @@ fn test_sketch_after_file_deleted() {
     std::fs::remove_file(dir.path().join("src/temporary.ts")).unwrap();
 
     // Re-index so the deletion is reflected.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["index", "--full"])
         .current_dir(&root)
@@ -223,7 +223,7 @@ fn test_sketch_after_file_deleted() {
         .success();
 
     // The symbol should now be gone — sketch must fail gracefully.
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["sketch", "TemporaryClass"])
         .current_dir(&root)
@@ -236,7 +236,7 @@ fn test_sketch_after_file_deleted() {
 // Deep depth flag
 // ---------------------------------------------------------------------------
 
-/// `sc impact PaymentService --depth 10` on the standard fixture must
+/// `scope impact PaymentService --depth 10` on the standard fixture must
 /// complete without hanging, crashing, or producing a non-zero exit code.
 ///
 /// This guards against infinite loops or exponential blowup in the impact
@@ -245,7 +245,7 @@ fn test_sketch_after_file_deleted() {
 fn test_impact_depth_limit() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["impact", "PaymentService", "--depth", "10"])
         .current_dir(&root)
@@ -255,16 +255,16 @@ fn test_impact_depth_limit() {
 }
 
 // ---------------------------------------------------------------------------
-// sc find edge cases
+// scope find edge cases
 // ---------------------------------------------------------------------------
 
-/// `sc find ""` with an empty query string must not crash. It must exit with
+/// `scope find ""` with an empty query string must not crash. It must exit with
 /// status 0 and produce output (even if it returns no results).
 #[test]
 fn test_find_empty_query() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["find", ""])
         .current_dir(&root)
@@ -272,13 +272,13 @@ fn test_find_empty_query() {
         .success();
 }
 
-/// `sc find "xyzzynonexistent"` with a query that has no matches must exit
+/// `scope find "xyzzynonexistent"` with a query that has no matches must exit
 /// with status 0 and tell the user that no results were found.
 #[test]
 fn test_find_no_results() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["find", "xyzzynonexistent"])
         .current_dir(&root)
@@ -288,17 +288,17 @@ fn test_find_no_results() {
 }
 
 // ---------------------------------------------------------------------------
-// sc refs --limit 0
+// scope refs --limit 0
 // ---------------------------------------------------------------------------
 
-/// `sc refs PaymentService --limit 0` must not crash. Either it returns
+/// `scope refs PaymentService --limit 0` must not crash. Either it returns
 /// nothing (with a truncation note) or it returns results — both are
 /// acceptable. The key requirement is exit status 0.
 #[test]
 fn test_refs_with_limit_zero() {
     let (_dir, root) = setup_indexed_fixture();
 
-    Command::cargo_bin("sc")
+    Command::cargo_bin("scope")
         .unwrap()
         .args(["refs", "PaymentService", "--limit", "0"])
         .current_dir(&root)

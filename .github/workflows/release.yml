@@ -39,7 +39,7 @@ jobs:
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/sc
+        run: strip target/${{ matrix.target }}/release/scope
 
       - name: Determine binary name
         id: bin
@@ -47,11 +47,11 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            BIN_NAME="sc-${VERSION}-${{ matrix.target }}.exe"
-            cp "target/${{ matrix.target }}/release/sc.exe" "${BIN_NAME}"
+            BIN_NAME="scope-${VERSION}-${{ matrix.target }}.exe"
+            cp "target/${{ matrix.target }}/release/scope.exe" "${BIN_NAME}"
           else
-            BIN_NAME="sc-${VERSION}-${{ matrix.target }}"
-            cp "target/${{ matrix.target }}/release/sc" "${BIN_NAME}"
+            BIN_NAME="scope-${VERSION}-${{ matrix.target }}"
+            cp "target/${{ matrix.target }}/release/scope" "${BIN_NAME}"
           fi
           echo "bin_name=${BIN_NAME}" >> "$GITHUB_OUTPUT"
 
