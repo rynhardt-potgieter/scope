@@ -58,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/Rayne182/scope/main/install.sh | sh
 **From source:**
 
 ```sh
-cargo install --git https://github.com/Rayne182/scope.git
+cargo install --git https://github.com/Rayne182/scope.git scope
 ```
 
 ---
