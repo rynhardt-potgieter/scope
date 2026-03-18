@@ -22,5 +22,9 @@
 .DS_Store
 Thumbs.db
 
+# Claude Code — local tooling, never commit
+/.claude/
+CLAUDE.md
+
 # Overview docs — local reference only, never commit
 /overview/
