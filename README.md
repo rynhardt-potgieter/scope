@@ -1,5 +1,13 @@
 # Scope
 
+[![Rust](https://img.shields.io/badge/Rust-2021_edition-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Rayne182/scope/ci.yml?branch=main&label=CI&logo=github)](https://github.com/Rayne182/scope/actions/workflows/ci.yml)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
+[![tree-sitter](https://img.shields.io/badge/tree--sitter-0.22-yellow?logo=treehouse&logoColor=white)](https://tree-sitter.github.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-supported-3178C6?logo=typescript&logoColor=white)](#supported-languages)
+[![C%23](https://img.shields.io/badge/C%23-supported-239120?logo=csharp&logoColor=white)](#supported-languages)
+
 **Give your coding agent structural awareness instead of dumping entire files into context.**
 
 Scope (`sc`) is a CLI that builds a local code intelligence index and exposes it through fast, token-efficient queries. Instead of an agent reading 8,000 tokens of source to understand a class, Scope returns a 200-token structural sketch with dependencies, callers, and method signatures.
