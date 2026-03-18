@@ -1,0 +1,25 @@
+## Code Navigation
+
+This project uses `Scope` for structural code navigation. Use it before reading or
+editing any non-trivial code.
+
+**Before editing a class or function:**
+- `sc sketch <ClassName>` -- get structural overview without reading full source
+- `sc refs <symbol>` -- find all callers before changing a signature
+- `sc impact <symbol>` -- check blast radius before any refactor
+
+**Finding code:**
+- `sc find "<description>"` -- find relevant code by intent
+- `sc similar <symbol>` -- find similar implementations
+
+**Understanding dependencies:**
+- `sc deps <symbol>` -- what does this depend on?
+- `sc rdeps <symbol>` -- what depends on this?
+
+**Reading source:**
+- `sc source <symbol>` -- fetch full source of a specific symbol
+
+Always run `sc sketch` before `sc source`. Only call `sc source` when you're
+ready to read or edit the implementation.
+
+Run `sc --help` for full usage.

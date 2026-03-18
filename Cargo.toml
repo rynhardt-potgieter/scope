@@ -38,6 +38,10 @@ tracing-subscriber = "0.3"
 console = "0.15"
 tree-sitter-c-sharp = "0.21"
 
+[profile.release]
+strip = true
+lto = "thin"
+
 [dev-dependencies]
 tempfile = "3"
 assert_cmd = "2"

@@ -1,0 +1,49 @@
+name: Benchmark
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    # Only run when ANTHROPIC_API_KEY is available
+    if: ${{ vars.BENCHMARKS_ENABLED == 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Scope
+        run: cargo build --release
+
+      - name: Setup Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Run benchmarks
+        run: |
+          cd benchmarks/runner
+          cargo run --release -- run --all --compare --reps 5
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit results
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add benchmarks/results/
+          git diff --cached --quiet || {
+            git commit -m "bench: add results for v${VERSION}"
+            git push
+          }
