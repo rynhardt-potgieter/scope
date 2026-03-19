@@ -201,7 +201,8 @@ impl CodeParser {
             let Some(def) = def_node else { continue };
 
             let kind = infer_symbol_kind(def.kind());
-            let id = format!("{file_path}::{name}::{kind}");
+            let line = def.start_position().row as u32 + 1;
+            let id = format!("{file_path}::{name}::{kind}::{line}");
 
             // Extract metadata using language-specific logic
             let metadata = match lang {
@@ -368,7 +369,8 @@ fn find_parent_class(node: &tree_sitter::Node, source: &str, file_path: &str) ->
                     if let Some(name_node) = class_node.child_by_field_name("name") {
                         let class_name = name_node.utf8_text(source.as_bytes()).ok()?;
                         let kind = infer_symbol_kind(class_node.kind());
-                        return Some(format!("{file_path}::{class_name}::{kind}"));
+                        let class_line = class_node.start_position().row as u32 + 1;
+                        return Some(format!("{file_path}::{class_name}::{kind}::{class_line}"));
                     }
                 }
             }
