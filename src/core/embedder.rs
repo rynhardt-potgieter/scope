@@ -69,7 +69,7 @@ pub fn build_embedding_text(symbol: &Symbol) -> String {
 /// - `"PaymentService"` -> `"Payment Service"`
 /// - `"getHTTPResponse"` -> `"get HTTP Response"`
 /// - `"login"` -> `"login"` (no change)
-fn split_camel_case(name: &str) -> String {
+pub(crate) fn split_camel_case(name: &str) -> String {
     let mut result = String::with_capacity(name.len() + 4);
     let chars: Vec<char> = name.chars().collect();
 

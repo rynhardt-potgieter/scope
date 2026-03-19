@@ -651,7 +651,7 @@ pub fn print_find_results(query: &str, results: &[SearchResult]) {
         let path = normalize_path(&result.file_path);
         let location = format!("{path}:{}", result.line_start);
         println!(
-            "{:.2}  {:<40}{:<36}{}",
+            "{:.2}  {:<40}{:<36}  {}",
             result.score, result.name, location, result.kind
         );
     }

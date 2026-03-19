@@ -263,12 +263,14 @@ fn normalize_scores(raw: Vec<RawFtsResult>) -> Vec<SearchResult> {
 
 /// Build an FTS5 query from a natural-language search string.
 ///
-/// Splits the query into tokens and joins them with OR so partial
-/// matches are returned. Special FTS5 characters are escaped.
+/// Splits the query into tokens and joins them with OR for partial matching.
+/// Each token gets a `*` suffix for prefix matching, and camelCase tokens
+/// are additionally split into component words for broader recall.
 ///
 /// Examples:
-/// - `"handles authentication errors"` -> `"handles" OR "authentication" OR "errors"`
-/// - `"payment processing"` -> `"payment" OR "processing"`
+/// - `"TransactionController"` -> `TransactionController* OR transaction* OR controller*`
+/// - `"payment"` -> `payment*`
+/// - `"authentication errors"` -> `authentication* OR errors*`
 fn build_fts_query(query: &str) -> String {
     let tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
 
@@ -276,30 +278,32 @@ fn build_fts_query(query: &str) -> String {
         return String::new();
     }
 
-    // Escape each token (wrap in double quotes to handle special chars)
-    // and join with OR for partial matching
-    let escaped: Vec<String> = tokens
-        .iter()
-        .map(|t| {
-            // Remove FTS5 special characters
-            let cleaned: String = t
-                .chars()
-                .filter(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            if cleaned.is_empty() {
-                String::new()
-            } else {
-                format!("\"{cleaned}\"")
-            }
-        })
-        .filter(|t| !t.is_empty())
-        .collect();
+    let mut fts_tokens: Vec<String> = Vec::new();
 
-    if escaped.is_empty() {
-        return String::new();
+    for token in &tokens {
+        let cleaned: String = token
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if cleaned.is_empty() {
+            continue;
+        }
+
+        // Add the full token with prefix matching
+        fts_tokens.push(format!("{cleaned}*"));
+
+        // Also split camelCase and add component words (min 3 chars)
+        let split = crate::core::embedder::split_camel_case(&cleaned);
+        for word in split.split_whitespace() {
+            let lower = word.to_lowercase();
+            if lower != cleaned.to_lowercase() && lower.len() >= 3 {
+                fts_tokens.push(format!("{lower}*"));
+            }
+        }
     }
 
-    escaped.join(" OR ")
+    fts_tokens.dedup();
+    fts_tokens.join(" OR ")
 }
 
 #[cfg(test)]
@@ -310,13 +314,13 @@ mod tests {
     fn test_build_fts_query_simple() {
         assert_eq!(
             build_fts_query("authentication errors"),
-            "\"authentication\" OR \"errors\""
+            "authentication* OR errors*"
         );
     }
 
     #[test]
     fn test_build_fts_query_single_word() {
-        assert_eq!(build_fts_query("payment"), "\"payment\"");
+        assert_eq!(build_fts_query("payment"), "payment*");
     }
 
     #[test]
@@ -327,7 +331,21 @@ mod tests {
 
     #[test]
     fn test_build_fts_query_special_chars() {
-        assert_eq!(build_fts_query("foo-bar baz"), "\"foobar\" OR \"baz\"");
+        assert_eq!(build_fts_query("foo-bar baz"), "foobar* OR baz*");
+    }
+
+    #[test]
+    fn test_build_fts_query_camel_case_splitting() {
+        assert_eq!(
+            build_fts_query("TransactionController"),
+            "TransactionController* OR transaction* OR controller*"
+        );
+    }
+
+    #[test]
+    fn test_build_fts_query_camel_case_no_short_words() {
+        // Short component words (< 3 chars) should be excluded
+        assert_eq!(build_fts_query("GoTo"), "GoTo*");
     }
 
     #[test]
