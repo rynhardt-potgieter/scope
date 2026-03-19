@@ -1,0 +1,34 @@
+[task]
+id = "cs-cat-d-01"
+category = "new-feature"
+language = "csharp"
+corpus = "fixture"
+description = "Add PaymentReceiptService integrating PaymentService, NotificationService, UserService"
+
+[prompt]
+text = """
+Create a new PaymentReceiptService in Infrastructure/Services that generates \
+and sends payment receipts. It should integrate: \
+1. IPaymentService — to retrieve payment details \
+2. INotificationService — to send the receipt via email \
+3. IUserService — to get user contact information \
+Create an IPaymentReceiptService interface in Application/Interfaces with: \
+- GenerateReceipt(Guid paymentId) — creates a receipt record \
+- SendReceipt(Guid paymentId, Guid userId) — generates and emails the receipt \
+Use scope sketch on each dependency to understand their APIs before coding. \
+Make sure the project still compiles.
+"""
+
+[target]
+symbol = "PaymentReceiptService"
+file = "src/Infrastructure/Services/PaymentReceiptService.cs"
+
+[correctness]
+require_compilation = true
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope sketch"]

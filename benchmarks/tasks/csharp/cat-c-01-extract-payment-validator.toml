@@ -1,0 +1,31 @@
+[task]
+id = "cs-cat-c-01"
+category = "refactoring"
+language = "csharp"
+corpus = "fixture"
+description = "Extract validation from ProcessPayment into separate PaymentValidator class"
+
+[prompt]
+text = """
+The ProcessPayment method in PaymentService contains inline validation logic. \
+Extract all validation into a separate PaymentValidator class in the \
+Infrastructure/Services directory. The validator should implement a new \
+IPaymentValidator interface (in Application/Interfaces) with a \
+ValidatePayment(Guid userId, Money amount, string paymentMethodToken) method \
+that throws BusinessRuleException on validation failure. Inject the validator \
+into PaymentService via constructor injection. Make sure the project still compiles.
+"""
+
+[target]
+symbol = "PaymentService.ProcessPayment"
+file = "src/Infrastructure/Services/PaymentService.cs"
+
+[correctness]
+require_compilation = true
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope sketch", "scope refs"]

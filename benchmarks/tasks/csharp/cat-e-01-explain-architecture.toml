@@ -1,0 +1,32 @@
+[task]
+id = "cs-cat-e-01"
+category = "exploration"
+language = "csharp"
+corpus = "fixture"
+description = "Explain Clean Architecture layers with concrete request flow examples"
+
+[prompt]
+text = """
+Analyze this codebase's architecture and create a comprehensive documentation \
+file at docs/architecture.md explaining: \
+1. The Clean Architecture layers (Domain, Application, Infrastructure, Api) \
+2. How a concrete request flows through all layers (use ProcessPayment as example) \
+3. The CQRS pattern usage with commands and queries \
+4. Dependency injection setup and service lifetimes \
+5. Cross-cutting concerns (logging, validation, error handling) \
+Use scope commands to explore the architecture without reading every file.
+"""
+
+[target]
+symbol = "PaymentService"
+file = "docs/architecture.md"
+
+[correctness]
+require_compilation = false
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope sketch", "scope deps"]
