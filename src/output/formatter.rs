@@ -66,6 +66,7 @@ pub fn print_class_sketch(
     caller_counts: &HashMap<String, usize>,
     relationships: &ClassRelationships,
     limit: usize,
+    show_docs: bool,
 ) {
     print_header(symbol);
 
@@ -100,6 +101,23 @@ pub fn print_class_sketch(
         };
 
         for method in display_methods {
+            // Show first line of docstring if available and docs are enabled
+            if show_docs {
+                if let Some(ref doc) = method.docstring {
+                    let first_line = doc.lines().next().unwrap_or("").trim();
+                    let clean = first_line
+                        .trim_start_matches("///")
+                        .trim_start_matches("//")
+                        .trim_start_matches("/**")
+                        .trim_start_matches("*")
+                        .trim_start_matches("*/")
+                        .trim();
+                    if !clean.is_empty() {
+                        println!("  /// {clean}");
+                    }
+                }
+            }
+
             let sig = method_display_line(method);
             let count = caller_counts.get(&method.id).copied().unwrap_or(0);
             let count_label = if count > 0 {
@@ -315,7 +333,14 @@ pub fn print_refs(symbol_name: &str, refs: &[Reference], total: usize) {
         } else {
             path
         };
-        println!("{:<40}{}", location, r.context);
+        let display_text = r.snippet_line.as_deref().unwrap_or(&r.context);
+        let truncated_text = truncate_str(display_text.trim(), 80);
+        println!("{:<40}{}", location, truncated_text);
+
+        // Show multi-line context if available
+        if let Some(ref snippet) = r.snippet {
+            print_snippet_context(snippet, r.line);
+        }
     }
 
     if refs.len() < total {
@@ -356,7 +381,14 @@ pub fn print_refs_grouped(symbol_name: &str, groups: &[(String, Vec<Reference>)]
             } else {
                 path
             };
-            println!("  {:<38}{}", location, r.context);
+            let display_text = r.snippet_line.as_deref().unwrap_or(&r.context);
+            let truncated_text = truncate_str(display_text.trim(), 80);
+            println!("  {:<38}{}", location, truncated_text);
+
+            // Show multi-line context if available
+            if let Some(ref snippet) = r.snippet {
+                print_snippet_context(snippet, r.line);
+            }
         }
         shown += refs.len();
         println!();
@@ -387,7 +419,14 @@ pub fn print_file_refs(file_path: &str, refs: &[Reference], total: usize) {
         } else {
             rpath
         };
-        println!("{:<40}{}", location, r.context);
+        let display_text = r.snippet_line.as_deref().unwrap_or(&r.context);
+        let truncated_text = truncate_str(display_text.trim(), 80);
+        println!("{:<40}{}", location, truncated_text);
+
+        // Show multi-line context if available
+        if let Some(ref snippet) = r.snippet {
+            print_snippet_context(snippet, r.line);
+        }
     }
 
     if refs.len() < total {
@@ -702,6 +741,38 @@ fn format_number(n: usize) -> String {
         result.push(ch);
     }
     result
+}
+
+/// Truncate a string to a maximum character width, adding "..." if truncated.
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_chars.saturating_sub(3)).collect();
+        format!("{truncated}...")
+    }
+}
+
+/// Print multi-line snippet context with line numbers.
+///
+/// Marks the reference line with `>` and other lines with a space.
+fn print_snippet_context(snippet: &[String], ref_line: Option<i64>) {
+    // We need to figure out what line number the first snippet line corresponds to.
+    // The snippet is centered around ref_line, so first line = ref_line - (snippet.len()-1)/2 approx.
+    // But we need the actual start line. We can compute it from ref_line and snippet length.
+    let Some(line_num) = ref_line else { return };
+    let ref_idx_in_snippet = snippet.len() / 2; // approximate center
+    let start_line = (line_num as usize).saturating_sub(ref_idx_in_snippet);
+
+    for (i, code) in snippet.iter().enumerate() {
+        let current_line = start_line + i;
+        let marker = if current_line == line_num as usize {
+            ">"
+        } else {
+            " "
+        };
+        println!("  {marker} {current_line:>4} | {code}");
+    }
 }
 
 /// Convert an edge kind string to a human-readable label for grouped output.

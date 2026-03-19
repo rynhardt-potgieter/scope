@@ -1,20 +1,21 @@
 ---
 source: tests/integration/test_refs.rs
+assertion_line: 223
 expression: normalized
 ---
 PaymentService — 9 references
 ──────────────────────────────────────────────────────────────────────────────
 called (3):
-  src/controllers/order.ts:13           OrderController.checkout
-  src/controllers/order.ts:18           OrderController.retryPayment
-  src/controllers/refund.ts:11          RefundController.processRefund
+  src/controllers/order.ts:13           await this.paymentService.processPayment(request);
+  src/controllers/order.ts:18           await this.paymentService.processPayment(request);
+  src/controllers/refund.ts:11          return await this.paymentService.refundPayment(transactionId);
 
 imported (2):
-  src/controllers/order.ts:1            order
-  src/controllers/refund.ts:1           refund
+  src/controllers/order.ts:1            import { PaymentService } from '../payments/service';
+  src/controllers/refund.ts:1           import { PaymentService } from '../payments/service';
 
 used as type (4):
-  src/controllers/order.ts:5            OrderController
-  src/controllers/order.ts:7            OrderController.constructor
-  src/controllers/refund.ts:4           RefundController
-  src/controllers/refund.ts:6           RefundController.constructor
+  src/controllers/order.ts:5            private paymentService: PaymentService;
+  src/controllers/order.ts:7            constructor(paymentService: PaymentService) {
+  src/controllers/refund.ts:4           private paymentService: PaymentService;
+  src/controllers/refund.ts:6           constructor(paymentService: PaymentService) {

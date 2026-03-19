@@ -35,6 +35,10 @@ pub struct SketchArgs {
     /// Maximum number of methods to show (default: all)
     #[arg(long, default_value = "50")]
     pub limit: usize,
+
+    /// Suppress docstring display in sketch output
+    #[arg(long)]
+    pub no_docs: bool,
 }
 
 /// Returns true if the input looks like a file path rather than a symbol name.
@@ -110,7 +114,14 @@ fn sketch_class(
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        formatter::print_class_sketch(symbol, &methods, &caller_counts, &relationships, args.limit);
+        formatter::print_class_sketch(
+            symbol,
+            &methods,
+            &caller_counts,
+            &relationships,
+            args.limit,
+            !args.no_docs,
+        );
     }
 
     Ok(())

@@ -79,6 +79,16 @@ pub enum Commands {
     ///   scope refs PaymentService --kind calls  — only call sites
     Refs(commands::refs::RefsArgs),
 
+    /// Show all callers of a function or method (shorthand for refs --kind calls).
+    ///
+    /// Equivalent to `scope refs <symbol> --kind calls`. Use when you want
+    /// a quick list of everything that calls a given function.
+    ///
+    /// Examples:
+    ///   scope callers processPayment           — who calls this function
+    ///   scope callers processPayment --context 2 — with surrounding code
+    Callers(commands::refs::CallersArgs),
+
     /// Show what a symbol depends on.
     ///
     /// Lists direct imports, calls, and type references. Use --depth 2
@@ -169,6 +179,7 @@ fn main() -> Result<()> {
         Commands::Index(args) => commands::index::run(args, &project_root),
         Commands::Sketch(args) => commands::sketch::run(args, &project_root),
         Commands::Refs(args) => commands::refs::run(args, &project_root),
+        Commands::Callers(args) => commands::refs::run_callers(args, &project_root),
         Commands::Deps(args) => commands::deps::run(args, &project_root),
         Commands::Rdeps(args) => commands::rdeps::run(args),
         Commands::Impact(args) => commands::impact::run(args, &project_root),

@@ -113,6 +113,12 @@ pub struct Reference {
     pub line: Option<i64>,
     /// Context string (caller name or description).
     pub context: String,
+    /// The actual source line at the reference location (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet_line: Option<String>,
+    /// Multi-line context around the reference (if --context N was used).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<Vec<String>>,
 }
 
 /// A node in an impact analysis result.
@@ -612,6 +618,8 @@ impl Graph {
                 file_path,
                 line,
                 context,
+                snippet_line: None,
+                snippet: None,
             });
         }
 
@@ -775,6 +783,8 @@ impl Graph {
                 file_path,
                 line,
                 context,
+                snippet_line: None,
+                snippet: None,
             });
         }
 
