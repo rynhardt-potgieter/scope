@@ -4,6 +4,9 @@ expression: normalized
 ---
 PaymentService — direct dependencies
 ──────────────────────────────────────────────────────────────────────────────
+calls (external):
+  logger.info             (external)
+
 imports:
   Logger                  src/utils/logger.ts
   PaymentRequest          src/payments/types.ts

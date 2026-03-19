@@ -4,4 +4,11 @@ expression: normalized
 ---
 Impact analysis: PaymentService
 ──────────────────────────────────────────────────────────────────────────────
-(no impact detected)
+Direct callers (7):
+  OrderController                         src/controllers/order.ts
+  checkout                                src/controllers/order.ts
+  constructor                             src/controllers/order.ts
+  retryPayment                            src/controllers/order.ts
+  RefundController                        src/controllers/refund.ts
+  constructor                             src/controllers/refund.ts
+  processRefund                           src/controllers/refund.ts

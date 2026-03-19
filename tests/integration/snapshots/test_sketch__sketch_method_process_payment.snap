@@ -1,8 +1,8 @@
 ---
 source: tests/integration/test_sketch.rs
-assertion_line: 229
 expression: normalized
 ---
 processPayment                                    method  src/payments/service.ts:11-14
 ──────────────────────────────────────────────────────────────────────────────
 signature:  async processPayment(request: PaymentRequest): Promise<PaymentResult>
+calls:      logger.info

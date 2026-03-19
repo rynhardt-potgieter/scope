@@ -266,9 +266,12 @@ impl Graph {
 
     /// Count incoming call edges for a symbol (how many callers it has).
     pub fn get_caller_count(&self, symbol_id: &str) -> Result<usize> {
+        // Extract bare name from the ID for matching member-call edges (e.g. svc.processPayment)
+        let bare_name = self.symbol_name_from_id(symbol_id);
+        let like_member = format!("%.{bare_name}");
         let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM edges WHERE to_id = ?1 AND kind = 'calls'",
-            params![symbol_id],
+            "SELECT COUNT(*) FROM edges WHERE (to_id = ?1 OR to_id = ?2 OR to_id LIKE ?3) AND kind = 'calls'",
+            params![symbol_id, bare_name, like_member],
             |row| row.get(0),
         )?;
         Ok(count as usize)
@@ -277,33 +280,20 @@ impl Graph {
     /// Batch version of `get_caller_count` — returns a map of symbol_id to caller count.
     ///
     /// Efficiently fetches caller counts for multiple symbols in a single query.
+    /// Matches by exact ID, bare name, and member-call patterns (e.g. `svc.processPayment`).
     pub fn get_caller_counts(&self, symbol_ids: &[&str]) -> Result<HashMap<String, usize>> {
         let mut result = HashMap::new();
         if symbol_ids.is_empty() {
             return Ok(result);
         }
 
-        // Use a single query with IN clause for efficiency
-        let placeholders: Vec<String> = (1..=symbol_ids.len()).map(|i| format!("?{i}")).collect();
-        let sql = format!(
-            "SELECT to_id, COUNT(*) FROM edges
-             WHERE to_id IN ({}) AND kind = 'calls'
-             GROUP BY to_id",
-            placeholders.join(", ")
-        );
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params: Vec<&dyn rusqlite::ToSql> = symbol_ids
-            .iter()
-            .map(|id| id as &dyn rusqlite::ToSql)
-            .collect();
-        let rows = stmt.query_map(params.as_slice(), |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })?;
-
-        for row in rows {
-            let (id, count) = row?;
-            result.insert(id, count as usize);
+        // For each symbol ID, we need to count call edges that reference it.
+        // We query each individually since to_id formats vary (exact, bare name, member.name).
+        for &sym_id in symbol_ids {
+            let count = self.get_caller_count(sym_id)?;
+            if count > 0 {
+                result.insert(sym_id.to_string(), count);
+            }
         }
 
         Ok(result)
@@ -314,8 +304,9 @@ impl Graph {
         let mut rels = ClassRelationships::default();
 
         // Build the set of source IDs to check: the class itself and the
-        // __module__::class synthetic ID (used by edge extraction when the
-        // enclosing class name is not available at query time).
+        // __module__::class synthetic ID. Also check __module__ synthetic ID
+        // for backward compatibility with pre-fix indexes and for import edges
+        // which intentionally use module-level from_id.
         let file_path = class_id.split("::").next().unwrap_or("");
         let module_class_id = format!("{file_path}::__module__::class");
 
@@ -537,9 +528,9 @@ impl Graph {
         }
 
         // Build the to_id matching clause:
-        // Match exact name, exact ID, or to_id ending with ::Name
+        // Match exact name, exact ID, to_id ending with ::Name, or to_id ending with .Name
         let match_conditions = self.build_to_id_match_clause(&match_names, 1);
-        let next_param = match_names.len() * 2 + 1; // each name uses 2 params (exact + LIKE)
+        let next_param = match_names.len() * 3 + 1; // each name uses 3 params (exact + %::name + %.name)
 
         let (kind_clause, kind_values): (String, Vec<String>) = if let Some(k) = kinds {
             let placeholders: Vec<String> = (next_param..next_param + k.len())
@@ -557,6 +548,7 @@ impl Graph {
         for name in &match_names {
             param_values.push(Box::new(name.clone()));
             param_values.push(Box::new(format!("%::{name}")));
+            param_values.push(Box::new(format!("%.{name}")));
         }
         for kv in &kind_values {
             param_values.push(Box::new(kv.clone()));
@@ -588,6 +580,7 @@ impl Graph {
         for name in &match_names {
             fetch_params.push(Box::new(name.clone()));
             fetch_params.push(Box::new(format!("%::{name}")));
+            fetch_params.push(Box::new(format!("%.{name}")));
         }
         for kv in &kind_values {
             fetch_params.push(Box::new(kv.clone()));
@@ -629,12 +622,22 @@ impl Graph {
     ///
     /// For each name, matches: `e.to_id = ?N OR e.to_id LIKE ?N` (pattern `%::Name`).
     /// `start_param` is the 1-based parameter index to begin with.
+    /// Build a SQL WHERE clause matching edges by `to_id`.
+    ///
+    /// Matches exact name, fully-qualified ID suffix (`%::Name`), and
+    /// dot-separated member calls (`%.Name`) so that `svc.processPayment`
+    /// matches when searching for `processPayment`.
     fn build_to_id_match_clause(&self, names: &[String], start_param: usize) -> String {
         let mut conditions = Vec::new();
         let mut idx = start_param;
         for _name in names {
-            conditions.push(format!("e.to_id = ?{idx} OR e.to_id LIKE ?{}", idx + 1));
-            idx += 2;
+            // ?idx = exact match, ?idx+1 = LIKE %::name, ?idx+2 = LIKE %.name
+            conditions.push(format!(
+                "e.to_id = ?{idx} OR e.to_id LIKE ?{} OR e.to_id LIKE ?{}",
+                idx + 1,
+                idx + 2
+            ));
+            idx += 3;
         }
         conditions.join(" OR ")
     }
@@ -691,7 +694,7 @@ impl Graph {
         }
 
         let match_conditions = self.build_to_id_match_clause(&match_names, 1);
-        let next_param = match_names.len() * 2 + 1;
+        let next_param = match_names.len() * 3 + 1; // each name uses 3 params (exact + %::name + %.name)
 
         let (kind_clause, kind_values): (String, Vec<String>) = if let Some(k) = kinds {
             let placeholders: Vec<String> = (next_param..next_param + k.len())
@@ -709,6 +712,7 @@ impl Graph {
         for name in &match_names {
             param_values.push(Box::new(name.clone()));
             param_values.push(Box::new(format!("%::{name}")));
+            param_values.push(Box::new(format!("%.{name}")));
         }
         for kv in &kind_values {
             param_values.push(Box::new(kv.clone()));
@@ -739,6 +743,7 @@ impl Graph {
         for name in &match_names {
             fetch_params.push(Box::new(name.clone()));
             fetch_params.push(Box::new(format!("%::{name}")));
+            fetch_params.push(Box::new(format!("%.{name}")));
         }
         for kv in &kind_values {
             fetch_params.push(Box::new(kv.clone()));
@@ -803,8 +808,8 @@ impl Graph {
             }
         }
 
-        // Also include the __module__ synthetic ID for the symbol's file,
-        // since many edges use it as from_id
+        // Also check __module__ synthetic ID for backward compatibility with
+        // pre-fix indexes and for import edges which intentionally use module-level from_id.
         let module_id = format!("{}::__module__::function", symbol.file_path);
         if !source_ids.contains(&module_id) {
             source_ids.push(module_id);
@@ -830,7 +835,8 @@ impl Graph {
 
         let mut source_ids: Vec<String> = symbols.iter().map(|s| s.id.clone()).collect();
 
-        // Also include the __module__ synthetic ID for this file
+        // Also check __module__ synthetic ID for backward compatibility with
+        // pre-fix indexes and for import edges which intentionally use module-level from_id.
         let module_id = format!("{file_path}::__module__::function");
         if !source_ids.contains(&module_id) {
             source_ids.push(module_id);
@@ -1093,18 +1099,21 @@ impl Graph {
         for seed_id in seed_ids {
             // Extract the bare name from the ID
             let bare_name = self.symbol_name_from_id(seed_id);
-            let like_pattern = format!("%::{bare_name}");
+            let like_qualified = format!("%::{bare_name}");
+            let like_member = format!("%.{bare_name}");
 
             seed_unions.push(format!(
                 "SELECT e.from_id, 1, CAST(e.from_id AS TEXT) \
-                 FROM edges e WHERE (e.to_id = ?{idx} OR e.to_id = ?{} OR e.to_id LIKE ?{})",
+                 FROM edges e WHERE (e.to_id = ?{idx} OR e.to_id = ?{} OR e.to_id LIKE ?{} OR e.to_id LIKE ?{})",
                 idx + 1,
-                idx + 2
+                idx + 2,
+                idx + 3
             ));
             param_values.push(Box::new(seed_id.clone()));
             param_values.push(Box::new(bare_name));
-            param_values.push(Box::new(like_pattern));
-            idx += 3;
+            param_values.push(Box::new(like_qualified));
+            param_values.push(Box::new(like_member));
+            idx += 4;
         }
 
         let seed_sql = seed_unions.join(" UNION ALL ");

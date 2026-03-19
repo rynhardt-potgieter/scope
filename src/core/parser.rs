@@ -272,6 +272,8 @@ impl CodeParser {
         for m in matches {
             let pattern = m.pattern_index;
             let mut captures_map: HashMap<String, (String, u32)> = HashMap::new();
+            // Save a representative AST node from the first capture for scope resolution
+            let mut representative_node: Option<tree_sitter::Node> = None;
 
             for capture in m.captures {
                 let capture_name = capture_names[capture.index as usize].to_string();
@@ -281,10 +283,24 @@ impl CodeParser {
                     .unwrap_or_default()
                     .to_string();
                 let line = capture.node.start_position().row as u32 + 1;
+                if representative_node.is_none() {
+                    representative_node = Some(capture.node);
+                }
                 captures_map.insert(capture_name, (text, line));
             }
 
-            let extracted = extract_edge_from_pattern(lang, pattern, &captures_map, file_path);
+            // Resolve the enclosing scope for this match
+            let enclosing_scope_id = representative_node
+                .as_ref()
+                .and_then(|n| find_enclosing_scope(n, source, file_path));
+
+            let extracted = extract_edge_from_pattern(
+                lang,
+                pattern,
+                &captures_map,
+                file_path,
+                enclosing_scope_id.as_deref(),
+            );
             edges.extend(extracted);
         }
 
@@ -348,6 +364,63 @@ fn extract_docstring(node: &tree_sitter::Node, source: &str) -> Option<String> {
     }
 }
 
+/// Walk up the AST from `node` to find the nearest enclosing scope (function, method, class).
+/// Returns the symbol ID of that scope, or `None` if at module level.
+fn find_enclosing_scope(node: &tree_sitter::Node, source: &str, file_path: &str) -> Option<String> {
+    let mut current = node.parent();
+
+    // Node types that define a scope
+    let scope_types = [
+        // TypeScript
+        "function_declaration",
+        "method_definition",
+        "arrow_function",
+        "function_expression",
+        // C#
+        "method_declaration",
+        "constructor_declaration",
+        // Both
+        "class_declaration",
+        "struct_declaration",
+        "interface_declaration",
+        "record_declaration",
+    ];
+
+    while let Some(parent) = current {
+        if scope_types.contains(&parent.kind()) {
+            // For arrow functions / function expressions assigned to variables,
+            // walk up to the variable_declarator to get a meaningful name.
+            if parent.kind() == "arrow_function" || parent.kind() == "function_expression" {
+                if let Some(grandparent) = parent.parent() {
+                    if grandparent.kind() == "variable_declarator" {
+                        if let Some(name_node) = grandparent.child_by_field_name("name") {
+                            if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
+                                let line = grandparent.start_position().row as u32 + 1;
+                                return Some(format!("{file_path}::{name}::function::{line}"));
+                            }
+                        }
+                    }
+                }
+                // If we can't get a name from variable_declarator, keep walking up
+                current = parent.parent();
+                continue;
+            }
+
+            // Named scope — get its name and build the ID
+            if let Some(name_node) = parent.child_by_field_name("name") {
+                if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
+                    let kind = infer_symbol_kind(parent.kind());
+                    let line = parent.start_position().row as u32 + 1;
+                    return Some(format!("{file_path}::{name}::{kind}::{line}"));
+                }
+            }
+        }
+        current = parent.parent();
+    }
+
+    None // Module level — no enclosing scope
+}
+
 /// Parent container node types that hold methods/properties.
 const CLASS_BODY_NODES: &[&str] = &["class_body", "declaration_list"];
 
@@ -389,24 +462,42 @@ fn extract_edge_from_pattern(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
     file_path: &str,
+    enclosing_scope_id: Option<&str>,
 ) -> Vec<Edge> {
     match lang {
-        SupportedLanguage::TypeScript => extract_ts_edge(pattern, captures, file_path),
-        SupportedLanguage::CSharp => extract_cs_edge(pattern, captures, file_path),
+        SupportedLanguage::TypeScript => {
+            extract_ts_edge(pattern, captures, file_path, enclosing_scope_id)
+        }
+        SupportedLanguage::CSharp => {
+            extract_cs_edge(pattern, captures, file_path, enclosing_scope_id)
+        }
         _ => Vec::new(),
     }
 }
 
 /// TypeScript edge extraction by pattern index.
+///
+/// Pattern indices map to the order of patterns in `queries/typescript/edges.scm`:
+/// 0 = import, 1 = direct call, 2 = member call, 3 = chained member call,
+/// 4 = new expression, 5 = extends, 6 = implements, 7 = type reference
 fn extract_ts_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
     file_path: &str,
+    enclosing_scope_id: Option<&str>,
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
+    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
+    let from_function = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
+    let from_class = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+
     match pattern {
-        // Import statement
+        // Import statement — always module-level, use __module__ synthetic ID
         0 => {
             if let (Some((imported_name, line)), Some((source, _))) =
                 (captures.get("imported_name"), captures.get("source"))
@@ -425,7 +516,7 @@ fn extract_ts_edge(
         1 => {
             if let Some((callee, line)) = captures.get("callee") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: callee.clone(),
                     kind: "calls".to_string(),
                     file_path: file_path.to_string(),
@@ -433,13 +524,13 @@ fn extract_ts_edge(
                 });
             }
         }
-        // Member call expression
-        2 => {
+        // Member call expression / chained member access call (patterns 2 and 3)
+        2 | 3 => {
             if let (Some((object, line)), Some((method, _))) =
                 (captures.get("object"), captures.get("method"))
             {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: format!("{object}.{method}"),
                     kind: "calls".to_string(),
                     file_path: file_path.to_string(),
@@ -448,10 +539,10 @@ fn extract_ts_edge(
             }
         }
         // New expression (instantiation)
-        3 => {
+        4 => {
             if let Some((class_name, line)) = captures.get("class_name") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: class_name.clone(),
                     kind: "instantiates".to_string(),
                     file_path: file_path.to_string(),
@@ -460,10 +551,10 @@ fn extract_ts_edge(
             }
         }
         // Extends clause
-        4 => {
+        5 => {
             if let Some((base_class, line)) = captures.get("base_class") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::class"),
+                    from_id: from_class.clone(),
                     to_id: base_class.clone(),
                     kind: "extends".to_string(),
                     file_path: file_path.to_string(),
@@ -472,10 +563,10 @@ fn extract_ts_edge(
             }
         }
         // Implements clause
-        5 => {
+        6 => {
             if let Some((iface_name, line)) = captures.get("interface_name") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::class"),
+                    from_id: from_class.clone(),
                     to_id: iface_name.clone(),
                     kind: "implements".to_string(),
                     file_path: file_path.to_string(),
@@ -484,10 +575,10 @@ fn extract_ts_edge(
             }
         }
         // Type reference
-        6 => {
+        7 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: type_ref.clone(),
                     kind: "references_type".to_string(),
                     file_path: file_path.to_string(),
@@ -502,15 +593,29 @@ fn extract_ts_edge(
 }
 
 /// C# edge extraction by pattern index.
+///
+/// Pattern indices map to the order of patterns in `queries/csharp/edges.scm`:
+/// 0 = using (identifier), 1 = using (qualified), 2 = member call,
+/// 3 = direct call, 4 = new expression, 5 = base list (identifier),
+/// 6 = base list (qualified)
 fn extract_cs_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
     file_path: &str,
+    enclosing_scope_id: Option<&str>,
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
+    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
+    let from_function = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
+    let from_class = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+
     match pattern {
-        // Using directive with identifier
+        // Using directive with identifier — always module-level, use __module__ synthetic ID
         0 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
                 edges.push(Edge {
@@ -522,7 +627,7 @@ fn extract_cs_edge(
                 });
             }
         }
-        // Using directive with qualified name
+        // Using directive with qualified name — always module-level, use __module__ synthetic ID
         1 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
                 edges.push(Edge {
@@ -540,7 +645,7 @@ fn extract_cs_edge(
                 (captures.get("object"), captures.get("method"))
             {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: format!("{object}.{method}"),
                     kind: "calls".to_string(),
                     file_path: file_path.to_string(),
@@ -552,7 +657,7 @@ fn extract_cs_edge(
         3 => {
             if let Some((callee, line)) = captures.get("callee") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: callee.clone(),
                     kind: "calls".to_string(),
                     file_path: file_path.to_string(),
@@ -564,7 +669,7 @@ fn extract_cs_edge(
         4 => {
             if let Some((class_name, line)) = captures.get("class_name") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
+                    from_id: from_function.clone(),
                     to_id: class_name.clone(),
                     kind: "instantiates".to_string(),
                     file_path: file_path.to_string(),
@@ -576,7 +681,7 @@ fn extract_cs_edge(
         5 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::class"),
+                    from_id: from_class.clone(),
                     to_id: base_type.clone(),
                     kind: "implements".to_string(),
                     file_path: file_path.to_string(),
@@ -588,7 +693,7 @@ fn extract_cs_edge(
         6 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::class"),
+                    from_id: from_class.clone(),
                     to_id: base_type.clone(),
                     kind: "implements".to_string(),
                     file_path: file_path.to_string(),

@@ -10,11 +10,18 @@
 (call_expression
   function: (identifier) @callee) @call
 
-; Call expressions — member access calls
+; Call expressions — member access calls (simple: obj.method())
 (call_expression
   function: (member_expression
     object: (identifier) @object
     property: (property_identifier) @method)) @member_call
+
+; Call expressions — chained member access calls (e.g. this.svc.method(), a.b.method())
+(call_expression
+  function: (member_expression
+    object: (member_expression
+      property: (property_identifier) @object)
+    property: (property_identifier) @method)) @chained_member_call
 
 ; New expressions (instantiation)
 (new_expression

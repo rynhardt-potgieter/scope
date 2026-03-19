@@ -1,6 +1,5 @@
 ---
 source: tests/integration/test_sketch.rs
-assertion_line: 247
 expression: normalized
 ---
 src/payments/service.ts
@@ -8,6 +7,6 @@ src/payments/service.ts
   PaymentService          class     4-24     [internal]
   logger                  property  5        [internal]
   constructor             method    7-9      [internal]
-  processPayment          method    11-14    [internal]
-  refundPayment           method    16-19    [internal]
+  processPayment          method    11-14    [2 callers]
+  refundPayment           method    16-19    [1 caller]
   validateAmount          method    21-23    [internal]
