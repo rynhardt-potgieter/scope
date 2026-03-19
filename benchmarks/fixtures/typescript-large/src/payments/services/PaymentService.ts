@@ -4,8 +4,8 @@ import { PaymentRepository } from '../repositories/PaymentRepository';
 import { ProcessorFactory } from '../processors/ProcessorFactory';
 import { PaymentValidator } from '../validators/PaymentValidator';
 import { Payment } from '../models/Payment';
-import { PaymentRequest, PaymentResult } from '../types/PaymentTypes';
-import { PaymentStatus } from '../../types/enums';
+import { PaymentResult } from '../types/PaymentTypes';
+import { PaymentStatus, PaymentProcessor } from '../../types/enums';
 import { EntityId } from '../../types/common';
 import { NotFoundError, ValidationError } from '../../types/errors';
 import { Money } from '../../types/money';
@@ -44,28 +44,35 @@ export class PaymentService {
    * PaymentRetryWorker.retryFailedPayment, InvoiceService.settleInvoice,
    * and RefundController.processPartialRefund.
    */
-  async processPayment(request: PaymentRequest): Promise<PaymentResult> {
+  async processPayment(
+    userId: EntityId,
+    amount: Money,
+    processor: PaymentProcessor,
+    description: string,
+    idempotencyKey: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<PaymentResult> {
     this.logger.info('Processing payment', {
-      userId: request.userId,
-      amount: request.amount.amount,
-      currency: request.amount.currency,
-      processor: request.processor,
+      userId,
+      amount: amount.amount,
+      currency: amount.currency,
+      processor,
     });
 
-    this.validator.validateAmount(request.amount);
-    this.validator.validateCurrency(request.amount.currency);
+    this.validator.validateAmount(amount);
+    this.validator.validateCurrency(amount.currency);
 
-    const processor = this.processorFactory.getProcessor(request.processor);
+    const proc = this.processorFactory.getProcessor(processor);
 
     const payment = await this.paymentRepo.save({
       id: `pay_${Date.now()}`,
-      userId: request.userId,
-      amount: request.amount,
+      userId,
+      amount,
       status: PaymentStatus.PROCESSING,
-      processor: request.processor,
+      processor,
       processorTransactionId: null,
-      description: request.description,
-      metadata: request.metadata ?? {},
+      description,
+      metadata: metadata ?? {},
       failureReason: null,
       refundedAmount: null,
       completedAt: null,
@@ -74,23 +81,23 @@ export class PaymentService {
     });
 
     try {
-      const chargeResult = await processor.charge({
-        amount: request.amount,
+      const chargeResult = await proc.charge({
+        amount,
         cardToken: 'tok_default',
-        description: request.description,
-        idempotencyKey: request.idempotencyKey,
-        metadata: request.metadata,
+        description,
+        idempotencyKey,
+        metadata,
       });
 
       if (chargeResult.success) {
         await this.paymentRepo.updateStatus(payment.id, PaymentStatus.COMPLETED, chargeResult.transactionId);
-        this.cache.invalidatePrefix(`payment:${request.userId}`);
+        this.cache.invalidatePrefix(`payment:${userId}`);
 
         await this.notificationService.send({
-          userId: request.userId,
+          userId,
           channel: 'email',
           subject: 'Payment Confirmation',
-          body: `Your payment of ${request.amount.amount} ${request.amount.currency} has been processed.`,
+          body: `Your payment of ${amount.amount} ${amount.currency} has been processed.`,
         });
 
         this.logger.info('Payment successful', { paymentId: payment.id });

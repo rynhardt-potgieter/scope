@@ -75,13 +75,13 @@ export class InvoiceService {
 
     this.logger.info('Settling invoice', { invoiceId, total: invoice.total.amount });
 
-    const paymentResult = await this.paymentService.processPayment({
-      userId: invoice.userId,
-      amount: invoice.total,
-      processor: PaymentProcessor.STRIPE,
-      description: `Invoice ${invoice.invoiceNumber}`,
-      idempotencyKey: `invoice_settle_${invoiceId}`,
-    });
+    const paymentResult = await this.paymentService.processPayment(
+      invoice.userId,
+      invoice.total,
+      PaymentProcessor.STRIPE,
+      `Invoice ${invoice.invoiceNumber}`,
+      `invoice_settle_${invoiceId}`,
+    );
 
     if (paymentResult.success) {
       const updated = await this.invoiceRepo.updateStatus(invoiceId, InvoiceStatus.PAID, paymentResult.paymentId);

@@ -48,14 +48,14 @@ export class OrderController {
 
     this.logger.info('Processing checkout', { userId: user.sub, total, itemCount: request.items.length });
 
-    const result = await this.paymentService.processPayment({
-      userId: user.sub,
+    const result = await this.paymentService.processPayment(
+      user.sub,
       amount,
-      processor: PaymentProcessor.STRIPE,
-      description: `Order checkout: ${request.items.length} items`,
-      idempotencyKey: `checkout_${user.sub}_${crypto.generateToken(8)}`,
-      metadata: { items: request.items },
-    });
+      PaymentProcessor.STRIPE,
+      `Order checkout: ${request.items.length} items`,
+      `checkout_${user.sub}_${crypto.generateToken(8)}`,
+      { items: request.items },
+    );
 
     this.logger.info('Checkout complete', { userId: user.sub, success: result.success, paymentId: result.paymentId });
 
@@ -79,14 +79,14 @@ export class OrderController {
     const money = createMoney(amount, currency);
     const crypto = new CryptoService();
 
-    const result = await this.paymentService.processPayment({
-      userId: user.sub,
-      amount: money,
-      processor: PaymentProcessor.STRIPE,
-      description: `Retry payment for order ${orderId}`,
-      idempotencyKey: `retry_${orderId}_${crypto.generateToken(8)}`,
-      metadata: { orderId, retryAt: new Date().toISOString() },
-    });
+    const result = await this.paymentService.processPayment(
+      user.sub,
+      money,
+      PaymentProcessor.STRIPE,
+      `Retry payment for order ${orderId}`,
+      `retry_${orderId}_${crypto.generateToken(8)}`,
+      { orderId, retryAt: new Date().toISOString() },
+    );
 
     return {
       success: result.success,

@@ -89,14 +89,14 @@ export class RefundController {
     const replacementAmount = createMoney(request.replacementAmount, request.currency);
     const crypto = new CryptoService();
 
-    const result = await this.paymentService.processPayment({
-      userId: user.sub,
-      amount: replacementAmount,
-      processor: PaymentProcessor.STRIPE,
-      description: `Replacement payment for refund on ${request.originalPaymentId}`,
-      idempotencyKey: `partial_refund_${request.originalPaymentId}_${crypto.generateToken(8)}`,
-      metadata: { originalPaymentId: request.originalPaymentId, refundAmount: request.refundAmount },
-    });
+    const result = await this.paymentService.processPayment(
+      user.sub,
+      replacementAmount,
+      PaymentProcessor.STRIPE,
+      `Replacement payment for refund on ${request.originalPaymentId}`,
+      `partial_refund_${request.originalPaymentId}_${crypto.generateToken(8)}`,
+      { originalPaymentId: request.originalPaymentId, refundAmount: request.refundAmount },
+    );
 
     return {
       success: result.success,

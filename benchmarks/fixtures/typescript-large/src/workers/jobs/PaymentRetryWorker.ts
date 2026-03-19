@@ -47,14 +47,14 @@ export class PaymentRetryWorker {
     }
 
     const crypto = new CryptoService();
-    const result = await this.paymentService.processPayment({
-      userId: payment.userId,
-      amount: payment.amount,
-      processor: payment.processor as PaymentProcessor,
-      description: `Retry ${job.attempt}: ${payment.description}`,
-      idempotencyKey: `retry_${job.paymentId}_${job.attempt}_${crypto.generateToken(8)}`,
-      metadata: { originalPaymentId: job.paymentId, retryAttempt: job.attempt },
-    });
+    const result = await this.paymentService.processPayment(
+      payment.userId,
+      payment.amount,
+      payment.processor as PaymentProcessor,
+      `Retry ${job.attempt}: ${payment.description}`,
+      `retry_${job.paymentId}_${job.attempt}_${crypto.generateToken(8)}`,
+      { originalPaymentId: job.paymentId, retryAttempt: job.attempt },
+    );
 
     if (result.success) {
       this.logger.info('Payment retry successful', { paymentId: job.paymentId, attempt: job.attempt });

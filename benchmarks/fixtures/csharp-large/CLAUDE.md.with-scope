@@ -6,10 +6,10 @@ This project is indexed with Scope for structural code intelligence.
 
 | Task | Command | Example |
 |---|---|---|
-| Find callers of a method | `scope callers <method>` | `scope callers processPayment` |
+| Find callers of a method | `scope callers <method>` | `scope callers ProcessPayment` |
 | Understand a class | `scope sketch <class>` | `scope sketch PaymentService` |
 | Find code by intent | `scope find "<query>"` | `scope find "retry logic"` |
-| Impact analysis | `scope impact <symbol>` | `scope impact processPayment` |
+| Impact analysis | `scope impact <symbol>` | `scope impact ProcessPayment` |
 
 ### Rules
 1. **One command, then act.** Scope output has file paths, line numbers, and source snippets — use them directly.
@@ -17,3 +17,8 @@ This project is indexed with Scope for structural code intelligence.
 3. **Don't run `callers` AND `refs`** for the same symbol — `callers` is a subset of `refs`.
 4. **Don't sketch what you'll read anyway** — sketch is for understanding without opening the file.
 5. **Use `scope find` only when you don't know the symbol name.** If you know it, use `sketch` or `callers`.
+
+### Architecture
+- Clean Architecture: Domain → Application → Infrastructure → Api
+- Interface-based DI: `IPaymentService`, `IUserService`, etc.
+- CQRS: Commands/Queries via MediatR pattern

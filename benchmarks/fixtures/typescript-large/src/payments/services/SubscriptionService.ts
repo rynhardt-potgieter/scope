@@ -80,13 +80,21 @@ export class SubscriptionService {
 
     this.logger.info('Processing subscription renewal', { subscriptionId, amount: subscription.amount.amount });
 
-    const paymentResult = await this.paymentService.processPayment({
-      userId: subscription.userId,
-      amount: subscription.amount,
-      processor: PaymentProcessor.STRIPE,
-      description: `Subscription renewal: ${subscription.planName}`,
-      idempotencyKey: `sub_renewal_${subscriptionId}_${Date.now()}`,
-    });
+    let paymentResult;
+    try {
+      paymentResult = await this.paymentService.processPayment(
+        subscription.userId,
+        subscription.amount,
+        PaymentProcessor.STRIPE,
+        `Subscription renewal: ${subscription.planName}`,
+        `sub_renewal_${subscriptionId}_${Date.now()}`,
+      );
+    } catch (error) {
+      await this.subscriptionRepo.incrementFailedAttempts(subscriptionId);
+      const message = error instanceof Error ? error.message : 'Unknown payment error';
+      this.logger.error('Payment processing error during renewal', { subscriptionId, error: message });
+      throw new ValidationError(`Renewal payment failed: ${message}`);
+    }
 
     if (paymentResult.success) {
       const newPeriodStart = subscription.currentPeriodEnd;

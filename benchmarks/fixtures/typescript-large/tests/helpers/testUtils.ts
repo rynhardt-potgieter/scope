@@ -1,7 +1,6 @@
 import { EntityId } from '../../src/types/common';
 import { Currency, createMoney, Money } from '../../src/types/money';
 import { UserRole, PaymentProcessor } from '../../src/types/enums';
-import { PaymentRequest } from '../../src/payments/types/PaymentTypes';
 
 /** Generate a unique test ID */
 export function testId(prefix: string = 'test'): EntityId {
@@ -11,18 +10,6 @@ export function testId(prefix: string = 'test'): EntityId {
 /** Create test money value */
 export function testMoney(amount: number = 99.99, currency: Currency = Currency.USD): Money {
   return createMoney(amount, currency);
-}
-
-/** Create a test payment request */
-export function testPaymentRequest(overrides?: Partial<PaymentRequest>): PaymentRequest {
-  return {
-    userId: testId('user'),
-    amount: testMoney(),
-    processor: PaymentProcessor.STRIPE,
-    description: 'Test payment',
-    idempotencyKey: testId('idem'),
-    ...overrides,
-  };
 }
 
 /** Sleep for a specified number of milliseconds */

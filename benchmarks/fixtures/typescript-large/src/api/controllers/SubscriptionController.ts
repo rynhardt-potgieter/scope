@@ -71,14 +71,14 @@ export class SubscriptionController {
     const subscription = await this.subscriptionService.getSubscription(subscriptionId);
     const crypto = new CryptoService();
 
-    const result = await this.paymentService.processPayment({
-      userId: user.sub,
-      amount: subscription.amount,
-      processor: PaymentProcessor.STRIPE,
-      description: `Manual renewal: ${subscription.planName}`,
-      idempotencyKey: `manual_renew_${subscriptionId}_${crypto.generateToken(8)}`,
-      metadata: { subscriptionId, planName: subscription.planName },
-    });
+    const result = await this.paymentService.processPayment(
+      user.sub,
+      subscription.amount,
+      PaymentProcessor.STRIPE,
+      `Manual renewal: ${subscription.planName}`,
+      `manual_renew_${subscriptionId}_${crypto.generateToken(8)}`,
+      { subscriptionId, planName: subscription.planName },
+    );
 
     this.logger.info('Subscription renewal result', { subscriptionId, success: result.success });
 
