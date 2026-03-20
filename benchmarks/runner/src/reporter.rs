@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::Path;
 
+use crate::agent::AgentAction;
+use crate::behavior::{self, BehaviorMetrics};
+
 /// A single benchmark run result.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BenchmarkRun {
@@ -15,6 +18,10 @@ pub struct BenchmarkRun {
     pub scope_commands_called: Vec<String>,
     pub correctness: CorrectnessResult,
     pub duration_ms: u64,
+    #[serde(default)]
+    pub actions: Vec<AgentAction>,
+    #[serde(default)]
+    pub behavior: Option<BehaviorMetrics>,
 }
 
 /// Correctness verification results for a single run.
@@ -175,6 +182,29 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
         max_rep
     ));
 
+    // Behavior analysis section
+    let with_behaviors: Vec<BehaviorMetrics> = with_scope
+        .iter()
+        .filter_map(|r| r.behavior.clone())
+        .collect();
+    let without_behaviors: Vec<BehaviorMetrics> = without_scope
+        .iter()
+        .filter_map(|r| r.behavior.clone())
+        .collect();
+
+    if !with_behaviors.is_empty() || !without_behaviors.is_empty() {
+        let comparison = behavior::aggregate_behavior(&with_behaviors, &without_behaviors);
+        out.push('\n');
+        out.push_str(&behavior::format_behavior_markdown(&comparison));
+
+        let scope_sequences: Vec<Vec<String>> = with_behaviors
+            .iter()
+            .map(|b| b.scope_command_sequence.clone())
+            .collect();
+        out.push('\n');
+        out.push_str(&behavior::generate_recommendations(&comparison, &scope_sequences));
+    }
+
     let mut file = std::fs::File::create(path)
         .with_context(|| format!("Failed to create summary file: {}", path.display()))?;
     file.write_all(out.as_bytes())?;
@@ -206,7 +236,7 @@ pub fn write_environment(path: &Path) -> Result<()> {
 
 /// Detect the Scope version by running `sc --version` or falling back to "unknown".
 fn detect_scope_version() -> String {
-    std::process::Command::new("sc")
+    std::process::Command::new("scope")
         .arg("--version")
         .output()
         .ok()
@@ -289,6 +319,8 @@ impl Clone for BenchmarkRun {
             scope_commands_called: self.scope_commands_called.clone(),
             correctness: self.correctness.clone(),
             duration_ms: self.duration_ms,
+            actions: self.actions.clone(),
+            behavior: self.behavior.clone(),
         }
     }
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0 (2026-03-20)
+
+### Features
+- **Automated benchmark runner** — `agent.rs` implements full `claude -p` invocation with stream-json parsing, temp directory isolation, and NDJSON tool call extraction
+- **Agent behavior analysis** — new `behavior.rs` module computes navigation efficiency, scope anti-patterns, tool overlap metrics, and generates data-driven CLI recommendations
+- **Behavior-aware reports** — markdown summaries now include agent behavior section with navigation:edit ratios, anti-pattern counts, and CLI evolution recommendations
+- Large fixture support in corpus resolver (prefers `{lang}-large` over `{lang}-api`)
+
+### Benchmark Runner (scope-benchmark v0.2.0)
+- `agent.rs`: temp dir isolation per run (no cross-contamination), CLAUDE.md swapping, `--disallowedTools` for baseline condition, stream-json parsing for tool call capture
+- `behavior.rs`: `BehaviorMetrics` struct, `compute_behavior_metrics()`, `aggregate_behavior()`, anti-pattern detection (sketch-then-read, grep-after-find, callers+refs overlap)
+- `reporter.rs`: behavior analysis section with navigation tables, anti-pattern counts, CLI recommendations
+- 34 unit tests (13 agent + 16 behavior + 3 verifier + 2 task)
+
+---
+
 ## v0.2.0 (2026-03-19)
 
 ### Breaking Changes

@@ -1,4 +1,5 @@
 mod agent;
+mod behavior;
 mod git;
 mod reporter;
 mod task;
@@ -161,8 +162,14 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     rep
                 );
 
-                let agent_run = agent::run_agent(task_def, true)?;
+                let agent_run = agent::run_agent(
+                    task_def,
+                    true,
+                    &corpus_path,
+                    backup.as_deref(),
+                )?;
                 let verification = verifier::verify_task(&corpus_path, task_def)?;
+                let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
                 all_runs.push(reporter::BenchmarkRun {
                     task_id: task_def.task.id.clone(),
@@ -179,6 +186,8 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                         overall_score: verification.overall_score,
                     },
                     duration_ms: agent_run.duration_ms,
+                    actions: agent_run.actions,
+                    behavior: Some(bm),
                 });
 
                 // Reset corpus between runs
@@ -201,8 +210,14 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     rep
                 );
 
-                let agent_run = agent::run_agent(task_def, false)?;
+                let agent_run = agent::run_agent(
+                    task_def,
+                    false,
+                    &corpus_path,
+                    backup.as_deref(),
+                )?;
                 let verification = verifier::verify_task(&corpus_path, task_def)?;
+                let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
                 all_runs.push(reporter::BenchmarkRun {
                     task_id: task_def.task.id.clone(),
@@ -219,6 +234,8 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                         overall_score: verification.overall_score,
                     },
                     duration_ms: agent_run.duration_ms,
+                    actions: agent_run.actions,
+                    behavior: Some(bm),
                 });
 
                 // Reset corpus between runs
@@ -389,6 +406,9 @@ fn resolve_corpus_path(task_def: &task::TaskDef) -> Result<std::path::PathBuf> {
 
     let fixture_candidates = match corpus_name.as_str() {
         "fixture" => vec![
+            format!("benchmarks/fixtures/{}-large", task_def.task.language),
+            format!("../fixtures/{}-large", task_def.task.language),
+            format!("../../benchmarks/fixtures/{}-large", task_def.task.language),
             format!("benchmarks/fixtures/{}-api", task_def.task.language),
             format!("../fixtures/{}-api", task_def.task.language),
             format!("../../benchmarks/fixtures/{}-api", task_def.task.language),
