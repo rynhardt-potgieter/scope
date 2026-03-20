@@ -423,6 +423,11 @@ fn extract_scope_command(bash_command: &str) -> Option<String> {
     Some(format!("scope {}", subcommand))
 }
 
+/// Public wrapper for prepare command to copy fixture directories.
+pub fn copy_dir_for_prepare(src: &Path, dst: &Path) -> Result<()> {
+    copy_dir_recursive(src, dst)
+}
+
 /// Recursively copy a directory and all its contents.
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst)?;

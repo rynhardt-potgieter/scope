@@ -32,7 +32,25 @@ pub enum Commands {
     /// By default, runs all tasks with Scope enabled. Use --compare to run
     /// both with and without Scope for a side-by-side comparison. Use --no-scope
     /// to run only the baseline (no Scope) condition.
+    ///
+    /// Requires ANTHROPIC_API_KEY and the `claude` CLI installed.
     Run(RunArgs),
+
+    /// Prepare isolated work directories and print prompts for manual runs.
+    ///
+    /// Sets up temp directories with CLAUDE.md variants and .scope/ indexes,
+    /// then prints the exact prompts to use. Run each prompt manually in a
+    /// Claude Code session, then use `benchmark import` to ingest results.
+    /// Does NOT require an API key.
+    Prepare(PrepareArgs),
+
+    /// Import manually captured benchmark results for analysis.
+    ///
+    /// Reads a JSON file with agent run data (tokens, tool calls, actions)
+    /// and generates behavior analysis reports. Use this when benchmarks
+    /// are run manually (e.g., via Claude Code Agent tool) instead of via
+    /// `benchmark run`.
+    Import(ImportArgs),
 
     /// Generate a report from existing benchmark results.
     ///
@@ -87,6 +105,44 @@ pub struct RunArgs {
 }
 
 #[derive(Parser, Debug)]
+pub struct PrepareArgs {
+    /// Run all tasks in the task suite
+    #[arg(long)]
+    pub all: bool,
+
+    /// Prepare a single task by its ID
+    #[arg(long)]
+    pub task: Option<String>,
+
+    /// Prepare all tasks for a specific language
+    #[arg(long)]
+    pub language: Option<String>,
+
+    /// Also prepare without-scope variant for comparison
+    #[arg(long)]
+    pub compare: bool,
+
+    /// Output directory for prepared work dirs (default: benchmarks/prepared/)
+    #[arg(long)]
+    pub output_dir: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+pub struct ImportArgs {
+    /// Path to a JSON file with manually captured results
+    #[arg(long)]
+    pub input: String,
+
+    /// Output format for the analysis report
+    #[arg(long, value_enum, default_value = "markdown")]
+    pub output: OutputFormat,
+
+    /// Output directory for results
+    #[arg(long)]
+    pub output_dir: Option<String>,
+}
+
+#[derive(Parser, Debug)]
 pub struct ReportArgs {
     /// Path to a JSON results file or directory containing results
     #[arg(long)]
@@ -102,6 +158,8 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Run(args) => run_benchmarks(&args),
+        Commands::Prepare(args) => prepare_benchmarks(&args),
+        Commands::Import(args) => import_results(&args),
         Commands::Report(args) => generate_report(&args),
     }
 }
@@ -265,6 +323,201 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     }
 
     let env_path = results_dir.join("environment.json");
+    reporter::write_environment(&env_path)?;
+
+    Ok(())
+}
+
+/// Prepare isolated work directories for manual benchmark runs.
+///
+/// Creates temp directories with the right CLAUDE.md variant and .scope/ index,
+/// then prints the exact prompt for each task+condition so the user can run
+/// them manually in Claude Code sessions.
+fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
+    let tasks_dir = find_tasks_dir()?;
+    let all_tasks = task::load_tasks(&tasks_dir)?;
+
+    let tasks = if args.all {
+        all_tasks.iter().collect::<Vec<_>>()
+    } else if let Some(ref task_id) = args.task {
+        all_tasks
+            .iter()
+            .filter(|t| t.task.id == *task_id)
+            .collect()
+    } else if let Some(ref lang) = args.language {
+        all_tasks
+            .iter()
+            .filter(|t| t.task.language == *lang)
+            .collect()
+    } else {
+        anyhow::bail!("Specify --all, --task <id>, or --language <lang>.");
+    };
+
+    if tasks.is_empty() {
+        anyhow::bail!("No tasks matched the given filters.");
+    }
+
+    let output_base = args
+        .output_dir
+        .as_deref()
+        .unwrap_or("benchmarks/prepared");
+    std::fs::create_dir_all(output_base)?;
+
+    let conditions: Vec<bool> = if args.compare {
+        vec![true, false]
+    } else {
+        vec![true]
+    };
+
+    let mut manifest = Vec::new();
+
+    for task_def in &tasks {
+        let corpus_path = resolve_corpus_path(task_def)?;
+
+        for &scope_enabled in &conditions {
+            let condition_label = if scope_enabled {
+                "with-scope"
+            } else {
+                "without-scope"
+            };
+            let dir_name = format!("{}-{}", task_def.task.id, condition_label);
+            let work_dir = std::path::PathBuf::from(output_base).join(&dir_name);
+
+            // Clean and create
+            if work_dir.exists() {
+                std::fs::remove_dir_all(&work_dir)?;
+            }
+            std::fs::create_dir_all(&work_dir)?;
+
+            // Copy fixture
+            agent::copy_dir_for_prepare(&corpus_path, &work_dir)?;
+
+            // Install CLAUDE.md variant
+            let variant = if scope_enabled {
+                "CLAUDE.md.with-scope"
+            } else {
+                "CLAUDE.md.without-scope"
+            };
+            let variant_src = work_dir.join(variant);
+            if variant_src.is_file() {
+                std::fs::copy(&variant_src, work_dir.join("CLAUDE.md"))?;
+            }
+
+            // Handle .scope/ directory
+            if !scope_enabled {
+                let scope_dir = work_dir.join(".scope");
+                if scope_dir.exists() {
+                    std::fs::remove_dir_all(&scope_dir)?;
+                }
+            }
+
+            let entry = serde_json::json!({
+                "task_id": task_def.task.id,
+                "category": task_def.task.category,
+                "language": task_def.task.language,
+                "scope_enabled": scope_enabled,
+                "work_dir": work_dir.display().to_string(),
+                "prompt": task_def.prompt.text,
+            });
+            manifest.push(entry);
+
+            eprintln!("  Prepared: {}", dir_name);
+        }
+    }
+
+    // Write manifest
+    let manifest_path = std::path::PathBuf::from(output_base).join("manifest.json");
+    let manifest_json = serde_json::to_string_pretty(&manifest)?;
+    std::fs::write(&manifest_path, &manifest_json)?;
+
+    eprintln!(
+        "\nPrepared {} work directories. Manifest: {}",
+        manifest.len(),
+        manifest_path.display()
+    );
+    eprintln!("\nTo run manually, for each entry in manifest.json:");
+    eprintln!("  1. cd into the work_dir");
+    eprintln!("  2. Run the prompt as a Claude Code agent");
+    eprintln!("  3. Record: total_tokens, tool_uses, duration_ms from agent metadata");
+    eprintln!("  4. Use `benchmark import` to ingest results");
+
+    Ok(())
+}
+
+/// Import manually captured benchmark results and generate analysis.
+///
+/// Expects a JSON file with this schema:
+/// ```json
+/// [
+///   {{
+///     "task_id": "ts-cat-a-01",
+///     "scope_enabled": true,
+///     "input_tokens": 24635,
+///     "output_tokens": 8000,
+///     "duration_ms": 74981,
+///     "tool_uses": 15,
+///     "actions": [
+///       {{"tool_name": "Bash", "arguments_summary": "scope find \"retry\"", ...}}
+///     ]
+///   }}
+/// ]
+/// ```
+fn import_results(args: &ImportArgs) -> Result<()> {
+    let content = std::fs::read_to_string(&args.input).map_err(|e| {
+        anyhow::anyhow!("Failed to read import file {}: {}", args.input, e)
+    })?;
+
+    // Try parsing as array of runs or as ResultsWrapper
+    let runs: Vec<reporter::BenchmarkRun> =
+        if let Ok(wrapper) = serde_json::from_str::<reporter::ResultsWrapper>(&content) {
+            wrapper.runs
+        } else if let Ok(runs) = serde_json::from_str::<Vec<reporter::BenchmarkRun>>(&content) {
+            runs
+        } else {
+            anyhow::bail!(
+                "Failed to parse import file. Expected a JSON array of BenchmarkRun objects \
+                 or a ResultsWrapper object with a 'runs' field."
+            );
+        };
+
+    if runs.is_empty() {
+        anyhow::bail!("Import file contains no runs.");
+    }
+
+    // Recompute behavior metrics if missing
+    let runs: Vec<reporter::BenchmarkRun> = runs
+        .into_iter()
+        .map(|mut run| {
+            if run.behavior.is_none() && !run.actions.is_empty() {
+                run.behavior = Some(behavior::compute_behavior_metrics(&run.actions));
+            }
+            run
+        })
+        .collect();
+
+    eprintln!("Imported {} runs.", runs.len());
+
+    let output_dir = args
+        .output_dir
+        .as_deref()
+        .unwrap_or("benchmarks/results/latest");
+    let output_path = std::path::PathBuf::from(output_dir);
+    std::fs::create_dir_all(&output_path)?;
+
+    match args.output {
+        OutputFormat::Json => {
+            let path = output_path.join("full_results.json");
+            reporter::write_json_results(&runs, &path)?;
+            eprintln!("Results written to {}", path.display());
+        }
+        OutputFormat::Markdown => {
+            let path = output_path.join("summary.md");
+            reporter::write_markdown_summary(&runs, &path)?;
+            eprintln!("Summary written to {}", path.display());
+        }
+    }
+
+    let env_path = output_path.join("environment.json");
     reporter::write_environment(&env_path)?;
 
     Ok(())

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.1 (2026-03-20)
+
+### Features
+- **`benchmark prepare`** — sets up isolated work directories with CLAUDE.md variants and .scope/ indexes, outputs manifest.json with prompts for manual runs. No API key required.
+- **`benchmark import`** — ingests manually captured results (tokens, actions, tool calls), recomputes behavior metrics, generates full analysis reports with CLI recommendations.
+- Large fixture resolver now prefers `{lang}-large` over `{lang}-api`
+
+### Fixes
+- Fix task count assertion (10 tasks, not 20) after test matrix consolidation
+
+---
+
 ## v0.3.0 (2026-03-20)
 
 ### Features
