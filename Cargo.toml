@@ -1,6 +1,6 @@
 [package]
 name = "scope"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Code intelligence CLI for LLM coding agents"
 license = "MIT"
@@ -83,3 +83,7 @@ path = "tests/integration/test_edge_cases.rs"
 [[test]]
 name = "test_json"
 path = "tests/integration/test_json.rs"
+
+[[test]]
+name = "test_trace"
+path = "tests/integration/test_trace.rs"

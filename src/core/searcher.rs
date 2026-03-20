@@ -11,6 +11,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::core::embedder::build_embedding_text;
@@ -67,15 +68,24 @@ impl Searcher {
     /// Index a batch of symbols into the FTS5 table.
     ///
     /// Builds the embedding text for each symbol and inserts it.
-    /// Call this after parsing symbols from source files.
-    pub fn index_symbols(&self, symbols: &[Symbol]) -> Result<()> {
+    /// Caller and callee maps provide relationship context for richer search.
+    /// Call this after parsing symbols and edges from source files.
+    pub fn index_symbols(
+        &self,
+        symbols: &[Symbol],
+        callers: &HashMap<String, Vec<String>>,
+        callees: &HashMap<String, Vec<String>>,
+    ) -> Result<()> {
         let mut stmt = self.conn.prepare(
             "INSERT OR REPLACE INTO symbols_fts (symbol_id, name, kind, file_path, body)
              VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
 
+        let empty: Vec<String> = Vec::new();
         for symbol in symbols {
-            let body = build_embedding_text(symbol);
+            let sym_callers = callers.get(&symbol.id).unwrap_or(&empty);
+            let sym_callees = callees.get(&symbol.id).unwrap_or(&empty);
+            let body = build_embedding_text(symbol, sym_callers, sym_callees);
             stmt.execute(params![
                 symbol.id,
                 symbol.name,
@@ -126,7 +136,7 @@ impl Searcher {
         let (sql, has_kind_filter) = if kind_filter.is_some() {
             (
                 "SELECT symbol_id, name, kind, file_path,
-                        bm25(symbols_fts, 0.0, 5.0, 0.0, 0.0, 10.0) AS rank
+                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank
                  FROM symbols_fts
                  WHERE symbols_fts MATCH ?1 AND kind = ?3
                  ORDER BY rank
@@ -136,7 +146,7 @@ impl Searcher {
         } else {
             (
                 "SELECT symbol_id, name, kind, file_path,
-                        bm25(symbols_fts, 0.0, 5.0, 0.0, 0.0, 10.0) AS rank
+                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank
                  FROM symbols_fts
                  WHERE symbols_fts MATCH ?1
                  ORDER BY rank
@@ -300,6 +310,16 @@ fn build_fts_query(query: &str) -> String {
                 fts_tokens.push(format!("{lower}*"));
             }
         }
+
+        // Also split snake_case and add component words
+        if cleaned.contains('_') {
+            for word in crate::core::embedder::split_snake_case(&cleaned).split_whitespace() {
+                let lower = word.to_lowercase();
+                if lower.len() >= 3 {
+                    fts_tokens.push(format!("{lower}*"));
+                }
+            }
+        }
     }
 
     fts_tokens.dedup();
@@ -340,6 +360,14 @@ mod tests {
             build_fts_query("TransactionController"),
             "TransactionController* OR transaction* OR controller*"
         );
+    }
+
+    #[test]
+    fn test_build_fts_query_snake_case_splitting() {
+        let query = build_fts_query("payment_retry");
+        assert!(query.contains("payment_retry*"));
+        assert!(query.contains("payment*"));
+        assert!(query.contains("retry*"));
     }
 
     #[test]

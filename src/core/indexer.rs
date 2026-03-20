@@ -100,6 +100,7 @@ impl Indexer {
         let mut total_edges = 0usize;
         let mut file_hashes: HashMap<String, String> = HashMap::new();
         let mut lang_stats: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut all_symbols: Vec<crate::core::graph::Symbol> = Vec::new();
 
         for (rel_path, abs_path, lang) in &files {
             let source = std::fs::read_to_string(abs_path)
@@ -119,11 +120,9 @@ impl Indexer {
             // Store in graph
             graph.insert_file_data(rel_path, &symbols, &edges)?;
 
-            // Index symbols for full-text search
-            if let Some(s) = searcher {
-                if let Err(e) = s.index_symbols(&symbols) {
-                    tracing::warn!("Failed to index symbols for search in {rel_path}: {e}");
-                }
+            // Collect symbols for FTS indexing (done after all edges are in the graph)
+            if searcher.is_some() {
+                all_symbols.extend(symbols);
             }
 
             total_symbols += sym_count;
@@ -132,6 +131,17 @@ impl Indexer {
             let entry = lang_stats.entry(lang.to_string()).or_insert((0, 0));
             entry.0 += 1;
             entry.1 += sym_count;
+        }
+
+        // Index symbols for full-text search with relationship context.
+        // This is done after all symbols and edges are in the graph so that
+        // caller/callee relationships are available for cross-file enrichment.
+        if let Some(s) = searcher {
+            let callers = graph.get_all_caller_names().unwrap_or_default();
+            let callees = graph.get_all_callee_names().unwrap_or_default();
+            if let Err(e) = s.index_symbols(&all_symbols, &callers, &callees) {
+                tracing::warn!("Failed to index symbols for search: {e}");
+            }
         }
 
         // Update file hashes
@@ -214,6 +224,7 @@ impl Indexer {
             .collect();
 
         let mut updated_hashes: HashMap<String, String> = HashMap::new();
+        let mut all_reindexed_symbols: Vec<crate::core::graph::Symbol> = Vec::new();
 
         for rel_path in &files_to_reindex {
             let (abs_path, lang) = file_map
@@ -229,19 +240,30 @@ impl Indexer {
             // Atomic per-file update: delete old data, insert new
             graph.insert_file_data(rel_path, &symbols, &edges)?;
 
-            // Update search index for this file
+            // Delete old search entries for this file
             if let Some(s) = searcher {
                 if let Err(e) = s.delete_file(rel_path) {
                     tracing::warn!("Failed to clear search entries for {rel_path}: {e}");
                 }
-                if let Err(e) = s.index_symbols(&symbols) {
-                    tracing::warn!("Failed to index symbols for search in {rel_path}: {e}");
-                }
+            }
+
+            // Collect symbols for FTS re-indexing with relationship context
+            if searcher.is_some() {
+                all_reindexed_symbols.extend(symbols);
             }
 
             // Track the hash for this file
             if let Some(hash) = current_hashes.get(rel_path) {
                 updated_hashes.insert(rel_path.clone(), hash.clone());
+            }
+        }
+
+        // Re-index FTS for changed files with relationship context from graph
+        if let Some(s) = searcher {
+            let callers = graph.get_all_caller_names().unwrap_or_default();
+            let callees = graph.get_all_callee_names().unwrap_or_default();
+            if let Err(e) = s.index_symbols(&all_reindexed_symbols, &callers, &callees) {
+                tracing::warn!("Failed to index symbols for search: {e}");
             }
         }
 

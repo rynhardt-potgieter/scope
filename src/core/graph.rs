@@ -162,6 +162,37 @@ pub struct Dependency {
     pub depth: usize,
 }
 
+/// A single step in a call path from entry point to target.
+#[derive(Debug, Clone, Serialize)]
+pub struct CallPathStep {
+    /// Display name of the symbol at this step.
+    pub symbol_name: String,
+    /// Full symbol ID.
+    pub symbol_id: String,
+    /// File path where this symbol is defined.
+    pub file_path: String,
+    /// Line number of the symbol definition.
+    pub line: u32,
+    /// Symbol kind (function, class, method, etc.).
+    pub kind: String,
+}
+
+/// A complete call path from an entry point to the target symbol.
+#[derive(Debug, Clone, Serialize)]
+pub struct CallPath {
+    /// Ordered steps from entry point (first) to target (last).
+    pub steps: Vec<CallPathStep>,
+}
+
+/// Result of a trace query — all call paths reaching a target symbol.
+#[derive(Debug, Serialize)]
+pub struct TraceResult {
+    /// The target symbol name.
+    pub target: String,
+    /// All discovered call paths from entry points to the target.
+    pub paths: Vec<CallPath>,
+}
+
 impl Symbol {
     /// Build a `Symbol` from a rusqlite row.
     pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
@@ -403,6 +434,78 @@ impl Graph {
                 count: count as usize,
             });
         }
+        Ok(result)
+    }
+
+    /// Get all caller names grouped by target symbol ID.
+    ///
+    /// Returns a map: `target_id -> vec of caller names`. Used during indexing
+    /// to enrich FTS text with relationship context. Caller lists are deduped
+    /// and truncated to 10 entries per symbol to avoid bloating the FTS text.
+    pub fn get_all_caller_names(&self) -> Result<HashMap<String, Vec<String>>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.to_id, s.name
+             FROM edges e
+             JOIN symbols s ON s.id = e.from_id
+             WHERE e.kind = 'calls'
+             ORDER BY e.to_id",
+        )?;
+
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        for row in rows {
+            let (target_id, caller_name) = row?;
+            let entry = result.entry(target_id).or_default();
+            // Dedup: only add if not already present
+            if !entry.contains(&caller_name) {
+                entry.push(caller_name);
+            }
+        }
+
+        // Truncate long lists to avoid bloating FTS text
+        for names in result.values_mut() {
+            names.truncate(10);
+        }
+
+        Ok(result)
+    }
+
+    /// Get all callee names grouped by source symbol ID.
+    ///
+    /// Returns a map: `source_id -> vec of callee names`. Used during indexing
+    /// to enrich FTS text with relationship context. Callee lists are deduped
+    /// and truncated to 10 entries per symbol to avoid bloating the FTS text.
+    pub fn get_all_callee_names(&self) -> Result<HashMap<String, Vec<String>>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.from_id, s.name
+             FROM edges e
+             JOIN symbols s ON s.id = e.to_id
+             WHERE e.kind = 'calls'
+             ORDER BY e.from_id",
+        )?;
+
+        let mut result: HashMap<String, Vec<String>> = HashMap::new();
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        for row in rows {
+            let (source_id, callee_name) = row?;
+            let entry = result.entry(source_id).or_default();
+            // Dedup: only add if not already present
+            if !entry.contains(&callee_name) {
+                entry.push(callee_name);
+            }
+        }
+
+        // Truncate long lists to avoid bloating FTS text
+        for names in result.values_mut() {
+            names.truncate(10);
+        }
+
         Ok(result)
     }
 
@@ -1200,6 +1303,163 @@ impl Graph {
             nodes_by_depth,
             test_files,
             total_affected,
+        })
+    }
+
+    /// Find all call paths from entry points to a target symbol.
+    ///
+    /// Walks the call graph backward from the target to discover entry points
+    /// (symbols with no incoming `calls` edges). Returns all distinct paths
+    /// from each entry point through intermediate callers to the target.
+    ///
+    /// Uses a recursive CTE that tracks the full path as a comma-separated
+    /// string to detect cycles and reconstruct paths afterward.
+    pub fn find_call_paths(
+        &self,
+        target_id: &str,
+        target_name: &str,
+        max_depth: usize,
+    ) -> Result<TraceResult> {
+        // Extract bare name for flexible matching
+        let bare_name = self.symbol_name_from_id(target_id);
+        let like_qualified = format!("%::{bare_name}");
+        let like_member = format!("%.{bare_name}");
+
+        // Recursive CTE: walk backward from target, keeping the full path.
+        // The path is built as `from_id>from_id>...>target_id` (entry-point first after reversal).
+        // We filter leaf nodes = those whose `id` has no incoming `calls` edges (entry points).
+        let sql = "
+            WITH RECURSIVE trace(id, depth, path) AS (
+                -- Seed: direct callers of the target
+                SELECT e.from_id, 1, e.from_id || '>' || ?1
+                FROM edges e
+                WHERE (e.to_id = ?1 OR e.to_id = ?2 OR e.to_id LIKE ?3 OR e.to_id LIKE ?4)
+                  AND e.kind = 'calls'
+
+                UNION ALL
+
+                -- Walk backward: find who calls the current head of the path
+                SELECT e.from_id, t.depth + 1, e.from_id || '>' || t.path
+                FROM edges e
+                JOIN trace t ON e.to_id = t.id
+                WHERE e.kind = 'calls'
+                  AND t.depth < ?5
+                  AND ('>' || t.path || '>') NOT LIKE '%>' || e.from_id || '>%'
+            )
+            -- Return paths that terminate at entry points (no incoming calls)
+            SELECT t.path, t.depth
+            FROM trace t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM edges e2
+                WHERE e2.to_id = t.id AND e2.kind = 'calls'
+            )
+            ORDER BY t.depth, t.path
+        ";
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(
+            params![
+                target_id,
+                bare_name,
+                like_qualified,
+                like_member,
+                max_depth as i64
+            ],
+            |row| {
+                let path: String = row.get(0)?;
+                Ok(path)
+            },
+        )?;
+
+        let mut raw_paths: Vec<String> = Vec::new();
+        for row in rows {
+            raw_paths.push(row?);
+        }
+
+        // Deduplicate paths (same sequence of symbol IDs)
+        let mut seen = std::collections::HashSet::new();
+        raw_paths.retain(|p| seen.insert(p.clone()));
+
+        // Resolve each path: split on '>' and look up symbol info for each step
+        let mut paths: Vec<CallPath> = Vec::new();
+        for raw_path in &raw_paths {
+            let ids: Vec<&str> = raw_path.split('>').collect();
+            let mut steps: Vec<CallPathStep> = Vec::new();
+
+            for id in &ids {
+                let step = self.resolve_call_path_step(id)?;
+                steps.push(step);
+            }
+
+            if !steps.is_empty() {
+                paths.push(CallPath { steps });
+            }
+        }
+
+        // Sort: shortest paths first, then alphabetically by first step name
+        paths.sort_by(|a, b| {
+            a.steps.len().cmp(&b.steps.len()).then_with(|| {
+                let a_name = a
+                    .steps
+                    .first()
+                    .map(|s| s.symbol_name.as_str())
+                    .unwrap_or("");
+                let b_name = b
+                    .steps
+                    .first()
+                    .map(|s| s.symbol_name.as_str())
+                    .unwrap_or("");
+                a_name.cmp(b_name)
+            })
+        });
+
+        Ok(TraceResult {
+            target: target_name.to_string(),
+            paths,
+        })
+    }
+
+    /// Resolve a symbol ID to a `CallPathStep`, falling back to parsing
+    /// the ID format if the symbol is not in the index.
+    fn resolve_call_path_step(&self, id: &str) -> Result<CallPathStep> {
+        if let Some(sym) = self
+            .conn
+            .query_row(
+                "SELECT id, name, kind, file_path, line_start FROM symbols WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(CallPathStep {
+                        symbol_id: row.get(0)?,
+                        symbol_name: row.get(1)?,
+                        kind: row.get(2)?,
+                        file_path: row.get(3)?,
+                        line: row.get(4)?,
+                    })
+                },
+            )
+            .optional()?
+        {
+            return Ok(sym);
+        }
+
+        // Fallback: parse the ID format "file::name::kind"
+        let parts: Vec<&str> = id.split("::").collect();
+        let name = if parts.len() >= 2 {
+            parts[1].to_string()
+        } else {
+            id.to_string()
+        };
+
+        Ok(CallPathStep {
+            symbol_id: id.to_string(),
+            symbol_name: name,
+            file_path: parts.first().unwrap_or(&"unknown").to_string(),
+            line: 0,
+            kind: if parts.len() >= 3 {
+                parts[2].to_string()
+            } else {
+                "unknown".to_string()
+            },
         })
     }
 

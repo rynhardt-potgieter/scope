@@ -24,7 +24,7 @@ use crate::core::graph::Symbol;
 /// ```text
 /// "class PaymentService"
 /// ```
-pub fn build_embedding_text(symbol: &Symbol) -> String {
+pub fn build_embedding_text(symbol: &Symbol, callers: &[String], callees: &[String]) -> String {
     let mut parts = Vec::new();
 
     // Kind and name: "method processPayment"
@@ -35,6 +35,12 @@ pub fn build_embedding_text(symbol: &Symbol) -> String {
     let split_name = split_camel_case(&symbol.name);
     if split_name != symbol.name {
         parts.push(split_name);
+    }
+
+    // Split snake_case names for better matching
+    let snake_split = split_snake_case(&symbol.name);
+    if snake_split != symbol.name {
+        parts.push(snake_split);
     }
 
     // Signature if available
@@ -57,6 +63,27 @@ pub fn build_embedding_text(symbol: &Symbol) -> String {
                 parts.push(format!("in {split_parent}"));
             }
         }
+    }
+
+    // Add file path segments for contextual search
+    // "src/payments/services/PaymentService.ts" → "payments services"
+    let path_parts: Vec<&str> = symbol
+        .file_path
+        .split('/')
+        .filter(|p| *p != "src" && !p.contains('.')) // skip 'src' and filename
+        .collect();
+    if !path_parts.is_empty() {
+        parts.push(format!("path {}", path_parts.join(" ")));
+    }
+
+    // Add caller names for relationship-based search
+    if !callers.is_empty() {
+        parts.push(format!("called-by {}", callers.join(" ")));
+    }
+
+    // Add callee names for relationship-based search
+    if !callees.is_empty() {
+        parts.push(format!("calls {}", callees.join(" ")));
     }
 
     parts.join(" | ")
@@ -87,6 +114,16 @@ pub(crate) fn split_camel_case(name: &str) -> String {
     }
 
     result
+}
+
+/// Split a snake_case identifier into space-separated words.
+///
+/// Examples:
+/// - `"payment_retry_worker"` -> `"payment retry worker"`
+/// - `"API_KEY"` -> `"API KEY"`
+/// - `"login"` -> `"login"` (no change)
+pub(crate) fn split_snake_case(name: &str) -> String {
+    name.replace('_', " ")
 }
 
 /// Extract the symbol name portion from a symbol ID.
@@ -127,7 +164,7 @@ mod tests {
     fn test_basic_embedding_text() {
         let sym = make_symbol("PaymentService", "class");
         assert_eq!(
-            build_embedding_text(&sym),
+            build_embedding_text(&sym, &[], &[]),
             "class PaymentService | Payment Service"
         );
     }
@@ -136,7 +173,7 @@ mod tests {
     fn test_basic_embedding_text_no_split_needed() {
         let sym = make_symbol("login", "function");
         // "login" has no camelCase to split, so no extra part
-        assert_eq!(build_embedding_text(&sym), "function login");
+        assert_eq!(build_embedding_text(&sym, &[], &[]), "function login");
     }
 
     #[test]
@@ -144,7 +181,7 @@ mod tests {
         let mut sym = make_symbol("processPayment", "method");
         sym.signature = Some("(amount: number) => boolean".to_string());
         assert_eq!(
-            build_embedding_text(&sym),
+            build_embedding_text(&sym, &[], &[]),
             "method processPayment | process Payment | (amount: number) => boolean"
         );
     }
@@ -154,7 +191,7 @@ mod tests {
         let mut sym = make_symbol("login", "function");
         sym.docstring = Some("Authenticates a user".to_string());
         assert_eq!(
-            build_embedding_text(&sym),
+            build_embedding_text(&sym, &[], &[]),
             "function login | Authenticates a user"
         );
     }
@@ -166,9 +203,34 @@ mod tests {
         sym.signature = Some("(amount: number) => boolean".to_string());
         sym.docstring = Some("Process a payment".to_string());
         assert_eq!(
-            build_embedding_text(&sym),
+            build_embedding_text(&sym, &[], &[]),
             "method processPayment | process Payment | (amount: number) => boolean | Process a payment | in PaymentService | in Payment Service"
         );
+    }
+
+    #[test]
+    fn test_embedding_text_with_callers_and_callees() {
+        let sym = make_symbol("processPayment", "method");
+        let callers = vec!["OrderController".to_string(), "RetryWorker".to_string()];
+        let callees = vec!["validateAmount".to_string(), "chargeCard".to_string()];
+        let text = build_embedding_text(&sym, &callers, &callees);
+        assert!(text.contains("called-by OrderController RetryWorker"));
+        assert!(text.contains("calls validateAmount chargeCard"));
+    }
+
+    #[test]
+    fn test_embedding_text_with_file_path_context() {
+        let mut sym = make_symbol("processPayment", "method");
+        sym.file_path = "src/payments/services/PaymentService.ts".to_string();
+        let text = build_embedding_text(&sym, &[], &[]);
+        assert!(text.contains("path payments services"));
+    }
+
+    #[test]
+    fn test_embedding_text_snake_case_name() {
+        let sym = make_symbol("payment_retry_worker", "function");
+        let text = build_embedding_text(&sym, &[], &[]);
+        assert!(text.contains("payment retry worker"));
     }
 
     #[test]
@@ -178,6 +240,16 @@ mod tests {
         assert_eq!(split_camel_case("login"), "login");
         assert_eq!(split_camel_case("getHTTPResponse"), "get HTTP Response");
         assert_eq!(split_camel_case("URL"), "URL");
+    }
+
+    #[test]
+    fn test_split_snake_case() {
+        assert_eq!(
+            split_snake_case("payment_retry_worker"),
+            "payment retry worker"
+        );
+        assert_eq!(split_snake_case("API_KEY"), "API KEY");
+        assert_eq!(split_snake_case("login"), "login");
     }
 
     #[test]

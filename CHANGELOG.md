@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.0 (2026-03-20)
+
+### Features
+- **`scope trace <symbol>`** — new command showing entry-point-to-symbol call paths for bug-fix workflows; uses recursive CTE to walk the call graph backward from the target to entry points
+- **`scope callers --depth N`** — merged impact analysis into callers; `--depth 1` (default) shows direct callers with snippets, `--depth 2+` shows transitive callers grouped by depth with test file separation
+- **Enriched sketch output** — methods now show `async`, `private`, `static`, `abstract`, `virtual`, `override` modifiers extracted from tree-sitter metadata
+- **Enriched FTS5 search** — `scope find` now indexes caller/callee relationships, file path components, and snake_case splits; BM25 weights tuned to boost file path matches
+
+### Deprecations
+- `scope impact` now delegates to `scope callers --depth N` with a deprecation notice to stderr; existing scripts continue to work
+
+### Improvements
+- FTS5 query builder now splits snake_case terms (`payment_retry` → `payment* OR retry*`)
+- FTS5 indexed text includes caller names (`called-by`), callee names (`calls`), and directory path segments (`path payments services`)
+- Sketch modifier display omits defaults (public is not shown; only private/protected/async/static shown)
+
+---
+
 ## v0.3.1 (2026-03-20)
 
 ### Features

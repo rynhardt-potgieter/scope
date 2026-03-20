@@ -79,14 +79,15 @@ pub enum Commands {
     ///   scope refs PaymentService --kind calls  — only call sites
     Refs(commands::refs::RefsArgs),
 
-    /// Show all callers of a function or method (shorthand for refs --kind calls).
+    /// Show all callers of a function or method.
     ///
-    /// Equivalent to `scope refs <symbol> --kind calls`. Use when you want
-    /// a quick list of everything that calls a given function.
+    /// At depth 1 (default): equivalent to `scope refs <symbol> --kind calls`.
+    /// At depth 2+: performs transitive impact analysis showing callers of callers.
     ///
     /// Examples:
-    ///   scope callers processPayment           — who calls this function
-    ///   scope callers processPayment --context 2 — with surrounding code
+    ///   scope callers processPayment              — direct callers only
+    ///   scope callers processPayment --depth 2    — callers + callers-of-callers
+    ///   scope callers processPayment --context 2  — with surrounding code (depth 1)
     Callers(commands::refs::CallersArgs),
 
     /// Show what a symbol depends on.
@@ -149,6 +150,17 @@ pub enum Commands {
     ///   scope source PaymentService.validateCard
     Source(commands::source::SourceArgs),
 
+    /// Trace call paths from entry points to a symbol.
+    ///
+    /// Shows how API endpoints, workers, and event handlers reach the
+    /// target method through the call graph. Useful for understanding
+    /// how a bug is triggered or what code paths exercise a function.
+    ///
+    /// Examples:
+    ///   scope trace processPayment
+    ///   scope trace SubscriptionService.processRenewal
+    Trace(commands::trace::TraceArgs),
+
     /// Show index status and freshness.
     ///
     /// Quick health check: is the index built? How many symbols and files?
@@ -186,6 +198,7 @@ fn main() -> Result<()> {
         Commands::Find(args) => commands::find::run(args, &project_root),
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),
+        Commands::Trace(args) => commands::trace::run(args, &project_root),
         Commands::Status(args) => commands::status::run(args, &project_root),
     }
 }

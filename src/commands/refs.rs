@@ -16,7 +16,8 @@ use clap::Args;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::core::graph::{Graph, Reference};
+use crate::core::graph::Graph;
+use crate::core::graph::Reference;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
@@ -55,11 +56,15 @@ pub struct CallersArgs {
     /// Symbol name to find callers for
     pub symbol: String,
 
-    /// Maximum callers to show (default: 20)
+    /// Traversal depth (default 1 = direct callers only, 2+ = transitive callers)
+    #[arg(long, default_value = "1")]
+    pub depth: usize,
+
+    /// Maximum callers to show (default: 20, only applies at depth 1)
     #[arg(long, default_value = "20")]
     pub limit: usize,
 
-    /// Lines of surrounding code context per caller (default: 0)
+    /// Lines of surrounding code context per caller (default: 0, only applies at depth 1)
     #[arg(long, short = 'c', default_value = "0")]
     pub context: usize,
 
@@ -69,7 +74,14 @@ pub struct CallersArgs {
 }
 
 /// Run the `scope callers` command (shorthand for refs --kind calls).
+///
+/// When `depth == 1`: delegates to `run()` with `kind=Some("calls")` (flat caller list).
+/// When `depth > 1`: performs transitive impact analysis via `graph.find_impact()`.
 pub fn run_callers(args: &CallersArgs, project_root: &Path) -> Result<()> {
+    if args.depth > 1 {
+        return run_callers_transitive(args, project_root, "callers");
+    }
+
     let refs_args = RefsArgs {
         symbol: args.symbol.clone(),
         kind: Some("calls".to_string()),
@@ -78,6 +90,51 @@ pub fn run_callers(args: &CallersArgs, project_root: &Path) -> Result<()> {
         json: args.json,
     };
     run(&refs_args, project_root)
+}
+
+/// Run transitive caller analysis (depth > 1) using the impact graph query.
+///
+/// The `command_label` is used in JSON output to identify the command
+/// (e.g. `"callers"` or `"impact"` for backward compatibility).
+pub(super) fn run_callers_transitive(
+    args: &CallersArgs,
+    project_root: &Path,
+    command_label: &'static str,
+) -> Result<()> {
+    let scope_dir = project_root.join(".scope");
+
+    if !scope_dir.exists() {
+        bail!("No .scope/ directory found. Run 'scope init' first.");
+    }
+
+    let db_path = scope_dir.join("graph.db");
+    if !db_path.exists() {
+        bail!("No index found. Run 'scope index' to build one first.");
+    }
+
+    let graph = Graph::open(&db_path)?;
+
+    let result = if looks_like_file_path(&args.symbol) {
+        let file_path = formatter::normalize_path(&args.symbol);
+        graph.find_file_impact(&file_path, args.depth)?
+    } else {
+        graph.find_impact(&args.symbol, args.depth)?
+    };
+
+    if args.json {
+        let output = JsonOutput {
+            command: command_label,
+            symbol: Some(args.symbol.clone()),
+            data: &result,
+            truncated: false,
+            total: result.total_affected + result.test_files.len(),
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_impact(&args.symbol, &result);
+    }
+
+    Ok(())
 }
 
 /// Enrich references with source line snippets from the actual files.

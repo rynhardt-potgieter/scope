@@ -222,3 +222,63 @@ fn test_refs_output_format() {
 
     assert_snapshot!("refs_payment_service", normalized);
 }
+
+// ---------------------------------------------------------------------------
+// Callers with --depth tests
+// ---------------------------------------------------------------------------
+
+/// `scope callers processPayment --depth 2` should show transitive callers
+/// with depth grouping (e.g. "Direct callers" and "Second-degree").
+#[test]
+fn test_callers_with_depth_shows_transitive() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["callers", "processPayment", "--depth", "2"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8(output).unwrap();
+
+    // Transitive output uses impact formatting with depth labels
+    assert!(
+        stdout.contains("Direct callers") || stdout.contains("Impact analysis"),
+        "Expected depth-grouped output, got:\n{stdout}"
+    );
+}
+
+/// `scope callers processPayment` (no --depth flag) should produce flat output,
+/// identical to `scope refs processPayment --kind calls`.
+#[test]
+fn test_callers_default_depth_is_flat() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let callers_output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["callers", "processPayment"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8(callers_output).unwrap();
+
+    // Flat output uses the refs formatter — shows "N references" header,
+    // not impact-style "Direct callers" grouping.
+    assert!(
+        stdout.contains("reference"),
+        "Expected flat refs output with 'reference' header, got:\n{stdout}"
+    );
+    // Should NOT contain impact-style depth labels
+    assert!(
+        !stdout.contains("Direct callers"),
+        "Default depth=1 should use flat format, not impact grouping"
+    );
+}

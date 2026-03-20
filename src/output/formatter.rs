@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use crate::core::graph::{
-    CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol,
+    CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol, TraceResult,
 };
 use crate::core::searcher::SearchResult;
 
@@ -178,6 +178,12 @@ pub fn print_method_sketch(
 ) {
     print_header(symbol);
 
+    // Modifiers line (only if any non-default modifiers exist)
+    let modifiers = extract_modifiers(&symbol.metadata);
+    if !modifiers.is_empty() {
+        println!("{}", modifiers.join(" "));
+    }
+
     // Signature line
     if let Some(sig) = &symbol.signature {
         println!("signature:  {sig}");
@@ -299,12 +305,92 @@ pub fn print_generic_sketch(symbol: &Symbol) {
 /// Build the display string for a method in a class/interface listing.
 ///
 /// Uses the signature if available, otherwise just the name.
+/// Prepends any modifiers from metadata that are not already present in the signature.
 fn method_display_line(method: &Symbol) -> String {
-    method
-        .signature
-        .as_deref()
-        .unwrap_or(&method.name)
-        .to_string()
+    let sig = method.signature.as_deref().unwrap_or(&method.name);
+
+    let modifiers = extract_modifiers(&method.metadata);
+    if modifiers.is_empty() {
+        return sig.to_string();
+    }
+
+    // Only prepend modifiers not already present in the signature text
+    let missing: Vec<&str> = modifiers
+        .iter()
+        .filter(|m| !sig.contains(m.as_str()))
+        .map(|m| m.as_str())
+        .collect();
+
+    if missing.is_empty() {
+        sig.to_string()
+    } else {
+        format!("{} {}", missing.join(" "), sig)
+    }
+}
+
+/// Extract display-worthy modifiers from a symbol's metadata JSON.
+///
+/// Returns modifiers that differ from defaults (public is default, so omit it).
+/// Example output: `vec!["async", "private", "static"]`
+fn extract_modifiers(metadata_json: &str) -> Vec<String> {
+    let parsed: serde_json::Value = match serde_json::from_str(metadata_json) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut mods = Vec::new();
+
+    // Access modifier (only show non-public)
+    if let Some(access) = parsed.get("access").and_then(|v| v.as_str()) {
+        match access {
+            "private" | "protected" | "internal" | "protected internal" => {
+                mods.push(access.to_string());
+            }
+            _ => {} // "public" is default, don't show
+        }
+    }
+
+    if parsed
+        .get("is_async")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        mods.push("async".to_string());
+    }
+
+    if parsed
+        .get("is_static")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        mods.push("static".to_string());
+    }
+
+    if parsed
+        .get("is_abstract")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        mods.push("abstract".to_string());
+    }
+
+    if parsed
+        .get("is_virtual")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        mods.push("virtual".to_string());
+    }
+
+    if parsed
+        .get("is_override")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        mods.push("override".to_string());
+    }
+
+    mods
 }
 
 /// Print references to a function or method (flat list).
@@ -620,6 +706,71 @@ pub fn print_impact(symbol_name: &str, result: &ImpactResult) {
             println!("  ... ({} more)", result.test_files.len() - max_display);
         }
     }
+}
+
+/// Print trace results showing call paths from entry points to the target.
+///
+/// Format:
+/// ```text
+/// processRenewal — 2 entry paths
+/// ──────────────────────────────────────────────────────────────────────────────
+/// Path 1: SubscriptionController.renewSubscription
+///   └─→ SubscriptionService.processRenewal          src/services/sub.ts:72
+///
+/// Path 2: SubscriptionRenewalWorker.autoRenewDue
+///   └─→ SubscriptionService.processRenewal          src/services/sub.ts:72
+/// ```
+pub fn print_trace(symbol_name: &str, result: &TraceResult) {
+    let path_count = result.paths.len();
+    let path_word = if path_count == 1 { "path" } else { "paths" };
+
+    println!(
+        "{} \u{2014} {} entry {}",
+        symbol_name, path_count, path_word
+    );
+    println!("{SEPARATOR}");
+
+    if result.paths.is_empty() {
+        println!("(no entry paths found)");
+        return;
+    }
+
+    for (i, call_path) in result.paths.iter().enumerate() {
+        if call_path.steps.is_empty() {
+            continue;
+        }
+
+        // First step: the entry point (no arrow prefix)
+        let entry = &call_path.steps[0];
+        let entry_name = format_step_name(entry);
+        println!("Path {}: {}", i + 1, entry_name);
+
+        // Subsequent steps: indented with └─→
+        for (step_idx, step) in call_path.steps.iter().enumerate().skip(1) {
+            let indent = "  ".repeat(step_idx);
+            let step_name = format_step_name(step);
+            let path = normalize_path(&step.file_path);
+            let location = format!("{path}:{}", step.line);
+            println!(
+                "{indent}\u{2514}\u{2500}\u{2192} {:<40}{}",
+                step_name, location
+            );
+        }
+
+        // Blank line between paths (but not after the last one)
+        if i < path_count - 1 {
+            println!();
+        }
+    }
+}
+
+/// Format a step name, using parent.name if it looks like a method with a class parent.
+fn format_step_name(step: &crate::core::graph::CallPathStep) -> String {
+    // If the symbol ID contains a parent class, show ClassName.methodName
+    // ID format: "file::ClassName::class" for classes,
+    //            "file::methodName::method" for methods with parent_id
+    // But we only have the name here. The name is sufficient.
+    step.symbol_name.clone()
 }
 
 /// Human-readable label for an impact depth level.
