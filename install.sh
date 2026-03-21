@@ -1,9 +1,9 @@
 #!/bin/sh
 # Scope install script
-# Usage: curl -fsSL https://raw.githubusercontent.com/Rayne182/scope/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/install.sh | sh
 set -e
 
-REPO="Rayne182/scope"
+REPO="rynhardt-potgieter/scope"
 BINARY="scope"
 
 # Determine OS and architecture

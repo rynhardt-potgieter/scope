@@ -16,11 +16,11 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/Rayne182/scope/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/Rayne182/scope/ci.yml?label=build)](https://github.com/Rayne182/scope/actions)
+[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/rynhardt-potgieter/scope/ci.yml?label=build)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
-[![Stars](https://img.shields.io/github/stars/Rayne182/scope?style=flat)](https://github.com/Rayne182/scope/stargazers)
-[![Issues](https://img.shields.io/github/issues/Rayne182/scope)](https://github.com/Rayne182/scope/issues)
+[![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
+[![Issues](https://img.shields.io/github/issues/rynhardt-potgieter/scope)](https://github.com/rynhardt-potgieter/scope/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
@@ -103,13 +103,13 @@ Language support means: tree-sitter grammar integrated, symbol extraction tested
 ### curl (Linux and macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Rayne182/scope/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/install.sh | sh
 ```
 
 ### cargo
 
 ```bash
-cargo install --git https://github.com/Rayne182/scope.git scope
+cargo install --git https://github.com/rynhardt-potgieter/scope.git scope
 ```
 
 After installation, verify with:
@@ -310,7 +310,7 @@ The same snippet works for Cursor, Aider, and any other agent that reads project
 **Prerequisites:** Rust 1.75 or later (`rustup update stable`)
 
 ```bash
-git clone https://github.com/Rayne182/scope.git
+git clone https://github.com/rynhardt-potgieter/scope.git
 cd scope
 cargo build --release
 # Binary at target/release/sc
