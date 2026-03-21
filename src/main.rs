@@ -161,6 +161,30 @@ pub enum Commands {
     ///   scope trace SubscriptionService.processRenewal
     Trace(commands::trace::TraceArgs),
 
+    /// List entry points — API controllers, workers, and event handlers.
+    ///
+    /// Shows symbols with no incoming call edges, grouped by type.
+    /// These are the starting points for request flows: HTTP endpoints,
+    /// background workers, event handlers, and standalone functions.
+    ///
+    /// Examples:
+    ///   scope entrypoints
+    ///   scope entrypoints --json
+    Entrypoints(commands::entrypoints::EntrypointsArgs),
+
+    /// Show a structural overview of the repository.
+    ///
+    /// Displays entry points, core symbols ranked by importance,
+    /// architecture layers, and key statistics. Gives an LLM agent
+    /// a complete mental model of the codebase in ~500-1000 tokens,
+    /// replacing multiple scope sketch calls.
+    ///
+    /// Examples:
+    ///   scope map
+    ///   scope map --limit 5
+    ///   scope map --json
+    Map(commands::map::MapArgs),
+
     /// Show index status and freshness.
     ///
     /// Quick health check: is the index built? How many symbols and files?
@@ -199,6 +223,8 @@ fn main() -> Result<()> {
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),
         Commands::Trace(args) => commands::trace::run(args, &project_root),
+        Commands::Entrypoints(args) => commands::entrypoints::run(args, &project_root),
+        Commands::Map(args) => commands::map::run(args, &project_root),
         Commands::Status(args) => commands::status::run(args, &project_root),
     }
 }

@@ -1,11 +1,14 @@
 ## Code Navigation — Scope CLI
 
 This project is indexed with Scope for structural code intelligence.
+**Start complex tasks with `scope map`** to understand the repo structure first.
 
 ### When to Use Which Command
 
 | Task | Command | Example |
 |---|---|---|
+| Understand the repo | `scope map` | `scope map` |
+| Find entry points | `scope entrypoints` | `scope entrypoints` |
 | Find callers of a method | `scope callers <method>` | `scope callers ProcessPayment` |
 | Understand a class | `scope sketch <class>` | `scope sketch PaymentService` |
 | Find code by intent | `scope find "<query>"` | `scope find "retry logic"` |
@@ -13,9 +16,9 @@ This project is indexed with Scope for structural code intelligence.
 | Transitive callers | `scope callers <symbol> --depth 2` | `scope callers ProcessPayment --depth 2` |
 
 ### Rules
-1. **One command, then act.** Scope output has file paths, line numbers, and source snippets — use them directly.
-2. **Don't stack commands.** If you've run 2+ scope commands without editing, you're over-navigating.
-3. **Don't run `callers` AND `refs`** for the same symbol — `callers` is a subset of `refs`.
+1. **Start with `scope map`** for complex tasks — it replaces multiple sketch calls.
+2. **One command, then act.** Scope output has file paths, line numbers, and source snippets — use them directly.
+3. **Don't stack commands.** If you've run 2+ scope commands without editing, you're over-navigating.
 4. **Don't sketch what you'll read anyway** — sketch is for understanding without opening the file.
 5. **Use `scope find` only when you don't know the symbol name.** If you know it, use `sketch` or `callers`.
 6. **For bug fixing**, use `scope trace` to see call paths, then read the file directly.

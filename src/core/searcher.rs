@@ -75,6 +75,7 @@ impl Searcher {
         symbols: &[Symbol],
         callers: &HashMap<String, Vec<String>>,
         callees: &HashMap<String, Vec<String>>,
+        importance: &HashMap<String, f64>,
     ) -> Result<()> {
         let mut stmt = self.conn.prepare(
             "INSERT OR REPLACE INTO symbols_fts (symbol_id, name, kind, file_path, body)
@@ -85,7 +86,8 @@ impl Searcher {
         for symbol in symbols {
             let sym_callers = callers.get(&symbol.id).unwrap_or(&empty);
             let sym_callees = callees.get(&symbol.id).unwrap_or(&empty);
-            let body = build_embedding_text(symbol, sym_callers, sym_callees);
+            let imp = importance.get(&symbol.id).copied().unwrap_or(0.0);
+            let body = build_embedding_text(symbol, sym_callers, sym_callees, imp);
             stmt.execute(params![
                 symbol.id,
                 symbol.name,

@@ -2,10 +2,12 @@
 ///
 /// Each module corresponds to one `scope` subcommand.
 pub mod deps;
+pub mod entrypoints;
 pub mod find;
 pub mod impact;
 pub mod index;
 pub mod init;
+pub mod map;
 pub mod rdeps;
 pub mod refs;
 pub mod similar;

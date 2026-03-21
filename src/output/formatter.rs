@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 
+use crate::commands::entrypoints::EntrypointInfo;
+use crate::commands::map::{CoreSymbol, DirStats, MapStats};
 use crate::core::graph::{
     CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol, TraceResult,
 };
@@ -760,6 +762,197 @@ pub fn print_trace(symbol_name: &str, result: &TraceResult) {
         // Blank line between paths (but not after the last one)
         if i < path_count - 1 {
             println!();
+        }
+    }
+}
+
+/// Print entry points grouped by type.
+///
+/// Format:
+/// ```text
+/// Entrypoints — 8 across 6 files
+/// ──────────────────────────────────────────────────────────────────────────────
+/// API Controllers:
+///   PaymentController              src/Api/Controllers/PaymentController.cs       → 3 methods
+///   SubscriptionController         src/Api/Controllers/SubscriptionController.cs  → 2 methods
+///
+/// Background Workers:
+///   PaymentRetryWorker             src/Infrastructure/Workers/PaymentRetryWorker.cs
+/// ```
+pub fn print_entrypoints(
+    groups: &[(String, Vec<EntrypointInfo>)],
+    total: usize,
+    file_count: usize,
+) {
+    let file_word = if file_count == 1 { "file" } else { "files" };
+    println!(
+        "Entrypoints \u{2014} {} across {} {}",
+        total, file_count, file_word
+    );
+    println!("{SEPARATOR}");
+
+    if groups.is_empty() {
+        println!("(no entry points found)");
+        return;
+    }
+
+    for (i, (group_name, entries)) in groups.iter().enumerate() {
+        println!("{group_name}:");
+
+        // Calculate max name width for alignment within this group.
+        let max_name_len = entries
+            .iter()
+            .map(|e| e.name.chars().count())
+            .max()
+            .unwrap_or(0);
+        let name_width = max_name_len.max(20) + 2; // Minimum 20 chars + padding
+
+        for entry in entries {
+            let path = normalize_path(&entry.file_path);
+            let suffix = if entry.method_count > 0 {
+                format!(
+                    "   \u{2192} {} method{}",
+                    entry.method_count,
+                    if entry.method_count == 1 { "" } else { "s" }
+                )
+            } else {
+                String::new()
+            };
+            println!(
+                "  {:<width$}{}{}",
+                entry.name,
+                path,
+                suffix,
+                width = name_width
+            );
+        }
+
+        // Blank line between groups (but not after the last one).
+        if i < groups.len() - 1 {
+            println!();
+        }
+    }
+}
+
+/// Print a structural map of the entire repository.
+///
+/// Format:
+/// ```text
+/// project-name — 181 files, 1,147 symbols, 1,409 edges
+/// ──────────────────────────────────────────────────────────────────────────────
+/// Languages: C#
+///
+/// Entry points:
+///   PaymentController              Api/Controllers/                → 3 methods
+///   SubscriptionController         Api/Controllers/                → 2 methods
+///
+/// Core symbols (by caller count):
+///   ProcessPayment                 7 callers    Infrastructure/Services/PaymentService.cs
+///
+/// Architecture:
+///   Api/                    7 files    62 symbols
+///   Application/            22 files   145 symbols
+/// ```
+pub fn print_map(
+    project_name: &str,
+    stats: &MapStats,
+    entrypoints: &[(String, Vec<EntrypointInfo>)],
+    core_symbols: &[CoreSymbol],
+    directories: &[DirStats],
+) {
+    // Header line: project-name — N files, N symbols, N edges
+    println!(
+        "{} \u{2014} {} files, {} symbols, {} edges",
+        project_name,
+        format_number(stats.file_count),
+        format_number(stats.symbol_count),
+        format_number(stats.edge_count),
+    );
+    println!("{SEPARATOR}");
+
+    // Languages line.
+    if !stats.languages.is_empty() {
+        println!("Languages: {}", stats.languages.join(", "));
+    }
+
+    // Entry points section.
+    let mut ep_count = 0usize;
+    let mut ep_lines: Vec<String> = Vec::new();
+
+    for (_group_name, entries) in entrypoints {
+        for entry in entries {
+            let path = normalize_path(&entry.file_path);
+            // Extract directory portion of the path.
+            let dir = if let Some(pos) = path.rfind('/') {
+                format!("{}/", &path[..pos])
+            } else {
+                String::new()
+            };
+
+            // Strip leading "src/" for brevity.
+            let display_dir = dir.strip_prefix("src/").unwrap_or(&dir).to_string();
+
+            let suffix = if entry.method_count > 0 {
+                format!(
+                    "   \u{2192} {} method{}",
+                    entry.method_count,
+                    if entry.method_count == 1 { "" } else { "s" }
+                )
+            } else {
+                String::new()
+            };
+
+            ep_lines.push(format!("  {:<32}{:<32}{}", entry.name, display_dir, suffix));
+            ep_count += 1;
+        }
+    }
+
+    if !ep_lines.is_empty() {
+        println!();
+        println!("Entry points:");
+        let max_display = 8;
+        for line in ep_lines.iter().take(max_display) {
+            println!("{line}");
+        }
+        if ep_count > max_display {
+            println!("  ... {} more", ep_count - max_display);
+        }
+    }
+
+    // Core symbols section.
+    if !core_symbols.is_empty() {
+        println!();
+        println!("Core symbols (by caller count):");
+        for sym in core_symbols {
+            let path = normalize_path(&sym.file_path);
+            // Strip leading "src/" for brevity.
+            let display_path = path.strip_prefix("src/").unwrap_or(&path).to_string();
+
+            let caller_label = format!(
+                "{} caller{}",
+                sym.caller_count,
+                if sym.caller_count == 1 { "" } else { "s" }
+            );
+            println!("  {:<32}{:<14}{}", sym.name, caller_label, display_path);
+        }
+    }
+
+    // Architecture section.
+    if !directories.is_empty() {
+        println!();
+        println!("Architecture:");
+        for dir in directories {
+            let file_label = format!(
+                "{} file{}",
+                dir.file_count,
+                if dir.file_count == 1 { "" } else { "s" }
+            );
+            let sym_label = format!(
+                "{} symbol{}",
+                dir.symbol_count,
+                if dir.symbol_count == 1 { "" } else { "s" }
+            );
+            println!("  {:<24}{:<14}{}", dir.directory, file_label, sym_label);
         }
     }
 }

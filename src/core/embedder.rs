@@ -24,7 +24,12 @@ use crate::core::graph::Symbol;
 /// ```text
 /// "class PaymentService"
 /// ```
-pub fn build_embedding_text(symbol: &Symbol, callers: &[String], callees: &[String]) -> String {
+pub fn build_embedding_text(
+    symbol: &Symbol,
+    callers: &[String],
+    callees: &[String],
+    importance: f64,
+) -> String {
     let mut parts = Vec::new();
 
     // Kind and name: "method processPayment"
@@ -84,6 +89,13 @@ pub fn build_embedding_text(symbol: &Symbol, callers: &[String], callees: &[Stri
     // Add callee names for relationship-based search
     if !callees.is_empty() {
         parts.push(format!("calls {}", callees.join(" ")));
+    }
+
+    // Add importance tier for search boosting
+    if importance > 0.7 {
+        parts.push("importance high core".to_string());
+    } else if importance > 0.3 {
+        parts.push("importance medium".to_string());
     }
 
     parts.join(" | ")
@@ -164,7 +176,7 @@ mod tests {
     fn test_basic_embedding_text() {
         let sym = make_symbol("PaymentService", "class");
         assert_eq!(
-            build_embedding_text(&sym, &[], &[]),
+            build_embedding_text(&sym, &[], &[], 0.0),
             "class PaymentService | Payment Service"
         );
     }
@@ -173,7 +185,7 @@ mod tests {
     fn test_basic_embedding_text_no_split_needed() {
         let sym = make_symbol("login", "function");
         // "login" has no camelCase to split, so no extra part
-        assert_eq!(build_embedding_text(&sym, &[], &[]), "function login");
+        assert_eq!(build_embedding_text(&sym, &[], &[], 0.0), "function login");
     }
 
     #[test]
@@ -181,7 +193,7 @@ mod tests {
         let mut sym = make_symbol("processPayment", "method");
         sym.signature = Some("(amount: number) => boolean".to_string());
         assert_eq!(
-            build_embedding_text(&sym, &[], &[]),
+            build_embedding_text(&sym, &[], &[], 0.0),
             "method processPayment | process Payment | (amount: number) => boolean"
         );
     }
@@ -191,7 +203,7 @@ mod tests {
         let mut sym = make_symbol("login", "function");
         sym.docstring = Some("Authenticates a user".to_string());
         assert_eq!(
-            build_embedding_text(&sym, &[], &[]),
+            build_embedding_text(&sym, &[], &[], 0.0),
             "function login | Authenticates a user"
         );
     }
@@ -203,7 +215,7 @@ mod tests {
         sym.signature = Some("(amount: number) => boolean".to_string());
         sym.docstring = Some("Process a payment".to_string());
         assert_eq!(
-            build_embedding_text(&sym, &[], &[]),
+            build_embedding_text(&sym, &[], &[], 0.0),
             "method processPayment | process Payment | (amount: number) => boolean | Process a payment | in PaymentService | in Payment Service"
         );
     }
@@ -213,7 +225,7 @@ mod tests {
         let sym = make_symbol("processPayment", "method");
         let callers = vec!["OrderController".to_string(), "RetryWorker".to_string()];
         let callees = vec!["validateAmount".to_string(), "chargeCard".to_string()];
-        let text = build_embedding_text(&sym, &callers, &callees);
+        let text = build_embedding_text(&sym, &callers, &callees, 0.0);
         assert!(text.contains("called-by OrderController RetryWorker"));
         assert!(text.contains("calls validateAmount chargeCard"));
     }
@@ -222,14 +234,14 @@ mod tests {
     fn test_embedding_text_with_file_path_context() {
         let mut sym = make_symbol("processPayment", "method");
         sym.file_path = "src/payments/services/PaymentService.ts".to_string();
-        let text = build_embedding_text(&sym, &[], &[]);
+        let text = build_embedding_text(&sym, &[], &[], 0.0);
         assert!(text.contains("path payments services"));
     }
 
     #[test]
     fn test_embedding_text_snake_case_name() {
         let sym = make_symbol("payment_retry_worker", "function");
-        let text = build_embedding_text(&sym, &[], &[]);
+        let text = build_embedding_text(&sym, &[], &[], 0.0);
         assert!(text.contains("payment retry worker"));
     }
 
@@ -259,5 +271,26 @@ mod tests {
             Some("PaymentService")
         );
         assert_eq!(extract_name_from_id("foo"), None);
+    }
+
+    #[test]
+    fn test_embedding_text_high_importance() {
+        let sym = make_symbol("PaymentService", "class");
+        let text = build_embedding_text(&sym, &[], &[], 0.8);
+        assert!(text.contains("importance high core"));
+    }
+
+    #[test]
+    fn test_embedding_text_medium_importance() {
+        let sym = make_symbol("PaymentService", "class");
+        let text = build_embedding_text(&sym, &[], &[], 0.5);
+        assert!(text.contains("importance medium"));
+    }
+
+    #[test]
+    fn test_embedding_text_low_importance() {
+        let sym = make_symbol("PaymentService", "class");
+        let text = build_embedding_text(&sym, &[], &[], 0.1);
+        assert!(!text.contains("importance"));
     }
 }

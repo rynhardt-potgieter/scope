@@ -1,6 +1,6 @@
 [package]
 name = "scope"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "Code intelligence CLI for LLM coding agents"
 license = "MIT"
@@ -87,3 +87,11 @@ path = "tests/integration/test_json.rs"
 [[test]]
 name = "test_trace"
 path = "tests/integration/test_trace.rs"
+
+[[test]]
+name = "test_entrypoints"
+path = "tests/integration/test_entrypoints.rs"
+
+[[test]]
+name = "test_map"
+path = "tests/integration/test_map.rs"

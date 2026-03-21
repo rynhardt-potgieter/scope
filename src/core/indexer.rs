@@ -139,7 +139,8 @@ impl Indexer {
         if let Some(s) = searcher {
             let callers = graph.get_all_caller_names().unwrap_or_default();
             let callees = graph.get_all_callee_names().unwrap_or_default();
-            if let Err(e) = s.index_symbols(&all_symbols, &callers, &callees) {
+            let importance_scores = graph.compute_importance_scores()?;
+            if let Err(e) = s.index_symbols(&all_symbols, &callers, &callees, &importance_scores) {
                 tracing::warn!("Failed to index symbols for search: {e}");
             }
         }
@@ -262,7 +263,13 @@ impl Indexer {
         if let Some(s) = searcher {
             let callers = graph.get_all_caller_names().unwrap_or_default();
             let callees = graph.get_all_callee_names().unwrap_or_default();
-            if let Err(e) = s.index_symbols(&all_reindexed_symbols, &callers, &callees) {
+            let importance_scores = graph.compute_importance_scores()?;
+            if let Err(e) = s.index_symbols(
+                &all_reindexed_symbols,
+                &callers,
+                &callees,
+                &importance_scores,
+            ) {
                 tracing::warn!("Failed to index symbols for search: {e}");
             }
         }

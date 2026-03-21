@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0 (2026-03-21)
+
+### Features
+- **`scope map`** — full repository overview in ~500-1000 tokens: entry points, core symbols ranked by caller count, architecture summary with directory stats. Replaces 5-17 scope sketch calls for orientation tasks. Research shows repo-level maps enable 4.2× fewer tokens (Aider) and +12.2% accuracy (RIG).
+- **`scope entrypoints`** — lists API controllers, background workers, and event handlers grouped by type. Entry points are symbols with zero incoming call edges. Saves 2-3 navigation actions per task.
+- **Importance scoring in FTS5** — symbols with more callers rank higher in `scope find` results. Importance tiers (high/medium) are embedded in the FTS5 index for natural BM25 boosting.
+
+### Research-Driven
+These changes are based on the LLM Coding Agent Tool-Use Research Report (50+ sources):
+- Aider's repo-map enables 4.2× fewer tokens than Claude Code (the `scope map` motivation)
+- Repository Intelligence Graph showed +12.2% accuracy and -53.9% time from architectural overview
+- Meta-tools reduce agent reasoning steps by 11.9% (the `scope entrypoints` motivation)
+- PageRank-style importance scoring is what makes Aider's repo-map effective
+
+---
+
 ## v0.4.0 (2026-03-20)
 
 ### Features

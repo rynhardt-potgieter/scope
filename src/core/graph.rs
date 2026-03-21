@@ -509,6 +509,31 @@ impl Graph {
         Ok(result)
     }
 
+    /// Compute normalized importance scores for all symbols.
+    ///
+    /// Score = incoming_call_count / max_incoming_call_count (0.0-1.0).
+    /// Symbols with no incoming calls get 0.0.
+    pub fn compute_importance_scores(&self) -> Result<HashMap<String, f64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT to_id, COUNT(*) as cnt FROM edges WHERE kind = 'calls' GROUP BY to_id",
+        )?;
+
+        let rows: Vec<(String, usize)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let max_count = rows.iter().map(|(_, c)| *c).max().unwrap_or(1) as f64;
+
+        let mut scores = HashMap::new();
+        for (id, count) in rows {
+            scores.insert(id, count as f64 / max_count);
+        }
+        Ok(scores)
+    }
+
     /// Get symbols that implement a given interface.
     pub fn get_implementors(&self, interface_id: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
@@ -535,6 +560,69 @@ impl Graph {
             result.push(row?);
         }
         Ok(result)
+    }
+
+    /// Find symbols that are entry points — symbols with zero incoming call edges.
+    ///
+    /// Returns each symbol paired with its outgoing call count (fan-out).
+    /// Only considers functions, methods, and classes. Filters out test files
+    /// (paths containing `test` or `spec`).
+    pub fn get_entrypoints(&self) -> Result<Vec<(Symbol, usize)>> {
+        // Step 1: Get all candidate symbols (functions, methods, classes), excluding test files.
+        let mut stmt = self.conn.prepare(
+            "SELECT * FROM symbols
+             WHERE kind IN ('function', 'method', 'class')
+             ORDER BY file_path, line_start",
+        )?;
+        let all_symbols: Vec<Symbol> = stmt
+            .query_map([], Symbol::from_row)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Step 2: Get all symbol IDs/names that ARE called (targets of call edges).
+        let mut called_stmt = self
+            .conn
+            .prepare("SELECT DISTINCT to_id FROM edges WHERE kind = 'calls'")?;
+        let called_set: std::collections::HashSet<String> = called_stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Step 3: Filter — keep symbols not in the called set.
+        // A symbol is "called" if its id, name, or any member-call pattern (*.name) appears
+        // in the called set.
+        let mut entrypoints = Vec::new();
+        for sym in &all_symbols {
+            // Skip test files
+            let path_lower = sym.file_path.to_lowercase();
+            if path_lower.contains("test") || path_lower.contains("spec") {
+                continue;
+            }
+
+            // Check if this symbol is called by any edge
+            let is_called = called_set.contains(&sym.id)
+                || called_set.contains(&sym.name)
+                || called_set
+                    .iter()
+                    .any(|to_id| to_id.ends_with(&format!(".{}", sym.name)));
+
+            if !is_called {
+                entrypoints.push(sym.clone());
+            }
+        }
+
+        // Step 4: For each entry point, count outgoing calls.
+        let mut results = Vec::new();
+        for sym in entrypoints {
+            let outgoing: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM edges WHERE from_id = ?1 AND kind = 'calls'",
+                params![sym.id],
+                |row| row.get(0),
+            )?;
+            results.push((sym, outgoing as usize));
+        }
+
+        Ok(results)
     }
 
     /// Extract a human-readable name from a symbol ID.
@@ -1578,6 +1666,97 @@ impl Graph {
             .conn
             .query_row("SELECT COUNT(*) FROM edges", [], |row| row.get(0))?;
         Ok(count as usize)
+    }
+
+    /// Get top N symbols by incoming call count (importance).
+    ///
+    /// Returns `(Symbol, caller_count)` pairs sorted by caller count descending.
+    /// Only considers functions and methods with at least one incoming call edge.
+    /// Uses the same matching logic as `get_caller_count`: exact ID, bare name,
+    /// and member-call patterns (e.g. `svc.processPayment`).
+    pub fn get_symbols_by_importance(&self, limit: usize) -> Result<Vec<(Symbol, usize)>> {
+        // Fetch all function/method symbols first, then compute caller counts
+        // using the same matching logic as get_caller_count.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM symbols WHERE kind IN ('function', 'method')")?;
+        let all_symbols: Vec<Symbol> = stmt
+            .query_map([], Symbol::from_row)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut scored: Vec<(Symbol, usize)> = Vec::new();
+        for sym in all_symbols {
+            let count = self.get_caller_count(&sym.id)?;
+            if count > 0 {
+                scored.push((sym, count));
+            }
+        }
+
+        // Sort by caller count descending, take top N.
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.truncate(limit);
+        Ok(scored)
+    }
+
+    /// Get directory-level statistics.
+    ///
+    /// Returns `(directory_path, file_count, symbol_count)` tuples grouped by
+    /// the top-level directory component (after stripping a leading `src/`).
+    pub fn get_directory_stats(&self) -> Result<Vec<(String, usize, usize)>> {
+        let mut stmt = self.conn.prepare("SELECT file_path FROM symbols")?;
+        let paths: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Group by top-level directory.
+        let mut dir_files: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
+        let mut dir_symbols: HashMap<String, usize> = HashMap::new();
+
+        for path in &paths {
+            let normalized = path.replace('\\', "/");
+            // Strip leading "src/" if present.
+            let stripped = normalized.strip_prefix("src/").unwrap_or(&normalized);
+
+            // Extract top-level directory component.
+            let dir = if let Some(slash_pos) = stripped.find('/') {
+                &stripped[..slash_pos]
+            } else {
+                // File is directly in src/ or root — use "(root)".
+                "(root)"
+            };
+
+            let dir_key = format!("{dir}/");
+            dir_files
+                .entry(dir_key.clone())
+                .or_default()
+                .insert(normalized);
+            *dir_symbols.entry(dir_key).or_insert(0) += 1;
+        }
+
+        let mut results: Vec<(String, usize, usize)> = dir_files
+            .iter()
+            .map(|(dir, files)| {
+                let sym_count = dir_symbols.get(dir).copied().unwrap_or(0);
+                (dir.clone(), files.len(), sym_count)
+            })
+            .collect();
+
+        results.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(results)
+    }
+
+    /// Get distinct languages present in the index.
+    pub fn get_languages(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT language FROM symbols ORDER BY language")?;
+        let langs: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(langs)
     }
 
     // -- File hash operations --
