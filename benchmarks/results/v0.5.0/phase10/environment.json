@@ -1,0 +1,9 @@
+{
+  "benchmark_version": "1",
+  "machine": {
+    "arch": "x86_64",
+    "os": "windows"
+  },
+  "run_date": "2026-03-21T11:06:49.193465600+00:00",
+  "scope_version": "scope 0.1.0"
+}

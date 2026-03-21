@@ -1,0 +1,1304 @@
+[
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 23038,
+    "output_tokens": 7602,
+    "file_reads": 2,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 105260,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 25110,
+    "output_tokens": 8286,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 91000,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 37473,
+    "output_tokens": 12366,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 396636,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 42294,
+    "output_tokens": 13957,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 198931,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 35388,
+    "output_tokens": 11678,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope trace",
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 116547,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 34057,
+    "output_tokens": 11238,
+    "file_reads": 5,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 108273,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 26969,
+    "output_tokens": 8899,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 90374,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 24763,
+    "output_tokens": 8171,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 82577,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 35283,
+    "output_tokens": 11643,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 122736,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 33635,
+    "output_tokens": 11099,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 119102,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 38544,
+    "output_tokens": 12719,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 120466,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 43730,
+    "output_tokens": 14430,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 143989,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 43271,
+    "output_tokens": 14279,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 200017,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 39104,
+    "output_tokens": 12904,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 119597,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 27455,
+    "output_tokens": 9060,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 69923,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 33979,
+    "output_tokens": 11213,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 74205,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 34899,
+    "output_tokens": 11516,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope map",
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 128174,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 43249,
+    "output_tokens": 14272,
+    "file_reads": 12,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 118574,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 45708,
+    "output_tokens": 15083,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope trace"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 116519,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 43195,
+    "output_tokens": 14254,
+    "file_reads": 12,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 120378,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 29777,
+    "output_tokens": 9826,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 62220,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 38065,
+    "output_tokens": 12561,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 60879,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 1,
+    "scope_enabled": true,
+    "input_tokens": 54751,
+    "output_tokens": 18067,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope callers"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 83127,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 1,
+    "scope_enabled": false,
+    "input_tokens": 45911,
+    "output_tokens": 15150,
+    "file_reads": 8,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 62989,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 27161,
+    "output_tokens": 8963,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 97918,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 25484,
+    "output_tokens": 8409,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 75851,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 32831,
+    "output_tokens": 10834,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 144192,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 41071,
+    "output_tokens": 13553,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 170732,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 32607,
+    "output_tokens": 10760,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope trace"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 151430,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 36707,
+    "output_tokens": 12113,
+    "file_reads": 5,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 85717,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 27294,
+    "output_tokens": 9007,
+    "file_reads": 3,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 85437,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 26232,
+    "output_tokens": 8656,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 61197,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 32845,
+    "output_tokens": 10838,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 116273,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 40430,
+    "output_tokens": 13341,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 139451,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 38739,
+    "output_tokens": 12783,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 99432,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 37899,
+    "output_tokens": 12506,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 122194,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 32118,
+    "output_tokens": 10598,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 92289,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 39611,
+    "output_tokens": 13071,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 117252,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 27407,
+    "output_tokens": 9044,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 86278,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 34026,
+    "output_tokens": 11228,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 69701,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 36200,
+    "output_tokens": 11946,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope map",
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 118644,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 48677,
+    "output_tokens": 16063,
+    "file_reads": 12,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 129497,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 38786,
+    "output_tokens": 12799,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope trace"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 129451,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 43825,
+    "output_tokens": 14462,
+    "file_reads": 12,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 111264,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 31817,
+    "output_tokens": 10499,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 63752,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 30015,
+    "output_tokens": 9904,
+    "file_reads": 5,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 67298,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 2,
+    "scope_enabled": true,
+    "input_tokens": 54743,
+    "output_tokens": 18065,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope callers"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 87868,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 2,
+    "scope_enabled": false,
+    "input_tokens": 55206,
+    "output_tokens": 18217,
+    "file_reads": 8,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 96632,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 24623,
+    "output_tokens": 8125,
+    "file_reads": 2,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 89157,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-a-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 28489,
+    "output_tokens": 9401,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 96766,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 34205,
+    "output_tokens": 11287,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 168366,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-a-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 48162,
+    "output_tokens": 15893,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 203766,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 37046,
+    "output_tokens": 12225,
+    "file_reads": 4,
+    "scope_commands_called": [
+      "scope trace"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 150342,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-b-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 36209,
+    "output_tokens": 11948,
+    "file_reads": 5,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 95045,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 24554,
+    "output_tokens": 8102,
+    "file_reads": 3,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 65430,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-b-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 26561,
+    "output_tokens": 8765,
+    "file_reads": 4,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 54254,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 34448,
+    "output_tokens": 11367,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 143792,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-c-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 43512,
+    "output_tokens": 14358,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 153572,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 41327,
+    "output_tokens": 13637,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 135290,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-c-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 41514,
+    "output_tokens": 13699,
+    "file_reads": 6,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 107273,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 32729,
+    "output_tokens": 10800,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 130712,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-d-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 41829,
+    "output_tokens": 13803,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 122807,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 32993,
+    "output_tokens": 10887,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 165857,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-d-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 36691,
+    "output_tokens": 12108,
+    "file_reads": 7,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 82709,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 41248,
+    "output_tokens": 13611,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope map",
+      "scope sketch"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 162388,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-e-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 38141,
+    "output_tokens": 12586,
+    "file_reads": 11,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 104629,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 44082,
+    "output_tokens": 14547,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope trace"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 113210,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-e-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 39506,
+    "output_tokens": 13036,
+    "file_reads": 12,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 102932,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 36841,
+    "output_tokens": 12157,
+    "file_reads": 3,
+    "scope_commands_called": [
+      "scope find"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 77003,
+    "actions": []
+  },
+  {
+    "task_id": "ts-cat-f-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 30501,
+    "output_tokens": 10065,
+    "file_reads": 5,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 68795,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 3,
+    "scope_enabled": true,
+    "input_tokens": 56061,
+    "output_tokens": 18500,
+    "file_reads": 5,
+    "scope_commands_called": [
+      "scope sketch",
+      "scope callers"
+    ],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 83364,
+    "actions": []
+  },
+  {
+    "task_id": "cs-cat-f-01",
+    "repetition": 3,
+    "scope_enabled": false,
+    "input_tokens": 54892,
+    "output_tokens": 18114,
+    "file_reads": 8,
+    "scope_commands_called": [],
+    "correctness": {
+      "compilation_pass": true,
+      "tests_pass": false,
+      "caller_coverage": null,
+      "overall_score": 50
+    },
+    "duration_ms": 130418,
+    "actions": []
+  }
+]
