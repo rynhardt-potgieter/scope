@@ -16,6 +16,7 @@ pub struct BenchmarkRun {
     pub output_tokens: u64,
     pub file_reads: u32,
     pub scope_commands_called: Vec<String>,
+    #[serde(default)]
     pub correctness: CorrectnessResult,
     pub duration_ms: u64,
     #[serde(default)]
@@ -355,6 +356,17 @@ impl Clone for CorrectnessResult {
             tests_pass: self.tests_pass,
             caller_coverage: self.caller_coverage,
             overall_score: self.overall_score,
+        }
+    }
+}
+
+impl Default for CorrectnessResult {
+    fn default() -> Self {
+        Self {
+            compilation_pass: false,
+            tests_pass: false,
+            caller_coverage: None,
+            overall_score: 0,
         }
     }
 }

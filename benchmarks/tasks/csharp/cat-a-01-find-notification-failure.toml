@@ -3,14 +3,13 @@ id = "cs-cat-a-01"
 category = "discovery"
 language = "csharp"
 corpus = "fixture"
-description = "Find notification delivery failure handling and add dead letter pattern"
+description = "Find where notifications are permanently abandoned and add dead letter pattern"
 
 [prompt]
 text = """
-Find where notification delivery failures are handled in this codebase. Once \
-found, implement a dead letter pattern: after the maximum delivery attempts are \
-exhausted, move the notification to a dead letter state instead of silently \
-dropping it. Add a DeadLettered status, set it when max attempts are reached, \
+Find where notifications are permanently abandoned after all delivery attempts \
+fail. They should be moved to a dead letter state instead of being silently \
+filtered out. Add a DeadLettered status, set it when max attempts are reached, \
 and log a structured error with the notification details. Make sure the project \
 still compiles.
 """

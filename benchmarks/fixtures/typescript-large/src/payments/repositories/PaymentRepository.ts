@@ -42,11 +42,16 @@ export class PaymentRepository {
 
   /** Find payments within a date range */
   async findByDateRange(start: Date, end: Date): Promise<Payment[]> {
-    const result = await this.db.query<Payment>(
-      'SELECT * FROM payments WHERE created_at >= $1 AND created_at <= $2 ORDER BY created_at DESC',
-      [start, end],
-    );
-    return result.rows;
+    try {
+      const result = await this.db.query<Payment>(
+        'SELECT * FROM payments WHERE created_at >= $1 AND created_at <= $2 ORDER BY created_at DESC',
+        [start, end],
+      );
+      return result.rows;
+    } catch (error) {
+      this.logger.error('Failed to query payments by date range', { start, end });
+      return [];
+    }
   }
 
   /** Update the status of a payment */

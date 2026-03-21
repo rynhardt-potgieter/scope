@@ -40,23 +40,30 @@ export class RefundService {
 
     this.logger.info('Processing refund', { paymentId, amount: amount.amount, reason });
 
-    const processor = this.processorFactory.getProcessor(payment.processor as any);
-    const refundResult = await processor.refund(payment.processorTransactionId!, amount);
+    let refund: Refund;
+    try {
+      const processor = this.processorFactory.getProcessor(payment.processor as any);
+      const refundResult = await processor.refund(payment.processorTransactionId!, amount);
 
-    const refund: Refund = {
-      id: `ref_${Date.now()}`,
-      paymentId,
-      userId: payment.userId,
-      amount,
-      reason,
-      status: RefundStatus.COMPLETED,
-      processorRefundId: refundResult.transactionId,
-      notes,
-      processedAt: new Date(),
-      processedBy,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      refund = {
+        id: `ref_${Date.now()}`,
+        paymentId,
+        userId: payment.userId,
+        amount,
+        reason,
+        status: RefundStatus.COMPLETED,
+        processorRefundId: refundResult.transactionId,
+        notes,
+        processedAt: new Date(),
+        processedBy,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown refund error';
+      this.logger.error('Refund processing failed', { paymentId, amount: amount.amount, error: message });
+      throw error;
+    }
 
     const isFullRefund = amount.amount >= payment.amount.amount;
     const newStatus = isFullRefund ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;

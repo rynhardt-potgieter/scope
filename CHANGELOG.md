@@ -1,5 +1,28 @@
 # Changelog
 
+## scope-benchmark v0.4.0 (2026-03-21)
+
+### Fixture Overhaul
+Phase 10 (72 runs) revealed 3 of 6 benchmark categories had fixture problems. This release fixes all 6 categories, adds fixture integrity protection, and adds a `benchmark verify` command.
+
+### Fixture Changes
+- **Cat-A (Discovery)**: Updated prompts to resist grep — TS focuses on "charge decline handling" (word "retry" removed), CS focuses on "permanently abandoned notifications" (word "delivery" removed)
+- **Cat-B (Bug Fix)**: CS bug replaced — compile-error (`payment.PaymentMethod.Last4Digits`) → runtime data integrity bug (RecordPayment called before status check)
+- **Cat-D (New Feature)**: TS `PaymentAnalyticsService.ts` deleted (was pre-existing, defeating "new feature" purpose), CS `PaymentReceipt.cs` entity added for domain context
+- **Cat-F (Cross-cutting)**: TS now has 6 catch blocks (was 2) for meaningful cross-cutting work, CS task changed from CancellationToken propagation to structured logging (CancellationToken would break fixture for other tasks)
+- **Cat-C, Cat-E**: Verified clean, no changes needed
+
+### New Commands
+- **`benchmark manifest --generate`**: Generates SHA256 manifests for all fixture source files
+- **`benchmark manifest --verify`**: Verifies fixtures match their stored manifests — prevents accidental corruption
+- **`benchmark verify --dir <path>`**: Runs correctness checks (compilation, tests) on a completed work directory and outputs JSON scores
+
+### Import Changes
+- Correctness data is now optional in `benchmark import` — defaults to zeros with a warning
+- Removes need for hardcoded correctness values in manually captured results
+
+---
+
 ## scope-benchmark v0.3.0 (2026-03-21)
 
 ### Methodology Redesign

@@ -75,13 +75,20 @@ export class InvoiceService {
 
     this.logger.info('Settling invoice', { invoiceId, total: invoice.total.amount });
 
-    const paymentResult = await this.paymentService.processPayment(
-      invoice.userId,
-      invoice.total,
-      PaymentProcessor.STRIPE,
-      `Invoice ${invoice.invoiceNumber}`,
-      `invoice_settle_${invoiceId}`,
-    );
+    let paymentResult;
+    try {
+      paymentResult = await this.paymentService.processPayment(
+        invoice.userId,
+        invoice.total,
+        PaymentProcessor.STRIPE,
+        `Invoice ${invoice.invoiceNumber}`,
+        `invoice_settle_${invoiceId}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown payment error';
+      this.logger.error('Invoice settlement payment failed', { invoiceId, error: message });
+      throw error;
+    }
 
     if (paymentResult.success) {
       const updated = await this.invoiceRepo.updateStatus(invoiceId, InvoiceStatus.PAID, paymentResult.paymentId);

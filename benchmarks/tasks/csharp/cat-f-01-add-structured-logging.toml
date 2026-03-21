@@ -1,0 +1,29 @@
+[task]
+id = "cs-cat-f-01"
+category = "cross-cutting"
+language = "csharp"
+corpus = "fixture"
+description = "Add structured entry/exit logging to PaymentService and UserService public methods"
+
+[prompt]
+text = """
+Add structured logging to all public methods in PaymentService and UserService. \
+Each method should log entry (method name + parameter names) and exit (method \
+name + duration) using the existing StructuredLogger. Don't modify methods that \
+already have entry/exit logging. Use a Stopwatch for duration measurement. \
+Make sure the project still compiles.
+"""
+
+[target]
+symbol = "PaymentService"
+file = "src/Infrastructure/Services/PaymentService.cs"
+
+[correctness]
+require_compilation = true
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope callers", "scope sketch"]

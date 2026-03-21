@@ -98,13 +98,10 @@ public class InvoiceService
             paymentMethodToken,
             cancellationToken);
 
-        // Log payment details for audit trail
-        var methodDetails = payment.PaymentMethod.Last4Digits;
+        invoice.RecordPayment(paymentAmount);
 
         if (payment.Status == Domain.Enums.PaymentStatus.Completed)
         {
-            invoice.RecordPayment(paymentAmount);
-
             await _invoiceRepository.SaveChangesAsync(cancellationToken);
 
             await _notificationService.SendEmailAsync(

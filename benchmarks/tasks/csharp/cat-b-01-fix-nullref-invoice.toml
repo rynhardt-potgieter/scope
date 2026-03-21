@@ -3,16 +3,14 @@ id = "cs-cat-b-01"
 category = "bug-fix"
 language = "csharp"
 corpus = "fixture"
-description = "Fix InvoiceService.SettleInvoice NullReferenceException when payment method missing"
+description = "Fix InvoiceService.SettleInvoice data integrity bug where failed payments reduce invoice balance"
 
 [prompt]
 text = """
-Users report a NullReferenceException when settling invoices with expired or \
-invalid payment methods. The error occurs in InvoiceService.SettleInvoice but \
-the stack trace is unclear. Investigate the invoice settlement flow, find where \
-the null reference occurs, and add proper null checking. The fix should handle \
-the case where PaymentMethod is null gracefully without crashing. Make sure the \
-project still compiles.
+Users report invoices showing as partially paid even when the payment was \
+declined. The invoice balance is reduced but no actual payment was collected. \
+Investigate InvoiceService.SettleInvoice and fix the data integrity issue. \
+Make sure the project still compiles.
 """
 
 [target]

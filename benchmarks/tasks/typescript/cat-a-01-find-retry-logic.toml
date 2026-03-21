@@ -3,15 +3,15 @@ id = "ts-cat-a-01"
 category = "discovery"
 language = "typescript"
 corpus = "fixture"
-description = "Find payment retry logic and add exponential backoff with jitter"
+description = "Find payment charge decline handling and add configurable retry delay"
 
 [prompt]
 text = """
-Find where payment retry logic is implemented in this codebase. Once found, \
-modify the retry mechanism to use exponential backoff with jitter. The backoff \
-should start at 200ms and double with each attempt, with random jitter of up to \
-50% of the delay. Cap the maximum delay at 5 seconds. Add a short comment \
-explaining the backoff formula. Make sure the project still compiles.
+Find the code that handles payment charge failures after the processor returns \
+a decline. The decline handling should add a configurable retry delay before \
+requeueing. Add a constant for the default delay (3000ms) and make the delay \
+configurable via a parameter. Add a short comment explaining the retry delay. \
+Make sure the project still compiles.
 """
 
 [target]

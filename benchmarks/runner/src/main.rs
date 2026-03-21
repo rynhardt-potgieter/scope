@@ -1,6 +1,7 @@
 mod agent;
 mod behavior;
 mod git;
+mod manifest;
 mod reporter;
 mod task;
 mod verifier;
@@ -57,6 +58,20 @@ pub enum Commands {
     /// Reads a previously saved JSON results file and produces a summary
     /// in the requested format (JSON or Markdown).
     Report(ReportArgs),
+
+    /// Generate or verify fixture integrity manifests.
+    ///
+    /// Use --generate to create a new manifest from the current fixture state.
+    /// Use --verify to check that fixtures match their stored manifests.
+    /// Manifests protect fixtures from accidental corruption between runs.
+    Manifest(ManifestArgs),
+
+    /// Verify correctness of a completed benchmark work directory.
+    ///
+    /// Runs compilation, test, and task-specific checks on a directory
+    /// where an agent has already completed its work. Use this after
+    /// manual benchmark runs to compute correctness scores.
+    Verify(VerifyArgs),
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -153,6 +168,32 @@ pub struct ReportArgs {
     pub output: OutputFormat,
 }
 
+#[derive(Parser, Debug)]
+pub struct ManifestArgs {
+    /// Generate a new manifest from the current fixture state
+    #[arg(long, conflicts_with = "verify")]
+    pub generate: bool,
+
+    /// Verify fixtures against their stored manifests
+    #[arg(long, conflicts_with = "generate")]
+    pub verify: bool,
+
+    /// Path to a specific fixture directory (default: auto-detect all fixtures)
+    #[arg(long)]
+    pub fixture: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+pub struct VerifyArgs {
+    /// Path to a completed work directory to verify
+    #[arg(long)]
+    pub dir: String,
+
+    /// Task ID to verify against (auto-detected from directory name if omitted)
+    #[arg(long)]
+    pub task: Option<String>,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -161,6 +202,8 @@ fn main() -> Result<()> {
         Commands::Prepare(args) => prepare_benchmarks(&args),
         Commands::Import(args) => import_results(&args),
         Commands::Report(args) => generate_report(&args),
+        Commands::Manifest(args) => manage_manifests(&args),
+        Commands::Verify(args) => verify_work_dir(&args),
     }
 }
 
@@ -357,6 +400,9 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
         anyhow::bail!("No tasks matched the given filters.");
     }
 
+    // Verify fixture integrity before preparing
+    let mut verified_fixtures: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     let output_base = args
         .output_dir
         .as_deref()
@@ -373,6 +419,21 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
 
     for task_def in &tasks {
         let corpus_path = resolve_corpus_path(task_def)?;
+
+        // Verify fixture integrity (once per fixture)
+        let corpus_key = corpus_path.display().to_string();
+        if !verified_fixtures.contains(&corpus_key) {
+            let manifest_file = corpus_path.join(".fixture-manifest.sha256");
+            if manifest_file.is_file() {
+                manifest::verify_manifest(&corpus_path)?;
+            } else {
+                eprintln!(
+                    "  Warning: No manifest found for {}. Skipping integrity check.",
+                    corpus_path.display()
+                );
+            }
+            verified_fixtures.insert(corpus_key);
+        }
 
         for &scope_enabled in &conditions {
             let condition_label = if scope_enabled {
@@ -496,6 +557,18 @@ fn import_results(args: &ImportArgs) -> Result<()> {
         .collect();
 
     eprintln!("Imported {} runs.", runs.len());
+
+    // Warn about missing correctness data
+    let missing_correctness = runs
+        .iter()
+        .filter(|r| r.correctness.overall_score == 0 && !r.correctness.compilation_pass)
+        .count();
+    if missing_correctness > 0 {
+        eprintln!(
+            "Warning: {} run(s) imported without correctness data. Run 'benchmark verify' on work dirs to compute correctness.",
+            missing_correctness
+        );
+    }
 
     let output_dir = args
         .output_dir
@@ -684,4 +757,153 @@ fn resolve_corpus_path(task_def: &task::TaskDef) -> Result<std::path::PathBuf> {
         "Corpus '{}' for task '{}' not found. Expected directory at benchmarks/fixtures/{}-api/ or benchmarks/corpora/{}.",
         corpus_name, task_def.task.id, task_def.task.language, corpus_name
     );
+}
+
+/// Generate or verify fixture integrity manifests.
+fn manage_manifests(args: &ManifestArgs) -> Result<()> {
+    if !args.generate && !args.verify {
+        anyhow::bail!("Specify --generate or --verify.");
+    }
+
+    let fixtures = if let Some(ref fixture_path) = args.fixture {
+        vec![std::path::PathBuf::from(fixture_path)]
+    } else {
+        find_all_fixture_dirs()?
+    };
+
+    if fixtures.is_empty() {
+        anyhow::bail!("No fixture directories found.");
+    }
+
+    for fixture in &fixtures {
+        if args.generate {
+            manifest::generate_manifest(fixture)?;
+        }
+        if args.verify {
+            manifest::verify_manifest(fixture)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify correctness of a completed work directory.
+fn verify_work_dir(args: &VerifyArgs) -> Result<()> {
+    let work_dir = std::path::PathBuf::from(&args.dir);
+    if !work_dir.is_dir() {
+        anyhow::bail!("Work directory does not exist: {}", args.dir);
+    }
+
+    // Determine task ID from args or directory name
+    let task_id = if let Some(ref id) = args.task {
+        id.clone()
+    } else {
+        // Extract from dir name: e.g. "ts-cat-a-01-with-scope" -> "ts-cat-a-01"
+        let dir_name = work_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        extract_task_id_from_dir_name(dir_name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Could not extract task ID from directory name '{}'. Use --task to specify.",
+                dir_name
+            )
+        })?
+    };
+
+    // Load the task definition
+    let tasks_dir = find_tasks_dir()?;
+    let all_tasks = task::load_tasks(&tasks_dir)?;
+    let task_def = all_tasks
+        .iter()
+        .find(|t| t.task.id == task_id)
+        .ok_or_else(|| anyhow::anyhow!("Task '{}' not found in task definitions.", task_id))?;
+
+    // Run verification
+    eprintln!("Verifying work directory for task '{}'...", task_id);
+    let result = verifier::verify_task(&work_dir, task_def)?;
+
+    // Output JSON
+    let output = serde_json::json!({
+        "task_id": task_id,
+        "compilation_pass": result.compilation_pass,
+        "tests_pass": result.tests_pass,
+        "caller_coverage": result.caller_coverage,
+        "overall_score": result.overall_score,
+    });
+
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
+/// Extract task ID from a prepared directory name.
+///
+/// Directory names look like "ts-cat-a-01-with-scope" or "cs-cat-b-01-without-scope".
+/// The task ID is everything before "-with-scope" or "-without-scope".
+fn extract_task_id_from_dir_name(dir_name: &str) -> Option<String> {
+    if let Some(idx) = dir_name.find("-with-scope") {
+        Some(dir_name[..idx].to_string())
+    } else if let Some(idx) = dir_name.find("-without-scope") {
+        Some(dir_name[..idx].to_string())
+    } else {
+        None
+    }
+}
+
+/// Find all fixture directories.
+fn find_all_fixture_dirs() -> Result<Vec<std::path::PathBuf>> {
+    let candidates = [
+        "benchmarks/fixtures",
+        "../fixtures",
+        "../../benchmarks/fixtures",
+    ];
+
+    for base in &candidates {
+        let base_path = std::path::PathBuf::from(base);
+        if base_path.is_dir() {
+            let mut dirs = Vec::new();
+            for entry in std::fs::read_dir(&base_path)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    // Only include fixture directories (contain "-large" or "-api")
+                    if name.contains("-large") || name.contains("-api") {
+                        dirs.push(entry.path());
+                    }
+                }
+            }
+            if !dirs.is_empty() {
+                dirs.sort();
+                return Ok(dirs);
+            }
+        }
+    }
+
+    anyhow::bail!("Could not find benchmarks/fixtures/ directory.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_task_id_with_scope() {
+        assert_eq!(
+            extract_task_id_from_dir_name("ts-cat-a-01-with-scope"),
+            Some("ts-cat-a-01".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_task_id_without_scope() {
+        assert_eq!(
+            extract_task_id_from_dir_name("cs-cat-b-01-without-scope"),
+            Some("cs-cat-b-01".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_task_id_unknown_format() {
+        assert_eq!(extract_task_id_from_dir_name("random-dir-name"), None);
+    }
 }
