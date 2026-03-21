@@ -1,0 +1,30 @@
+[task]
+id = "cs-cat-e-01"
+category = "focused-exploration"
+language = "csharp"
+corpus = "fixture"
+description = "Explain ProcessPayment flow through all layers for debugging"
+
+[prompt]
+text = """
+Explain how the ProcessPayment request flows through this codebase, \
+from the API controller through the CQRS command handler to the \
+payment gateway and back. I need to understand where a payment could \
+fail silently. Write your explanation in docs/payment-flow.md with \
+each layer, the method signatures, and the error handling at each step. \
+Focus on the payment path only — don't document the full architecture.
+"""
+
+[target]
+symbol = "PaymentService.ProcessPayment"
+file = "docs/payment-flow.md"
+
+[correctness]
+require_compilation = false
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope map", "scope sketch", "scope trace"]

@@ -90,14 +90,18 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
     let without_scope: Vec<&BenchmarkRun> = results.iter().filter(|r| !r.scope_enabled).collect();
 
     out.push_str("### Token Consumption\n\n");
-    out.push_str("| Condition | Mean input tokens | Reduction |\n");
-    out.push_str("|-----------|-------------------|-----------|\n");
+    out.push_str("| Condition | Mean input tokens | Std Dev | Reduction |\n");
+    out.push_str("|-----------|-------------------|---------|-----------|");
 
     let mean_without = mean_tokens(&without_scope);
     let mean_with = mean_tokens(&with_scope);
 
     if !without_scope.is_empty() {
-        out.push_str(&format!("| Without Scope | {:.0} | — |\n", mean_without));
+        out.push_str(&format!(
+            "\n| Without Scope | {:.0} | \u{00b1}{:.0} | \u{2014} |\n",
+            mean_without,
+            std_dev_tokens(&without_scope)
+        ));
     }
     if !with_scope.is_empty() {
         let reduction = if mean_without > 0.0 {
@@ -106,8 +110,10 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
             "N/A".to_string()
         };
         out.push_str(&format!(
-            "| With Scope | {:.0} | {} |\n",
-            mean_with, reduction
+            "| With Scope | {:.0} | \u{00b1}{:.0} | {} |\n",
+            mean_with,
+            std_dev_tokens(&with_scope),
+            reduction
         ));
     }
 
@@ -255,6 +261,23 @@ fn mean_tokens(runs: &[&BenchmarkRun]) -> f64 {
     }
     let total: u64 = runs.iter().map(|r| r.input_tokens).sum();
     total as f64 / runs.len() as f64
+}
+
+/// Calculate standard deviation of input tokens from a set of runs.
+fn std_dev_tokens(runs: &[&BenchmarkRun]) -> f64 {
+    if runs.len() < 2 {
+        return 0.0;
+    }
+    let mean = mean_tokens(runs);
+    let variance: f64 = runs
+        .iter()
+        .map(|r| {
+            let diff = r.input_tokens as f64 - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / (runs.len() - 1) as f64;
+    variance.sqrt()
 }
 
 /// Calculate mean file reads from a set of runs.

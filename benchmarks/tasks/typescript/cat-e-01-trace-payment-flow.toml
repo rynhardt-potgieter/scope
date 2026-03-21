@@ -1,20 +1,18 @@
 [task]
 id = "ts-cat-e-01"
-category = "exploration"
+category = "focused-exploration"
 language = "typescript"
 corpus = "fixture"
-description = "Trace complete payment flow from OrderController.checkout to notification delivery"
+description = "Explain payment flow from checkout to notification for debugging"
 
 [prompt]
 text = """
-Trace the complete payment processing flow in this codebase, starting from \
-OrderController.checkout all the way through to notification delivery. \
-Document the flow in a new file docs/payment-flow.md with: \
-1. Each step in the flow (controller → service → processor → notification) \
-2. The exact method signatures at each step \
-3. Error handling at each layer \
-4. Which services are involved and how they connect \
-Use scope commands to understand the architecture without reading every file.
+Explain how payment processing works in this codebase, from \
+OrderController.checkout through to notification delivery. I need to \
+understand this flow to debug a charge failure. Write your explanation \
+in docs/payment-flow.md with the key steps, method signatures, and \
+where errors are handled at each layer. Focus on the payment path only — \
+don't document unrelated parts of the architecture.
 """
 
 [target]

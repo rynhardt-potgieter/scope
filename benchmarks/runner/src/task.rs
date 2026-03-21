@@ -140,8 +140,8 @@ mod tests {
         );
         assert_eq!(
             tasks.len(),
-            10,
-            "Expected 10 tasks (5 TypeScript + 5 C#), found {}",
+            12,
+            "Expected 12 tasks (6 TypeScript + 6 C#), found {}",
             tasks.len()
         );
 

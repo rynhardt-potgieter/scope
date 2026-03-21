@@ -1,5 +1,25 @@
 # Changelog
 
+## scope-benchmark v0.3.0 (2026-03-21)
+
+### Methodology Redesign
+Phases 7-9 revealed fundamental methodology problems: 1-rep results had up to 10× variance (per research paper), Cat-E "document the architecture" was open-ended and unrealistic, and no correctness verification beyond compilation. This release addresses all three.
+
+### Changes
+- **6 task categories** (was 5): added Category F (cross-cutting changes across multiple files)
+- **Cat-E reframed**: "document the full architecture" → "explain payment flow for debugging" — focused exploration with a purpose and natural stopping point
+- **Cat-F added**: TS (add structured error logging to all catch blocks) + C# (add CancellationToken to interface methods and all callers) — tests whether Scope helps with changes that touch many files
+- **3 reps per condition** for statistical reliability (72 runs per phase, was 20)
+- **Standard deviations** reported alongside means in all aggregate metrics
+- **12 tasks total** (6 TypeScript + 6 C#), up from 10
+
+### Why
+- Research paper: "token consumption varies up to 10× across runs on the same task" — single-rep comparisons are unreliable
+- CS Cat-E consistently produced 18-sketch outliers across P7/P8/P9 due to open-ended task framing
+- Cross-cutting changes (Cat-F) are a common real-world workflow not previously tested
+
+---
+
 ## v0.5.0 (2026-03-21)
 
 ### Features
