@@ -1,5 +1,15 @@
 # Changelog
 
+## scope-benchmark v0.7.2 (2026-03-22)
+
+### New Features
+- **`--resume` flag on `benchmark run`** — reads existing `full_results.json` in the output directory, skips completed task/condition/rep combinations, and runs only what's missing. Safe to Ctrl+C and resume later.
+
+### Fixes
+- **Fix JSON round-trip for infinity values** — `navigation_to_edit_ratio` is infinity when an agent makes no edits. JSON serializes this as `null`, which failed deserialization on resume. Added custom deserializer that maps `null` back to `f64::INFINITY`.
+
+---
+
 ## scope-benchmark v0.7.1 (2026-03-22)
 
 ### Improvements

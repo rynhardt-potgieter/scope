@@ -150,6 +150,11 @@ pub struct RunArgs {
     /// Increase to speed up benchmarks if your API rate limits allow it.
     #[arg(long, default_value = "1")]
     pub parallel: usize,
+
+    /// Resume a previous run by skipping already-completed task/condition/rep
+    /// combinations found in the output directory's full_results.json.
+    #[arg(long)]
+    pub resume: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -412,7 +417,61 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         }
     }
 
+    // Resume: load existing results and skip completed jobs
+    let mut resumed_runs: Vec<reporter::BenchmarkRun> = Vec::new();
+    let mut completed_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    if args.resume && json_path.is_file() {
+        let content = std::fs::read_to_string(&json_path)
+            .with_context(|| format!("Failed to read existing results for resume: {}", json_path.display()))?;
+        match serde_json::from_str::<reporter::ResultsWrapper>(&content) {
+            Ok(wrapper) => {
+                for run in &wrapper.runs {
+                    let key = format!("{}|{}|{}", run.task_id, run.condition, run.repetition);
+                    completed_keys.insert(key);
+                }
+                eprintln!(
+                    "Resuming: found {} completed runs in {}",
+                    wrapper.runs.len(),
+                    json_path.display()
+                );
+                resumed_runs = wrapper.runs;
+            }
+            Err(e) => {
+                eprintln!("  [resume] Warning: failed to parse existing results: {}", e);
+                eprintln!("  [resume] Starting from scratch.");
+            }
+        }
+    }
+
+    // Filter out already-completed jobs
+    let original_count = jobs.len();
+    if !completed_keys.is_empty() {
+        jobs.retain(|job| {
+            let key = format!(
+                "{}|{}|{}",
+                tasks[job.task_def_idx].task.id, job.condition_label, job.rep
+            );
+            !completed_keys.contains(&key)
+        });
+        eprintln!(
+            "Skipping {} completed, {} remaining\n",
+            original_count - jobs.len(),
+            jobs.len()
+        );
+    }
+
     let total_runs = jobs.len();
+    if total_runs == 0 {
+        eprintln!("All runs already completed. Nothing to do.");
+        // Still write final markdown summary
+        let md_path = results_dir.join("summary.md");
+        reporter::write_markdown_summary(&resumed_runs, &md_path)?;
+        let env_path = results_dir.join("environment.json");
+        reporter::write_environment(&env_path)?;
+        return Ok(());
+    }
+
     eprintln!(
         "Total runs: {} (parallel: {})\n",
         total_runs, args.parallel
@@ -421,7 +480,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
 
     let all_runs = if args.parallel <= 1 {
         // Sequential execution with incremental save
-        let mut runs: Vec<reporter::BenchmarkRun> = Vec::new();
+        let mut runs: Vec<reporter::BenchmarkRun> = resumed_runs;
 
         for (i, job) in jobs.iter().enumerate() {
             let task_def = tasks[job.task_def_idx];
@@ -503,7 +562,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         runs
     } else {
         // Parallel execution using std::thread::scope
-        let runs_mutex = std::sync::Mutex::new(Vec::<reporter::BenchmarkRun>::new());
+        let runs_mutex = std::sync::Mutex::new(resumed_runs);
         let completed = std::sync::atomic::AtomicUsize::new(0);
         let failed = std::sync::atomic::AtomicUsize::new(0);
         let model = args.model.as_deref();

@@ -1,13 +1,22 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 
 use crate::agent::AgentAction;
+
+/// Deserialize f64 that may be null (from JSON infinity → null round-trip).
+fn deserialize_f64_or_null<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<f64>::deserialize(deserializer).map(|opt| opt.unwrap_or(f64::INFINITY))
+}
 
 /// Behavior metrics derived from an agent's action sequence during a benchmark run.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BehaviorMetrics {
     // Navigation efficiency
     pub actions_before_first_edit: u32,
+    #[serde(default, deserialize_with = "deserialize_f64_or_null")]
     pub navigation_to_edit_ratio: f64,
     pub unique_files_read: u32,
     pub redundant_reads: u32,
