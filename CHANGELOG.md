@@ -1,5 +1,26 @@
 # Changelog
 
+## scope-benchmark v0.6.0 (2026-03-22)
+
+### Critical Bug Fixes
+- **Fix verification running on original fixture instead of agent's work** — `verifier::verify_task` now runs on the temp dir where the agent made changes. Previously it checked the unmodified original, so verification always passed against clean code.
+- **Remove dangerous `git reset --hard HEAD` on fixture path** — `reset_corpus()` ran git reset on the fixture directory, which is inside the scope repo. Would have destroyed ALL uncommitted work in the repo. Removed entirely since agents work on temp copies.
+- **Fix `--disallowedTools` syntax** — changed from incorrect space-separated args to `Bash(scope:*)` glob pattern that the claude CLI expects
+
+### New Features
+- **`--model <name>` flag on `benchmark run`** — specify Sonnet, Opus, or Haiku for agent runs. Passed directly to claude CLI. Required for cost control and reproducibility.
+- **`--conditions 3` on `benchmark run`** — enables the 3-arm experiment (without-scope, with-scope, with-scope-preloaded). Previously only available on `prepare`.
+- **`--save-ndjson <dir>` flag** — persists raw NDJSON streams from every agent run. Enables post-hoc analysis, action replay, and token decomposition.
+- **`--bare` flag on claude CLI invocation** — ensures consistent behavior (no hooks, no LSP, no plugin sync) for reproducible benchmark runs
+- **Preloaded condition in automated runs** — `setup_temp_corpus` handles `with-scope-preloaded` by running `scope map` and baking output into CLAUDE.md before the agent starts
+- **`run_agent` returns `(AgentRun, TempDir)`** — caller controls temp dir lifetime, enabling verification before cleanup
+
+### Breaking Changes
+- `run_agent` signature changed — now accepts `condition`, `model`, `ndjson_save_path` parameters and returns tuple with TempDir
+- Default reps changed from 5 to 3
+
+---
+
 ## v0.5.2 (2026-03-22)
 
 ### Performance (from skill-validated code review)

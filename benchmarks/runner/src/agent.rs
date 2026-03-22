@@ -221,6 +221,7 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
 fn setup_temp_corpus(
     corpus_path: &Path,
     scope_enabled: bool,
+    condition: &str,
     scope_backup: Option<&Path>,
 ) -> Result<tempfile::TempDir> {
     let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
@@ -273,6 +274,33 @@ fn setup_temp_corpus(
         }
     }
 
+    // Handle preloaded scope map variant
+    if condition == "with-scope-preloaded" {
+        let preloaded_src = dest.join("CLAUDE.md.with-scope-preloaded");
+        if preloaded_src.is_file() {
+            let map_output = Command::new("scope")
+                .args(["map"])
+                .current_dir(dest)
+                .output();
+            match map_output {
+                Ok(output) if output.status.success() => {
+                    let map_text = String::from_utf8_lossy(&output.stdout);
+                    let template = std::fs::read_to_string(&preloaded_src)?;
+                    let rendered = template.replace("{{SCOPE_MAP_OUTPUT}}", &map_text);
+                    std::fs::write(dest.join("CLAUDE.md"), rendered)?;
+                }
+                _ => {
+                    // Fall back to regular with-scope
+                    eprintln!("  Warning: scope map failed in temp dir. Falling back to with-scope variant.");
+                    let fallback = dest.join("CLAUDE.md.with-scope");
+                    if fallback.is_file() {
+                        std::fs::copy(&fallback, dest.join("CLAUDE.md"))?;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(temp_dir)
 }
 
@@ -280,15 +308,30 @@ fn setup_temp_corpus(
 ///
 /// Creates an isolated temp directory with the corpus, invokes the `claude`
 /// CLI with stream-json output, parses the NDJSON stream for tool calls
-/// and token usage, and returns the captured run data.
+/// and token usage, and returns the captured run data alongside the temp
+/// directory handle. The caller MUST keep the returned `TempDir` alive
+/// until verification completes — dropping it deletes the work directory.
 ///
 /// Requires `ANTHROPIC_API_KEY` to be set and the `claude` CLI to be installed.
+///
+/// # Parameters
+///
+/// * `task` - The task definition containing the prompt and metadata
+/// * `scope_enabled` - Whether Scope CLI is available for this run
+/// * `condition` - Experimental condition label (e.g. "with-scope", "without-scope", "with-scope-preloaded")
+/// * `corpus_path` - Path to the fixture corpus to copy
+/// * `scope_backup` - Optional path to a `.scope/` backup to restore
+/// * `model` - Optional model override (e.g. "claude-sonnet-4-20250514")
+/// * `ndjson_save_path` - Optional path to save the raw NDJSON stream for later replay
 pub fn run_agent(
     task: &TaskDef,
     scope_enabled: bool,
+    condition: &str,
     corpus_path: &Path,
     scope_backup: Option<&Path>,
-) -> Result<AgentRun> {
+    model: Option<&str>,
+    ndjson_save_path: Option<&Path>,
+) -> Result<(AgentRun, tempfile::TempDir)> {
     // Pre-flight checks
     std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
         anyhow::anyhow!(
@@ -297,13 +340,14 @@ pub fn run_agent(
     })?;
 
     // Set up isolated temp directory
-    let temp_dir = setup_temp_corpus(corpus_path, scope_enabled, scope_backup)?;
+    let temp_dir = setup_temp_corpus(corpus_path, scope_enabled, condition, scope_backup)?;
     let work_dir = temp_dir.path();
 
     // Build the claude command
     let mut cmd = Command::new("claude");
     cmd.arg("-p")
         .arg(&task.prompt.text)
+        .arg("--bare")
         .arg("--output-format")
         .arg("stream-json")
         .arg("--max-turns")
@@ -311,10 +355,13 @@ pub fn run_agent(
         .arg("--allowedTools")
         .arg("Read,Edit,Write,Glob,Grep,Bash");
 
+    if let Some(m) = model {
+        cmd.arg("--model").arg(m);
+    }
+
     if !scope_enabled {
         cmd.arg("--disallowedTools")
-            .arg("Bash(scope *)")
-            .arg("Bash(*/scope *)");
+            .arg("Bash(scope:*)");
     }
 
     cmd.current_dir(work_dir)
@@ -343,12 +390,15 @@ pub fn run_agent(
     let mut scope_commands_called: Vec<String> = Vec::new();
     let mut actions: Vec<AgentAction> = Vec::new();
     let mut sequence: u32 = 0;
+    let mut raw_lines: Vec<String> = Vec::new();
 
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
             Err(_) => continue,
         };
+
+        raw_lines.push(line.clone());
 
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -461,23 +511,36 @@ pub fn run_agent(
     let status = child.wait().context("Failed to wait for claude process")?;
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    Ok(AgentRun {
-        task_id: task.task.id.clone(),
-        scope_enabled,
-        input_tokens,
-        output_tokens,
-        cache_creation_input_tokens,
-        cache_read_input_tokens,
-        file_reads,
-        file_edits,
-        grep_calls,
-        glob_calls,
-        bash_calls,
-        scope_commands_called,
-        duration_ms,
-        exit_code: status.code().unwrap_or(-1),
-        actions,
-    })
+    // Save raw NDJSON if path provided
+    if let Some(save_path) = ndjson_save_path {
+        if let Some(parent) = save_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let ndjson_content = raw_lines.join("\n");
+        std::fs::write(save_path, &ndjson_content)
+            .with_context(|| format!("Failed to save NDJSON to {}", save_path.display()))?;
+    }
+
+    Ok((
+        AgentRun {
+            task_id: task.task.id.clone(),
+            scope_enabled,
+            input_tokens,
+            output_tokens,
+            cache_creation_input_tokens,
+            cache_read_input_tokens,
+            file_reads,
+            file_edits,
+            grep_calls,
+            glob_calls,
+            bash_calls,
+            scope_commands_called,
+            duration_ms,
+            exit_code: status.code().unwrap_or(-1),
+            actions,
+        },
+        temp_dir,
+    ))
 }
 
 /// Extract tool_use items from a stream-json event.

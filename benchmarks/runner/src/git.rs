@@ -6,6 +6,10 @@ use std::process::Command;
 ///
 /// Runs `git reset --hard HEAD` and `git clean -fd` to undo all changes
 /// the agent may have made during a benchmark run.
+///
+/// Note: No longer called from the automated run loop (agents work on temp
+/// copies), but retained for manual corpus cleanup workflows.
+#[allow(dead_code)]
 pub fn reset_corpus(corpus_path: &Path) -> Result<()> {
     let status = Command::new("git")
         .args(["reset", "--hard", "HEAD"])
@@ -67,6 +71,10 @@ pub fn backup_scope_index(corpus_path: &Path) -> Result<PathBuf> {
 ///
 /// Removes the current `.scope/` directory (which may have been modified
 /// by the agent or by git clean) and replaces it with the backup.
+///
+/// Note: No longer called from the automated run loop (agents work on temp
+/// copies), but retained for manual corpus cleanup workflows.
+#[allow(dead_code)]
 pub fn restore_scope_index(corpus_path: &Path, backup: &Path) -> Result<()> {
     let scope_dir = corpus_path.join(".scope");
 

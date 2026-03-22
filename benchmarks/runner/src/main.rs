@@ -98,8 +98,8 @@ pub struct RunArgs {
     #[arg(long)]
     pub language: Option<String>,
 
-    /// Number of repetitions per task per condition (default: 5)
-    #[arg(long, default_value = "5")]
+    /// Number of repetitions per task per condition (default: 3)
+    #[arg(long, default_value = "3")]
     pub reps: u32,
 
     /// Run both with-Scope and without-Scope conditions and compare results
@@ -113,6 +113,20 @@ pub struct RunArgs {
     /// Run only the Scope-enabled condition
     #[arg(long, conflicts_with = "no_scope")]
     pub scope_only: bool,
+
+    /// Model to use for agent runs (e.g. "sonnet", "opus", "haiku").
+    /// Passed directly to the claude CLI --model flag.
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Number of experimental conditions: 1 = with-scope only (default),
+    /// 2 = with --compare, 3 = without-scope + with-scope + with-scope-preloaded
+    #[arg(long, default_value = "1")]
+    pub conditions: u32,
+
+    /// Directory to save raw NDJSON streams from each run
+    #[arg(long)]
+    pub save_ndjson: Option<String>,
 
     /// Output format for results
     #[arg(long, value_enum, default_value = "json")]
@@ -248,47 +262,76 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         args.reps
     );
 
-    // Determine which conditions to run
-    let run_with_scope = !args.no_scope;
-    let run_without_scope = args.compare || args.no_scope;
+    // Determine which conditions to run (same tuple approach as prepare_benchmarks)
+    let conditions: Vec<(&str, bool)> = if args.conditions >= 3 {
+        vec![
+            ("without-scope", false),
+            ("with-scope", true),
+            ("with-scope-preloaded", true),
+        ]
+    } else if args.compare || args.conditions == 2 {
+        vec![
+            ("with-scope", true),
+            ("without-scope", false),
+        ]
+    } else if args.no_scope {
+        vec![("without-scope", false)]
+    } else {
+        // Default and --scope-only both run with-scope only
+        vec![("with-scope", true)]
+    };
 
     let mut all_runs: Vec<reporter::BenchmarkRun> = Vec::new();
 
     for task_def in &tasks {
         let corpus_path = resolve_corpus_path(task_def)?;
 
-        // Back up the scope index before starting
-        let backup = if run_with_scope {
+        // Back up the scope index (used by setup_temp_corpus to restore .scope/ into fresh temp dirs)
+        let scope_dir = corpus_path.join(".scope");
+        let backup = if scope_dir.is_dir() {
             Some(git::backup_scope_index(&corpus_path)?)
         } else {
             None
         };
 
         for rep in 1..=args.reps {
-            if run_with_scope {
+            for &(condition_label, scope_enabled) in &conditions {
                 eprintln!(
-                    "  [{}/{}] {} (with Scope, rep {})",
-                    tasks
-                        .iter()
-                        .position(|t| t.task.id == task_def.task.id)
-                        .unwrap_or(0)
-                        + 1,
+                    "  [{}/{}] {} ({}, rep {})",
+                    tasks.iter().position(|t| t.task.id == task_def.task.id).unwrap_or(0) + 1,
                     tasks.len(),
                     task_def.task.id,
+                    condition_label,
                     rep
                 );
 
-                let agent_run = agent::run_agent(task_def, true, &corpus_path, backup.as_deref())?;
-                let verification = verifier::verify_task(&corpus_path, task_def)?;
+                // Build NDJSON save path if requested
+                let ndjson_path = args.save_ndjson.as_ref().map(|dir| {
+                    let p = std::path::PathBuf::from(dir);
+                    p.join(format!("{}-{}-rep{}.ndjson", task_def.task.id, condition_label, rep))
+                });
+
+                let (agent_run, work_dir) = agent::run_agent(
+                    task_def,
+                    scope_enabled,
+                    condition_label,
+                    &corpus_path,
+                    backup.as_deref(),
+                    args.model.as_deref(),
+                    ndjson_path.as_deref(),
+                )?;
+
+                // Run verification on the TEMP DIR where the agent worked
+                let verification = verifier::verify_task(work_dir.path(), task_def)?;
                 let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
                 all_runs.push(reporter::BenchmarkRun {
                     task_id: task_def.task.id.clone(),
                     repetition: rep,
-                    scope_enabled: true,
+                    scope_enabled,
+                    condition: condition_label.to_string(),
                     cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
                     cache_read_input_tokens: agent_run.cache_read_input_tokens,
-                    condition: "with-scope".to_string(),
                     input_tokens: agent_run.input_tokens,
                     output_tokens: agent_run.output_tokens,
                     file_reads: agent_run.file_reads,
@@ -304,57 +347,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     behavior: Some(bm),
                 });
 
-                // Reset corpus between runs
-                git::reset_corpus(&corpus_path)?;
-                if let Some(ref backup_path) = backup {
-                    git::restore_scope_index(&corpus_path, backup_path)?;
-                }
-            }
-
-            if run_without_scope {
-                eprintln!(
-                    "  [{}/{}] {} (without Scope, rep {})",
-                    tasks
-                        .iter()
-                        .position(|t| t.task.id == task_def.task.id)
-                        .unwrap_or(0)
-                        + 1,
-                    tasks.len(),
-                    task_def.task.id,
-                    rep
-                );
-
-                let agent_run = agent::run_agent(task_def, false, &corpus_path, backup.as_deref())?;
-                let verification = verifier::verify_task(&corpus_path, task_def)?;
-                let bm = behavior::compute_behavior_metrics(&agent_run.actions);
-
-                all_runs.push(reporter::BenchmarkRun {
-                    task_id: task_def.task.id.clone(),
-                    repetition: rep,
-                    scope_enabled: false,
-                    cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
-                    cache_read_input_tokens: agent_run.cache_read_input_tokens,
-                    condition: "without-scope".to_string(),
-                    input_tokens: agent_run.input_tokens,
-                    output_tokens: agent_run.output_tokens,
-                    file_reads: agent_run.file_reads,
-                    scope_commands_called: agent_run.scope_commands_called,
-                    correctness: reporter::CorrectnessResult {
-                        compilation_pass: verification.compilation_pass,
-                        tests_pass: verification.tests_pass,
-                        caller_coverage: verification.caller_coverage,
-                        overall_score: verification.overall_score,
-                    },
-                    duration_ms: agent_run.duration_ms,
-                    actions: agent_run.actions,
-                    behavior: Some(bm),
-                });
-
-                // Reset corpus between runs
-                git::reset_corpus(&corpus_path)?;
-                if let Some(ref backup_path) = backup {
-                    git::restore_scope_index(&corpus_path, backup_path)?;
-                }
+                // work_dir (TempDir) is dropped here, cleaning up
             }
         }
     }
