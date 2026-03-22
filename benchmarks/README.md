@@ -21,28 +21,72 @@ Three metrics are captured simultaneously:
 
 ## Prerequisites
 
-- **`ANTHROPIC_API_KEY`** environment variable (for automated runs)
-- **Claude CLI** (`claude`) installed and on PATH
-- **Scope CLI** (`scope`) built and on PATH
-- **.NET SDK** (for C# fixture compilation and tests)
-- **Node.js** (for TypeScript fixture compilation and tests)
+- **Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com)
+- **Claude CLI** — `npm install -g @anthropic-ai/claude-code`
+- **Scope CLI** — `cargo install --path .` from the repo root
+- **Node.js** — for TypeScript fixture compilation (`npx tsc`)
+- **.NET SDK** — for C# fixture compilation (`dotnet build`)
+- **Rust toolchain** — to build the benchmark runner
+
+## Setup
+
+```bash
+# 1. Build the benchmark runner
+cd benchmarks/runner
+cargo build
+
+# 2. Install scope globally (needed for with-scope and preloaded conditions)
+cd ../..
+cargo install --path .
+scope --version    # Should print scope 0.5.2+
+
+# 3. Set your API key
+```
+
+**Linux/macOS:**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**Windows PowerShell:**
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+To persist the key across sessions (Windows):
+```powershell
+[System.Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', 'sk-ant-...', 'User')
+# Restart terminal after this
+```
+
+```bash
+# 4. Verify everything
+claude --version   # Should print 2.x.x
+scope --version    # Should print scope 0.5.2+
+cd benchmarks/runner
+cargo run -- --version  # Should print benchmark 0.6.6+
+```
 
 ## Quick start
 
+### 1. Test with Haiku first (always)
+
+Validates telemetry capture before spending real money. Costs ~$0.10:
+
 ```bash
 cd benchmarks/runner
-cargo build --release
+cargo run -- test --task ts-cat-a-01 --model haiku
 ```
 
-### 1. Test (always run first)
+Runs 1 task across all 3 conditions (3 agent invocations). Prints PASS/FAIL per condition, validating that tokens, actions, file reads, scope commands, and NDJSON streams are all captured. **Fix any failures before proceeding to a full run.**
 
-Validates that telemetry capture works before committing to a full run:
-
-```bash
-cargo run -- test --task ts-cat-a-01 --model sonnet
-```
-
-Runs 1 task across all 3 conditions (3 agent invocations). Prints PASS/FAIL per condition. Fix any failures before proceeding.
+Expected output for each condition:
+- `Input tokens: > 0`
+- `Output tokens: > 0`
+- `Actions: > 0`
+- `File reads: > 0`
+- `Scope commands: [scope find]` (for with-scope conditions)
+- `Telemetry: VALID`
 
 ### 2. Run
 
