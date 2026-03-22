@@ -72,6 +72,18 @@ pub enum Commands {
     /// where an agent has already completed its work. Use this after
     /// manual benchmark runs to compute correctness scores.
     Verify(VerifyArgs),
+
+    /// Run a single-task validation test across all 3 conditions.
+    ///
+    /// Runs one task with 1 rep across without-scope, with-scope, and
+    /// with-scope-preloaded conditions. Validates that telemetry data is
+    /// captured correctly (tokens, actions, file reads, scope commands)
+    /// before committing to a full benchmark run.
+    ///
+    /// Examples:
+    ///   benchmark test --task ts-cat-a-01 --model sonnet
+    ///   benchmark test --language typescript --model opus
+    Test(TestArgs),
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -128,9 +140,10 @@ pub struct RunArgs {
     #[arg(long)]
     pub save_ndjson: Option<String>,
 
-    /// Output format for results
-    #[arg(long, value_enum, default_value = "json")]
-    pub output: OutputFormat,
+    /// Output directory for results (default: benchmarks/results/latest/).
+    /// Results include full_results.json, summary.md, and environment.json.
+    #[arg(long)]
+    pub output_dir: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -223,6 +236,22 @@ pub struct VerifyArgs {
     pub json: bool,
 }
 
+#[derive(Parser, Debug)]
+pub struct TestArgs {
+    /// Task ID to test (e.g. ts-cat-a-01). If omitted, picks the first task
+    /// matching --language, or ts-cat-a-01 as default.
+    #[arg(long)]
+    pub task: Option<String>,
+
+    /// Language to pick a task from if --task not specified
+    #[arg(long)]
+    pub language: Option<String>,
+
+    /// Model to use (e.g. "sonnet", "opus", "haiku"). Required.
+    #[arg(long)]
+    pub model: String,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -233,6 +262,7 @@ fn main() -> Result<()> {
         Commands::Report(args) => generate_report(&args),
         Commands::Manifest(args) => manage_manifests(&args),
         Commands::Verify(args) => verify_work_dir(&args),
+        Commands::Test(args) => run_test(&args),
     }
 }
 
@@ -270,16 +300,31 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
             ("with-scope-preloaded", true),
         ]
     } else if args.compare || args.conditions == 2 {
-        vec![
-            ("with-scope", true),
-            ("without-scope", false),
-        ]
+        vec![("with-scope", true), ("without-scope", false)]
     } else if args.no_scope {
         vec![("without-scope", false)]
     } else {
         // Default and --scope-only both run with-scope only
         vec![("with-scope", true)]
     };
+
+    // Determine NDJSON directory: explicit --save-ndjson, auto under --output-dir, or none
+    let ndjson_dir: Option<std::path::PathBuf> = if args.save_ndjson.is_some() {
+        args.save_ndjson.as_ref().map(std::path::PathBuf::from)
+    } else if args.output_dir.is_some() {
+        let results_dir = std::path::PathBuf::from(
+            args.output_dir
+                .as_ref()
+                .map_or("benchmarks/results/latest", |s| s.as_str()),
+        );
+        Some(results_dir.join("ndjson"))
+    } else {
+        None
+    };
+
+    if let Some(ref dir) = ndjson_dir {
+        std::fs::create_dir_all(dir)?;
+    }
 
     let mut all_runs: Vec<reporter::BenchmarkRun> = Vec::new();
 
@@ -298,17 +343,23 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
             for &(condition_label, scope_enabled) in &conditions {
                 eprintln!(
                     "  [{}/{}] {} ({}, rep {})",
-                    tasks.iter().position(|t| t.task.id == task_def.task.id).unwrap_or(0) + 1,
+                    tasks
+                        .iter()
+                        .position(|t| t.task.id == task_def.task.id)
+                        .unwrap_or(0)
+                        + 1,
                     tasks.len(),
                     task_def.task.id,
                     condition_label,
                     rep
                 );
 
-                // Build NDJSON save path if requested
-                let ndjson_path = args.save_ndjson.as_ref().map(|dir| {
-                    let p = std::path::PathBuf::from(dir);
-                    p.join(format!("{}-{}-rep{}.ndjson", task_def.task.id, condition_label, rep))
+                // Build NDJSON save path from resolved directory
+                let ndjson_path = ndjson_dir.as_ref().map(|dir| {
+                    dir.join(format!(
+                        "{}-{}-rep{}.ndjson",
+                        task_def.task.id, condition_label, rep
+                    ))
                 });
 
                 let (agent_run, work_dir) = agent::run_agent(
@@ -353,21 +404,21 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     }
 
     // Write results
-    let results_dir = find_results_dir()?;
+    let results_dir = if let Some(ref dir) = args.output_dir {
+        std::path::PathBuf::from(dir)
+    } else {
+        find_results_dir()?
+    };
     std::fs::create_dir_all(&results_dir)?;
 
-    match args.output {
-        OutputFormat::Json => {
-            let path = results_dir.join("full_results.json");
-            reporter::write_json_results(&all_runs, &path)?;
-            eprintln!("Results written to {}", path.display());
-        }
-        OutputFormat::Markdown => {
-            let path = results_dir.join("summary.md");
-            reporter::write_markdown_summary(&all_runs, &path)?;
-            eprintln!("Summary written to {}", path.display());
-        }
-    }
+    // Always write both JSON and Markdown results
+    let json_path = results_dir.join("full_results.json");
+    reporter::write_json_results(&all_runs, &json_path)?;
+    eprintln!("Results written to {}", json_path.display());
+
+    let md_path = results_dir.join("summary.md");
+    reporter::write_markdown_summary(&all_runs, &md_path)?;
+    eprintln!("Summary written to {}", md_path.display());
 
     let env_path = results_dir.join("environment.json");
     reporter::write_environment(&env_path)?;
@@ -733,6 +784,203 @@ fn generate_report(args: &ReportArgs) -> Result<()> {
             reporter::write_markdown_summary(&wrapper.runs, &output_path)?;
             eprintln!("Summary written to {}", output_path.display());
         }
+    }
+
+    Ok(())
+}
+
+/// Run a single-task validation test across all 3 conditions.
+///
+/// Validates telemetry capture before committing to a full benchmark run.
+/// Checks that actions, tokens, file reads, and scope commands are captured.
+fn run_test(args: &TestArgs) -> Result<()> {
+    let tasks_dir = find_tasks_dir()?;
+    let all_tasks = task::load_tasks(&tasks_dir)?;
+
+    // Select task
+    let task_def = if let Some(ref task_id) = args.task {
+        all_tasks
+            .iter()
+            .find(|t| t.task.id == *task_id)
+            .ok_or_else(|| anyhow::anyhow!("Task '{}' not found.", task_id))?
+    } else if let Some(ref lang) = args.language {
+        all_tasks
+            .iter()
+            .find(|t| t.task.language == *lang)
+            .ok_or_else(|| anyhow::anyhow!("No tasks found for language '{}'.", lang))?
+    } else {
+        all_tasks
+            .iter()
+            .find(|t| t.task.id == "ts-cat-a-01")
+            .or_else(|| all_tasks.first())
+            .ok_or_else(|| anyhow::anyhow!("No tasks found."))?
+    };
+
+    eprintln!("=== BENCHMARK TEST ===");
+    eprintln!("Task: {} ({})", task_def.task.id, task_def.task.description);
+    eprintln!("Model: {}", args.model);
+    eprintln!("Conditions: without-scope, with-scope, with-scope-preloaded");
+    eprintln!();
+
+    let corpus_path = resolve_corpus_path(task_def)?;
+
+    // Verify fixture integrity
+    let manifest_file = corpus_path.join(".fixture-manifest.sha256");
+    if manifest_file.is_file() {
+        manifest::verify_manifest(&corpus_path)?;
+        eprintln!("Fixture integrity: OK");
+    }
+
+    // Back up scope index
+    let scope_dir = corpus_path.join(".scope");
+    let backup = if scope_dir.is_dir() {
+        Some(git::backup_scope_index(&corpus_path)?)
+    } else {
+        anyhow::bail!("No .scope/ directory found in fixture. Run 'scope index' first.");
+    };
+
+    // Create temp output dir for test
+    let test_output = std::path::PathBuf::from("benchmarks/results/test");
+    std::fs::create_dir_all(&test_output)?;
+    let ndjson_dir = test_output.join("ndjson");
+    std::fs::create_dir_all(&ndjson_dir)?;
+
+    let conditions: Vec<(&str, bool)> = vec![
+        ("without-scope", false),
+        ("with-scope", true),
+        ("with-scope-preloaded", true),
+    ];
+
+    let mut all_runs: Vec<reporter::BenchmarkRun> = Vec::new();
+    let mut all_valid = true;
+
+    for &(condition_label, scope_enabled) in &conditions {
+        eprintln!("\n--- {} ---", condition_label);
+
+        let ndjson_path =
+            ndjson_dir.join(format!("{}-{}.ndjson", task_def.task.id, condition_label));
+
+        let (agent_run, work_dir) = agent::run_agent(
+            task_def,
+            scope_enabled,
+            condition_label,
+            &corpus_path,
+            backup.as_deref(),
+            Some(&args.model),
+            Some(&ndjson_path),
+        )?;
+
+        let verification = verifier::verify_task(work_dir.path(), task_def)?;
+        let bm = behavior::compute_behavior_metrics(&agent_run.actions);
+
+        // Validate telemetry
+        let mut issues: Vec<String> = Vec::new();
+
+        if agent_run.input_tokens == 0 {
+            issues.push("input_tokens = 0".to_string());
+        }
+        if agent_run.output_tokens == 0 {
+            issues.push("output_tokens = 0".to_string());
+        }
+        if agent_run.actions.is_empty() {
+            issues.push("actions[] is empty".to_string());
+        }
+        if agent_run.file_reads == 0 {
+            issues.push("file_reads = 0".to_string());
+        }
+        if scope_enabled && agent_run.scope_commands_called.is_empty() {
+            issues
+                .push("scope_commands_called is empty (agent may not have used scope)".to_string());
+        }
+        if !ndjson_path.is_file() {
+            issues.push("NDJSON file was not saved".to_string());
+        } else {
+            let ndjson_size = std::fs::metadata(&ndjson_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if ndjson_size == 0 {
+                issues.push("NDJSON file is empty".to_string());
+            } else {
+                eprintln!(
+                    "  NDJSON saved: {} ({} bytes)",
+                    ndjson_path.display(),
+                    ndjson_size
+                );
+            }
+        }
+
+        eprintln!("  Input tokens:    {}", agent_run.input_tokens);
+        eprintln!("  Output tokens:   {}", agent_run.output_tokens);
+        eprintln!("  Cache read:      {}", agent_run.cache_read_input_tokens);
+        eprintln!(
+            "  Cache creation:  {}",
+            agent_run.cache_creation_input_tokens
+        );
+        eprintln!("  File reads:      {}", agent_run.file_reads);
+        eprintln!("  Actions:         {}", agent_run.actions.len());
+        eprintln!("  Scope commands:  {:?}", agent_run.scope_commands_called);
+        eprintln!("  Duration:        {}ms", agent_run.duration_ms);
+        eprintln!(
+            "  Compilation:     {}",
+            if verification.compilation_pass {
+                "PASS"
+            } else {
+                "FAIL"
+            }
+        );
+
+        if issues.is_empty() {
+            eprintln!("  Telemetry:       VALID");
+        } else {
+            eprintln!("  Telemetry:       ISSUES DETECTED");
+            for issue in &issues {
+                eprintln!("    WARNING: {}", issue);
+            }
+            all_valid = false;
+        }
+
+        all_runs.push(reporter::BenchmarkRun {
+            task_id: task_def.task.id.clone(),
+            repetition: 1,
+            scope_enabled,
+            condition: condition_label.to_string(),
+            cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
+            cache_read_input_tokens: agent_run.cache_read_input_tokens,
+            input_tokens: agent_run.input_tokens,
+            output_tokens: agent_run.output_tokens,
+            file_reads: agent_run.file_reads,
+            scope_commands_called: agent_run.scope_commands_called,
+            correctness: reporter::CorrectnessResult {
+                compilation_pass: verification.compilation_pass,
+                tests_pass: verification.tests_pass,
+                caller_coverage: verification.caller_coverage,
+                overall_score: verification.overall_score,
+            },
+            duration_ms: agent_run.duration_ms,
+            actions: agent_run.actions,
+            behavior: Some(bm),
+        });
+    }
+
+    // Write test results
+    let json_path = test_output.join("test_results.json");
+    reporter::write_json_results(&all_runs, &json_path)?;
+    let md_path = test_output.join("test_summary.md");
+    reporter::write_markdown_summary(&all_runs, &md_path)?;
+
+    eprintln!("\n=== TEST COMPLETE ===");
+    eprintln!("Results: {}", test_output.display());
+
+    if all_valid {
+        eprintln!("Telemetry: ALL VALID - safe to proceed with full benchmark run");
+    } else {
+        eprintln!("Telemetry: ISSUES DETECTED - fix before running full benchmarks");
+        eprintln!("Check the warnings above. Common causes:");
+        eprintln!("  - ANTHROPIC_API_KEY not set or invalid");
+        eprintln!("  - claude CLI not on PATH or wrong version");
+        eprintln!("  - scope CLI not on PATH (needed for with-scope conditions)");
+        // Return error instead of process::exit to follow project conventions
+        anyhow::bail!("Telemetry validation failed. See warnings above.");
     }
 
     Ok(())

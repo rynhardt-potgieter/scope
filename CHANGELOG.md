@@ -1,5 +1,16 @@
 # Changelog
 
+## scope-benchmark v0.6.1 (2026-03-22)
+
+### New Commands
+- **`benchmark test --task <id> --model <model>`** — single-task validation across all 3 conditions (1 rep). Validates telemetry capture (tokens, actions, file reads, scope commands, NDJSON) before committing to a full run. Prints clear PASS/FAIL per condition.
+
+### Improvements
+- **`--output-dir` on `benchmark run`** — specify where results are saved. Auto-creates `ndjson/` subdirectory for NDJSON streams.
+- **Always writes both JSON and Markdown** — `full_results.json`, `summary.md`, and `environment.json` are always generated (removed the `--output` format selector)
+
+---
+
 ## scope-benchmark v0.6.0 (2026-03-22)
 
 ### Critical Bug Fixes
