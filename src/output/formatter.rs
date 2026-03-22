@@ -722,13 +722,14 @@ pub fn print_impact(symbol_name: &str, result: &ImpactResult) {
 /// Path 2: SubscriptionRenewalWorker.autoRenewDue
 ///   └─→ SubscriptionService.processRenewal          src/services/sub.ts:72
 /// ```
-pub fn print_trace(symbol_name: &str, result: &TraceResult) {
+pub fn print_trace(symbol_name: &str, result: &TraceResult, total: usize, truncated: bool) {
     let path_count = result.paths.len();
     let path_word = if path_count == 1 { "path" } else { "paths" };
 
+    let display_count = if truncated { total } else { path_count };
     println!(
         "{} \u{2014} {} entry {}",
-        symbol_name, path_count, path_word
+        symbol_name, display_count, path_word
     );
     println!("{SEPARATOR}");
 
@@ -763,6 +764,10 @@ pub fn print_trace(symbol_name: &str, result: &TraceResult) {
         if i < path_count - 1 {
             println!();
         }
+    }
+
+    if truncated {
+        println!("... {} more paths (use --limit to show more)", total - path_count);
     }
 }
 

@@ -39,7 +39,8 @@ pub struct TraceArgs {
     #[arg(long, default_value = "10")]
     pub max_depth: usize,
 
-    /// Maximum number of paths to display (default: 20)
+    /// Maximum number of call paths to display. When exceeded, shows
+    /// "... N more paths" — increase this value to see all paths.
     #[arg(long, default_value = "20")]
     pub limit: usize,
 
@@ -90,10 +91,7 @@ pub fn run(args: &TraceArgs, project_root: &Path) -> Result<()> {
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        formatter::print_trace(&args.symbol, &result);
-        if truncated {
-            println!("... {} more paths (use --limit to show more)", total - args.limit);
-        }
+        formatter::print_trace(&args.symbol, &result, total, truncated);
     }
 
     Ok(())

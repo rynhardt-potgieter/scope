@@ -1704,21 +1704,30 @@ impl Graph {
 
     /// Fetch all call-edge target counts in a single aggregate query.
     ///
-    /// Returns a map from `to_id` to the number of call edges targeting it.
-    /// Used to avoid N+1 queries when computing importance for many symbols.
-    fn get_all_caller_counts(&self) -> Result<HashMap<String, usize>> {
+    /// Returns two maps for O(1) lookup by all three matching patterns:
+    /// - `by_id`: exact `to_id` → count (covers patterns 1 and 2: exact ID and bare name)
+    /// - `by_suffix`: bare name (part after last `.`) → count (covers pattern 3: member-call)
+    fn get_all_caller_counts(&self) -> Result<CallerCountMaps> {
         let mut stmt = self
             .conn
             .prepare("SELECT to_id, COUNT(*) FROM edges WHERE kind = 'calls' GROUP BY to_id")?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })?;
-        let mut counts = HashMap::new();
+        let mut by_id = HashMap::new();
+        let mut by_suffix: HashMap<String, usize> = HashMap::new();
         for row in rows {
             let (to_id, count) = row?;
-            counts.insert(to_id, count as usize);
+            let count = count as usize;
+            // Build suffix map: extract bare name after last '.'
+            if let Some(bare) = to_id.rsplit('.').next() {
+                if bare != to_id {
+                    *by_suffix.entry(bare.to_string()).or_insert(0) += count;
+                }
+            }
+            by_id.insert(to_id, count);
         }
-        Ok(counts)
+        Ok(CallerCountMaps { by_id, by_suffix })
     }
 
     /// Get directory-level statistics.
@@ -1889,34 +1898,117 @@ pub fn is_test_file(file_path: &str) -> bool {
         || lower.starts_with("tests/")
 }
 
-/// Resolve a symbol's caller count from a pre-computed counts map.
+/// Pre-computed caller count maps for O(1) symbol resolution.
+struct CallerCountMaps {
+    /// Exact `to_id` → count (for pattern 1: exact ID, pattern 2: bare name)
+    by_id: HashMap<String, usize>,
+    /// Bare name (after last `.`) → count (for pattern 3: member-call suffix)
+    by_suffix: HashMap<String, usize>,
+}
+
+/// Resolve a symbol's caller count from pre-computed maps in O(1).
 ///
 /// Matches using the same three patterns as `get_caller_count`:
-/// 1. Exact ID match
-/// 2. Bare name match
-/// 3. Member-call suffix match (e.g., `svc.processPayment`)
+/// 1. Exact ID match (O(1) HashMap lookup)
+/// 2. Bare name match (O(1) HashMap lookup)
+/// 3. Member-call suffix match via pre-computed suffix map (O(1) lookup)
 fn resolve_caller_count(
-    counts: &HashMap<String, usize>,
+    maps: &CallerCountMaps,
     symbol_id: &str,
     symbol_name: &str,
 ) -> usize {
     let mut total = 0usize;
     // Pattern 1: exact ID match
-    if let Some(&c) = counts.get(symbol_id) {
+    if let Some(&c) = maps.by_id.get(symbol_id) {
         total += c;
     }
     // Pattern 2: bare name match (only if different from ID)
     if symbol_name != symbol_id {
-        if let Some(&c) = counts.get(symbol_name) {
+        if let Some(&c) = maps.by_id.get(symbol_name) {
             total += c;
         }
     }
-    // Pattern 3: member-call suffix (e.g., "svc.processPayment")
-    let suffix = format!(".{}", symbol_name);
-    for (to_id, &count) in counts {
-        if to_id.ends_with(&suffix) && to_id != symbol_id && to_id != symbol_name {
-            total += count;
-        }
+    // Pattern 3: member-call suffix — use pre-computed suffix map
+    if let Some(&c) = maps.by_suffix.get(symbol_name) {
+        total += c;
     }
     total
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_caller_count_exact_id() {
+        let maps = CallerCountMaps {
+            by_id: HashMap::from([("src/foo.ts::processPayment::function::10".to_string(), 3)]),
+            by_suffix: HashMap::new(),
+        };
+        assert_eq!(
+            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            3
+        );
+    }
+
+    #[test]
+    fn test_resolve_caller_count_bare_name() {
+        let maps = CallerCountMaps {
+            by_id: HashMap::from([("processPayment".to_string(), 2)]),
+            by_suffix: HashMap::new(),
+        };
+        assert_eq!(
+            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            2
+        );
+    }
+
+    #[test]
+    fn test_resolve_caller_count_suffix_match() {
+        let maps = CallerCountMaps {
+            by_id: HashMap::new(),
+            by_suffix: HashMap::from([("processPayment".to_string(), 5)]),
+        };
+        assert_eq!(
+            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            5
+        );
+    }
+
+    #[test]
+    fn test_resolve_caller_count_all_three_patterns() {
+        let maps = CallerCountMaps {
+            by_id: HashMap::from([
+                ("src/foo.ts::processPayment::function::10".to_string(), 1),
+                ("processPayment".to_string(), 2),
+            ]),
+            by_suffix: HashMap::from([("processPayment".to_string(), 3)]),
+        };
+        // All three patterns match: 1 + 2 + 3 = 6
+        assert_eq!(
+            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            6
+        );
+    }
+
+    #[test]
+    fn test_resolve_caller_count_no_match() {
+        let maps = CallerCountMaps {
+            by_id: HashMap::from([("other".to_string(), 10)]),
+            by_suffix: HashMap::from([("other".to_string(), 5)]),
+        };
+        assert_eq!(
+            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_is_test_file() {
+        assert!(is_test_file("tests/unit/payment.test.ts"));
+        assert!(is_test_file("src/payments/PaymentService.spec.ts"));
+        assert!(is_test_file("Tests/Unit/PaymentTests.cs"));
+        assert!(!is_test_file("src/payments/PaymentService.ts"));
+        assert!(!is_test_file("src/controllers/OrderController.cs"));
+    }
 }

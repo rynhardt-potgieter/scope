@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.5.2 (2026-03-22)
+
+### Performance (from skill-validated code review)
+- **Fix O(N) linear scan in `resolve_caller_count`** — the initial N+1 fix in v0.5.1 replaced SQL N+1 but introduced an O(N) HashMap scan for suffix matching. Now uses pre-computed `by_suffix` HashMap for true O(1) lookups across all three matching patterns.
+
+### Code Quality
+- Move trace truncation message into formatter (was bypassing output layer)
+- Improve `--limit` help text on `scope trace` for LLM readability
+
+### Tests
+- Add 6 unit tests in `graph.rs` for `resolve_caller_count` (all three matching patterns, combined, no-match, is_test_file)
+
+---
+
+## v0.5.1 (2026-03-22)
+
+### Performance
+- **Fix N+1 queries in `scope map` and `scope entrypoints`** — replaced per-symbol `get_caller_count()` with single aggregate query (`get_all_caller_counts`), replaced per-entrypoint outgoing count with pre-computed HashMap, replaced O(N×M) `.ends_with()` scan with O(1) HashSet lookup
+- These three fixes compound: `scope map` on large codebases should now stay well within the < 500ms performance target
+
+### CLI
+- **`scope trace --limit N`** — truncate paths output (default 20) with "... N more paths" message. Prevents unbounded output on heavily-called symbols.
+
+### Code Quality
+- Extract shared `collapse_and_group()` function for entrypoint processing (was duplicated between entrypoints.rs and map.rs)
+- Remove no-op `format_step_name` function, inline at call sites
+
+---
+
+## scope-benchmark v0.5.1 (2026-03-22)
+
+### Fixes (from skill-validated code review)
+- Fix duplicate rows in 3-arm Token Decomposition report (skip boolean split when per-condition data exists)
+- Set condition labels in `run_benchmarks()` for automated runs (was `String::new()`, making condition-aware reporting dead code)
+- Replace manual `Clone`/`Default` impls with derives on `BenchmarkRun` and `CorrectnessResult`
+- Extract `unique_conditions()` helper (was duplicated 3×)
+- Log WalkDir errors in manifest.rs instead of silent swallow
+- Add human-readable default output to `benchmark verify` (new `--json` flag)
+- Log skipped non-JSON line count in `parse_ndjson_actions`
+
+### Tests
+- Add `insta` snapshot tests for `scope trace`, `scope entrypoints`, `scope map` (output format is a contract)
+
+---
+
 ## scope-benchmark v0.5.0 (2026-03-22)
 
 ### Phase 11 Infrastructure
