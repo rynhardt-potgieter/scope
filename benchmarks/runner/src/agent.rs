@@ -348,6 +348,8 @@ pub fn run_agent(
     cmd.arg("-p")
         .arg(&task.prompt.text)
         .arg("--bare")
+        .arg("--add-dir")
+        .arg(work_dir)
         .arg("--output-format")
         .arg("stream-json")
         .arg("--max-turns")

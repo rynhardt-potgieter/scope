@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.6.2 (2026-03-22)
+
+### Critical Fix
+- **`--bare` was suppressing CLAUDE.md loading** — the `--bare` flag on the claude CLI skips CLAUDE.md auto-discovery, meaning agents in ALL conditions received no project guidance. Added `--add-dir` flag to explicitly load the work directory's CLAUDE.md while keeping `--bare` for reproducibility (no hooks/LSP/plugins).
+
+---
+
 ## scope-benchmark v0.6.1 (2026-03-22)
 
 ### New Commands
