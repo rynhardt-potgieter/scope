@@ -144,6 +144,12 @@ pub struct RunArgs {
     /// Results include full_results.json, summary.md, and environment.json.
     #[arg(long)]
     pub output_dir: Option<String>,
+
+    /// Number of parallel agent runs (default: 1 = sequential).
+    /// Each parallel run uses its own temp directory and claude process.
+    /// Increase to speed up benchmarks if your API rate limits allow it.
+    #[arg(long, default_value = "1")]
+    pub parallel: usize,
 }
 
 #[derive(Parser, Debug)]
@@ -266,6 +272,21 @@ fn main() -> Result<()> {
     }
 }
 
+/// A fully-specified benchmark job ready for execution.
+///
+/// Built upfront so that both sequential and parallel paths iterate
+/// over the same job list. Each job captures everything needed to
+/// invoke `agent::run_agent` without re-borrowing mutable state.
+struct RunJob {
+    task_def_idx: usize,
+    rep: u32,
+    condition_label: String,
+    scope_enabled: bool,
+    corpus_path: std::path::PathBuf,
+    backup_path: Option<std::path::PathBuf>,
+    ndjson_path: Option<std::path::PathBuf>,
+}
+
 /// Execute benchmark tasks according to the provided arguments.
 fn run_benchmarks(args: &RunArgs) -> Result<()> {
     // Determine tasks directory relative to the runner binary
@@ -312,12 +333,12 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     let ndjson_dir: Option<std::path::PathBuf> = if args.save_ndjson.is_some() {
         args.save_ndjson.as_ref().map(std::path::PathBuf::from)
     } else if args.output_dir.is_some() {
-        let results_dir = std::path::PathBuf::from(
+        let rd = std::path::PathBuf::from(
             args.output_dir
                 .as_ref()
                 .map_or("benchmarks/results/latest", |s| s.as_str()),
         );
-        Some(results_dir.join("ndjson"))
+        Some(rd.join("ndjson"))
     } else {
         None
     };
@@ -326,35 +347,40 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         std::fs::create_dir_all(dir)?;
     }
 
-    let mut all_runs: Vec<reporter::BenchmarkRun> = Vec::new();
+    // Set up results directory BEFORE the run loop so incremental saves work
+    let results_dir = if let Some(ref dir) = args.output_dir {
+        std::path::PathBuf::from(dir)
+    } else {
+        find_results_dir()?
+    };
+    std::fs::create_dir_all(&results_dir)?;
+    let json_path = results_dir.join("full_results.json");
 
-    for task_def in &tasks {
+    // Build all jobs upfront
+    let mut jobs: Vec<RunJob> = Vec::new();
+    // Track backups per corpus so we only create one backup per fixture
+    let mut corpus_backups: std::collections::HashMap<String, Option<std::path::PathBuf>> =
+        std::collections::HashMap::new();
+
+    for (task_idx, task_def) in tasks.iter().enumerate() {
         let corpus_path = resolve_corpus_path(task_def)?;
+        let corpus_key = corpus_path.display().to_string();
 
-        // Back up the scope index (used by setup_temp_corpus to restore .scope/ into fresh temp dirs)
-        let scope_dir = corpus_path.join(".scope");
-        let backup = if scope_dir.is_dir() {
-            Some(git::backup_scope_index(&corpus_path)?)
+        let backup = if let Some(existing) = corpus_backups.get(&corpus_key) {
+            existing.clone()
         } else {
-            None
+            let scope_dir = corpus_path.join(".scope");
+            let b = if scope_dir.is_dir() {
+                Some(git::backup_scope_index(&corpus_path)?)
+            } else {
+                None
+            };
+            corpus_backups.insert(corpus_key, b.clone());
+            b
         };
 
         for rep in 1..=args.reps {
             for &(condition_label, scope_enabled) in &conditions {
-                eprintln!(
-                    "  [{}/{}] {} ({}, rep {})",
-                    tasks
-                        .iter()
-                        .position(|t| t.task.id == task_def.task.id)
-                        .unwrap_or(0)
-                        + 1,
-                    tasks.len(),
-                    task_def.task.id,
-                    condition_label,
-                    rep
-                );
-
-                // Build NDJSON save path from resolved directory
                 let ndjson_path = ndjson_dir.as_ref().map(|dir| {
                     dir.join(format!(
                         "{}-{}-rep{}.ndjson",
@@ -362,60 +388,199 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     ))
                 });
 
-                let (agent_run, work_dir) = agent::run_agent(
-                    task_def,
+                jobs.push(RunJob {
+                    task_def_idx: task_idx,
+                    rep,
+                    condition_label: condition_label.to_string(),
                     scope_enabled,
-                    condition_label,
-                    &corpus_path,
-                    backup.as_deref(),
-                    args.model.as_deref(),
-                    ndjson_path.as_deref(),
-                )?;
-
-                // Run verification on the TEMP DIR where the agent worked
-                let verification = verifier::verify_task(work_dir.path(), task_def)?;
-                let bm = behavior::compute_behavior_metrics(&agent_run.actions);
-
-                all_runs.push(reporter::BenchmarkRun {
-                    task_id: task_def.task.id.clone(),
-                    repetition: rep,
-                    scope_enabled,
-                    condition: condition_label.to_string(),
-                    cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
-                    cache_read_input_tokens: agent_run.cache_read_input_tokens,
-                    input_tokens: agent_run.input_tokens,
-                    output_tokens: agent_run.output_tokens,
-                    file_reads: agent_run.file_reads,
-                    scope_commands_called: agent_run.scope_commands_called,
-                    correctness: reporter::CorrectnessResult {
-                        compilation_pass: verification.compilation_pass,
-                        tests_pass: verification.tests_pass,
-                        caller_coverage: verification.caller_coverage,
-                        overall_score: verification.overall_score,
-                    },
-                    duration_ms: agent_run.duration_ms,
-                    actions: agent_run.actions,
-                    behavior: Some(bm),
+                    corpus_path: corpus_path.clone(),
+                    backup_path: backup.clone(),
+                    ndjson_path,
                 });
-
-                // work_dir (TempDir) is dropped here, cleaning up
             }
         }
     }
 
-    // Write results
-    let results_dir = if let Some(ref dir) = args.output_dir {
-        std::path::PathBuf::from(dir)
-    } else {
-        find_results_dir()?
-    };
-    std::fs::create_dir_all(&results_dir)?;
+    let total_runs = jobs.len();
+    eprintln!("Total runs: {} (parallel: {})", total_runs, args.parallel);
 
-    // Always write both JSON and Markdown results
-    let json_path = results_dir.join("full_results.json");
+    let all_runs = if args.parallel <= 1 {
+        // Sequential execution with incremental save
+        let mut runs: Vec<reporter::BenchmarkRun> = Vec::new();
+
+        for (i, job) in jobs.iter().enumerate() {
+            let task_def = tasks[job.task_def_idx];
+            eprintln!(
+                "  [{}/{}] {} ({}, rep {})",
+                i + 1,
+                total_runs,
+                task_def.task.id,
+                job.condition_label,
+                job.rep
+            );
+
+            // Pass model through the job by calling run_agent directly
+            let (agent_run, work_dir) = agent::run_agent(
+                task_def,
+                job.scope_enabled,
+                &job.condition_label,
+                &job.corpus_path,
+                job.backup_path.as_deref(),
+                args.model.as_deref(),
+                job.ndjson_path.as_deref(),
+            )?;
+
+            let verification = verifier::verify_task(work_dir.path(), task_def)?;
+            let bm = behavior::compute_behavior_metrics(&agent_run.actions);
+
+            runs.push(reporter::BenchmarkRun {
+                task_id: task_def.task.id.clone(),
+                repetition: job.rep,
+                scope_enabled: job.scope_enabled,
+                condition: job.condition_label.clone(),
+                cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
+                cache_read_input_tokens: agent_run.cache_read_input_tokens,
+                input_tokens: agent_run.input_tokens,
+                output_tokens: agent_run.output_tokens,
+                file_reads: agent_run.file_reads,
+                scope_commands_called: agent_run.scope_commands_called,
+                correctness: reporter::CorrectnessResult {
+                    compilation_pass: verification.compilation_pass,
+                    tests_pass: verification.tests_pass,
+                    caller_coverage: verification.caller_coverage,
+                    overall_score: verification.overall_score,
+                },
+                duration_ms: agent_run.duration_ms,
+                actions: agent_run.actions,
+                behavior: Some(bm),
+            });
+
+            // Incremental save — write results after every completed run
+            reporter::write_json_results(&runs, &json_path)?;
+            eprintln!(
+                "  [{}/{}] Saved ({} runs so far)",
+                runs.len(),
+                total_runs,
+                runs.len()
+            );
+
+            // work_dir (TempDir) is dropped here, cleaning up
+        }
+
+        runs
+    } else {
+        // Parallel execution using std::thread::scope
+        let runs_mutex = std::sync::Mutex::new(Vec::<reporter::BenchmarkRun>::new());
+        let completed = std::sync::atomic::AtomicUsize::new(0);
+        let failed = std::sync::atomic::AtomicUsize::new(0);
+        let model = args.model.as_deref();
+
+        for chunk in jobs.chunks(args.parallel) {
+            std::thread::scope(|s| {
+                let handles: Vec<_> = chunk
+                    .iter()
+                    .map(|job| {
+                        let task_def = tasks[job.task_def_idx];
+                        s.spawn(move || -> Result<reporter::BenchmarkRun> {
+                            eprintln!(
+                                "  [parallel] Starting {} ({}, rep {})",
+                                task_def.task.id, job.condition_label, job.rep
+                            );
+
+                            let (agent_run, work_dir) = agent::run_agent(
+                                task_def,
+                                job.scope_enabled,
+                                &job.condition_label,
+                                &job.corpus_path,
+                                job.backup_path.as_deref(),
+                                model,
+                                job.ndjson_path.as_deref(),
+                            )?;
+
+                            let verification =
+                                verifier::verify_task(work_dir.path(), task_def)?;
+                            let bm =
+                                behavior::compute_behavior_metrics(&agent_run.actions);
+
+                            Ok(reporter::BenchmarkRun {
+                                task_id: task_def.task.id.clone(),
+                                repetition: job.rep,
+                                scope_enabled: job.scope_enabled,
+                                condition: job.condition_label.clone(),
+                                cache_creation_input_tokens: agent_run
+                                    .cache_creation_input_tokens,
+                                cache_read_input_tokens: agent_run
+                                    .cache_read_input_tokens,
+                                input_tokens: agent_run.input_tokens,
+                                output_tokens: agent_run.output_tokens,
+                                file_reads: agent_run.file_reads,
+                                scope_commands_called: agent_run.scope_commands_called,
+                                correctness: reporter::CorrectnessResult {
+                                    compilation_pass: verification.compilation_pass,
+                                    tests_pass: verification.tests_pass,
+                                    caller_coverage: verification.caller_coverage,
+                                    overall_score: verification.overall_score,
+                                },
+                                duration_ms: agent_run.duration_ms,
+                                actions: agent_run.actions,
+                                behavior: Some(bm),
+                            })
+                        })
+                    })
+                    .collect();
+
+                // Collect results from this batch
+                for handle in handles {
+                    match handle.join() {
+                        Ok(Ok(run)) => {
+                            let mut runs = runs_mutex.lock().unwrap_or_else(|e| e.into_inner());
+                            runs.push(run);
+                            drop(runs); // Release lock before file I/O
+
+                            let c = completed
+                                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                                + 1;
+                            eprintln!("  [parallel] Completed {}/{}", c, total_runs);
+
+                            // Incremental save
+                            let runs = runs_mutex.lock().unwrap_or_else(|e| e.into_inner());
+                            if let Err(e) = reporter::write_json_results(&runs, &json_path)
+                            {
+                                eprintln!(
+                                    "  Warning: Failed to save incremental results: {}",
+                                    e
+                                );
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            failed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            eprintln!("  [parallel] Run failed: {}", e);
+                        }
+                        Err(_) => {
+                            failed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            eprintln!("  [parallel] Thread panicked");
+                        }
+                    }
+                }
+            });
+        }
+
+        let fail_count = failed.load(std::sync::atomic::Ordering::SeqCst);
+        if fail_count > 0 {
+            eprintln!(
+                "  Warning: {} of {} runs failed or panicked",
+                fail_count, total_runs
+            );
+        }
+
+        runs_mutex.into_inner().unwrap_or_else(|e| e.into_inner())
+    };
+
+    // Final JSON save (ensures we have the complete set even for parallel path)
     reporter::write_json_results(&all_runs, &json_path)?;
     eprintln!("Results written to {}", json_path.display());
 
+    // Write markdown summary and environment (only at the end)
     let md_path = results_dir.join("summary.md");
     reporter::write_markdown_summary(&all_runs, &md_path)?;
     eprintln!("Summary written to {}", md_path.display());

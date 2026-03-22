@@ -1,5 +1,13 @@
 # Changelog
 
+## scope-benchmark v0.7.0 (2026-03-22)
+
+### New Features
+- **`--parallel N` on `benchmark run`** — run N agent processes concurrently using scoped threads. Each run uses its own temp directory. Errors in individual threads are logged and skipped — the harness continues with remaining runs. Default: 1 (sequential).
+- **Incremental save** — `full_results.json` is written after every completed run (both sequential and parallel). If the process crashes at run 50, you have 49 runs of data. Markdown summary and environment JSON are written once at the end.
+
+---
+
 ## scope-benchmark v0.6.7 (2026-03-22)
 
 ### Fix
