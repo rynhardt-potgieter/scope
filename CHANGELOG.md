@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.6.5 (2026-03-22)
+
+### Fix
+- **Fix Windows batch file argument limitation** — `.cmd` wrappers can't handle special characters in task prompts (quotes, newlines). Now bypasses the batch wrapper entirely by finding the claude CLI JS entry point and calling `node` directly via npm prefix resolution.
+
+---
+
 ## scope-benchmark v0.6.4 (2026-03-22)
 
 ### Fix

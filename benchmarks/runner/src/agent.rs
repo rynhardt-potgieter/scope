@@ -343,14 +343,11 @@ pub fn run_agent(
     let temp_dir = setup_temp_corpus(corpus_path, scope_enabled, condition, scope_backup)?;
     let work_dir = temp_dir.path();
 
-    // Build the claude command
-    // On Windows, npm installs claude as claude.cmd — Command::new("claude")
-    // won't find it. Use the .cmd extension directly on Windows.
-    let mut cmd = if cfg!(windows) {
-        Command::new("claude.cmd")
-    } else {
-        Command::new("claude")
-    };
+    // Build the claude command.
+    // On Windows, npm installs claude as claude.cmd. Batch files can't handle
+    // complex arguments (quotes, newlines in prompts). Bypass the .cmd wrapper
+    // and call node directly with the claude CLI entry point.
+    let mut cmd = build_claude_command()?;
     cmd.arg("-p")
         .arg(&task.prompt.text)
         .arg("--bare")
@@ -666,6 +663,50 @@ pub(crate) fn extract_scope_command(bash_command: &str) -> Option<String> {
 }
 
 /// Public wrapper for prepare command to copy fixture directories.
+/// Build a Command for invoking the claude CLI.
+///
+/// On Unix, this is simply `Command::new("claude")`.
+/// On Windows, npm installs claude as a `.cmd` batch wrapper which cannot
+/// handle complex arguments (special characters, newlines in prompts).
+/// This function bypasses the wrapper by finding the actual JS entry point
+/// and calling `node` directly.
+fn build_claude_command() -> Result<Command> {
+    if !cfg!(windows) {
+        return Ok(Command::new("claude"));
+    }
+
+    // On Windows: find the npm global prefix, then the claude CLI JS entry point
+    let npm_output = Command::new("cmd")
+        .args(["/C", "npm", "config", "get", "prefix"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .context("Failed to run 'npm config get prefix'. Is npm installed?")?;
+
+    let npm_prefix = String::from_utf8_lossy(&npm_output.stdout).trim().to_string();
+    if npm_prefix.is_empty() {
+        anyhow::bail!("npm config get prefix returned empty. Is npm installed?");
+    }
+
+    // The claude CLI entry point is at <prefix>/node_modules/@anthropic-ai/claude-code/cli.js
+    let cli_js = std::path::PathBuf::from(&npm_prefix)
+        .join("node_modules")
+        .join("@anthropic-ai")
+        .join("claude-code")
+        .join("cli.js");
+
+    if !cli_js.is_file() {
+        anyhow::bail!(
+            "Could not find claude CLI at {}. Is @anthropic-ai/claude-code installed globally?",
+            cli_js.display()
+        );
+    }
+
+    let mut cmd = Command::new("node");
+    cmd.arg(&cli_js);
+    Ok(cmd)
+}
+
 pub fn copy_dir_for_prepare(src: &Path, dst: &Path) -> Result<()> {
     copy_dir_recursive(src, dst)
 }
