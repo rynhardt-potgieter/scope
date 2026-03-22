@@ -30,3 +30,4 @@ CLAUDE.md
 /overview/
 .env
 *.ndjson
+ndjson/
