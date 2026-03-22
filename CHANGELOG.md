@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.7.1 (2026-03-22)
+
+### Improvements
+- **Progress bar with ETA** — `benchmark run` shows progress bar, percentage, elapsed time, and estimated time remaining for sequential runs. Final summary shows total tokens and duration.
+
+---
+
 ## scope-benchmark v0.7.0 (2026-03-22)
 
 ### New Features
