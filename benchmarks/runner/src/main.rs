@@ -203,6 +203,10 @@ pub struct VerifyArgs {
     /// Task ID to verify against (auto-detected from directory name if omitted)
     #[arg(long)]
     pub task: Option<String>,
+
+    /// Output as JSON instead of human-readable
+    #[arg(long)]
+    pub json: bool,
 }
 
 fn main() -> Result<()> {
@@ -284,7 +288,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     scope_enabled: true,
                     cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
                     cache_read_input_tokens: agent_run.cache_read_input_tokens,
-                    condition: String::new(),
+                    condition: "with-scope".to_string(),
                     input_tokens: agent_run.input_tokens,
                     output_tokens: agent_run.output_tokens,
                     file_reads: agent_run.file_reads,
@@ -330,7 +334,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     scope_enabled: false,
                     cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
                     cache_read_input_tokens: agent_run.cache_read_input_tokens,
-                    condition: String::new(),
+                    condition: "without-scope".to_string(),
                     input_tokens: agent_run.input_tokens,
                     output_tokens: agent_run.output_tokens,
                     file_reads: agent_run.file_reads,
@@ -926,16 +930,28 @@ fn verify_work_dir(args: &VerifyArgs) -> Result<()> {
     eprintln!("Verifying work directory for task '{}'...", task_id);
     let result = verifier::verify_task(&work_dir, task_def)?;
 
-    // Output JSON
-    let output = serde_json::json!({
-        "task_id": task_id,
-        "compilation_pass": result.compilation_pass,
-        "tests_pass": result.tests_pass,
-        "caller_coverage": result.caller_coverage,
-        "overall_score": result.overall_score,
-    });
+    if args.json {
+        let output = serde_json::json!({
+            "task_id": task_id,
+            "compilation_pass": result.compilation_pass,
+            "tests_pass": result.tests_pass,
+            "caller_coverage": result.caller_coverage,
+            "overall_score": result.overall_score,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        let pass = |b: bool| if b { "PASS" } else { "FAIL" };
+        let coverage_str = match result.caller_coverage {
+            Some(c) => format!("{:.0}%", c * 100.0),
+            None => "N/A".to_string(),
+        };
+        println!("Verification: {}", task_id);
+        println!("  Compilation: {}", pass(result.compilation_pass));
+        println!("  Tests:       {}", pass(result.tests_pass));
+        println!("  Coverage:    {}", coverage_str);
+        println!("  Score:       {}", result.overall_score);
+    }
 
-    println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
 

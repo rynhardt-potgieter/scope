@@ -7,7 +7,7 @@ use crate::agent::AgentAction;
 use crate::behavior::{self, BehaviorMetrics};
 
 /// A single benchmark run result.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkRun {
     pub task_id: String,
     pub repetition: u32,
@@ -33,7 +33,7 @@ pub struct BenchmarkRun {
 }
 
 /// Correctness verification results for a single run.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CorrectnessResult {
     pub compilation_pass: bool,
     pub tests_pass: bool,
@@ -97,6 +97,9 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
     let with_scope: Vec<&BenchmarkRun> = results.iter().filter(|r| r.scope_enabled).collect();
     let without_scope: Vec<&BenchmarkRun> = results.iter().filter(|r| !r.scope_enabled).collect();
 
+    // Check if we have condition-level data (e.g. 3-arm mode)
+    let has_conditions = results.iter().any(|r| !r.condition.is_empty());
+
     out.push_str("### Token Consumption\n\n");
     out.push_str("| Condition | Mean input tokens | Std Dev | Reduction |\n");
     out.push_str("|-----------|-------------------|---------|-----------|");
@@ -104,43 +107,37 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
     let mean_without = mean_tokens(&without_scope);
     let mean_with = mean_tokens(&with_scope);
 
-    if !without_scope.is_empty() {
-        out.push_str(&format!(
-            "\n| Without Scope | {:.0} | \u{00b1}{:.0} | \u{2014} |\n",
-            mean_without,
-            std_dev_tokens(&without_scope)
-        ));
+    // When has_conditions is true, skip the boolean-split rows — the per-condition
+    // table below provides the accurate breakdown without aggregation errors.
+    if !has_conditions {
+        if !without_scope.is_empty() {
+            out.push_str(&format!(
+                "\n| Without Scope | {:.0} | \u{00b1}{:.0} | \u{2014} |\n",
+                mean_without,
+                std_dev_tokens(&without_scope)
+            ));
+        }
+        if !with_scope.is_empty() {
+            let reduction = if mean_without > 0.0 {
+                format!("**{:.1}%**", (1.0 - mean_with / mean_without) * 100.0)
+            } else {
+                "N/A".to_string()
+            };
+            out.push_str(&format!(
+                "| With Scope | {:.0} | \u{00b1}{:.0} | {} |\n",
+                mean_with,
+                std_dev_tokens(&with_scope),
+                reduction
+            ));
+        }
     }
-    if !with_scope.is_empty() {
-        let reduction = if mean_without > 0.0 {
-            format!("**{:.1}%**", (1.0 - mean_with / mean_without) * 100.0)
-        } else {
-            "N/A".to_string()
-        };
-        out.push_str(&format!(
-            "| With Scope | {:.0} | \u{00b1}{:.0} | {} |\n",
-            mean_with,
-            std_dev_tokens(&with_scope),
-            reduction
-        ));
-    }
-
-    // Check if we have 3-arm data (condition field populated)
-    let has_conditions = results.iter().any(|r| !r.condition.is_empty());
 
     if has_conditions {
         out.push_str("\n### Token Consumption by Condition\n\n");
         out.push_str("| Condition | Mean input tokens | Std Dev | Runs |\n");
         out.push_str("|-----------|-------------------|---------|------|\n");
 
-        let mut conditions: Vec<String> = results
-            .iter()
-            .filter(|r| !r.condition.is_empty())
-            .map(|r| r.condition.clone())
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        conditions.sort();
+        let conditions = unique_conditions(results);
 
         for condition in &conditions {
             let cond_runs: Vec<&BenchmarkRun> = results
@@ -222,23 +219,20 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
             )
         };
 
-        if !without_scope.is_empty() {
-            out.push_str(&format_decomp(&without_scope, "Without Scope"));
-        }
-        if !with_scope.is_empty() {
-            out.push_str(&format_decomp(&with_scope, "With Scope"));
+        // When has_conditions is true, skip the boolean-split rows — the
+        // per-condition table provides accurate decomposition without aggregation errors.
+        if !has_conditions {
+            if !without_scope.is_empty() {
+                out.push_str(&format_decomp(&without_scope, "Without Scope"));
+            }
+            if !with_scope.is_empty() {
+                out.push_str(&format_decomp(&with_scope, "With Scope"));
+            }
         }
 
         // Per-condition decomposition if 3-arm
         if has_conditions {
-            let mut conditions: Vec<String> = results
-                .iter()
-                .filter(|r| !r.condition.is_empty())
-                .map(|r| r.condition.clone())
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            conditions.sort();
+            let conditions = unique_conditions(results);
 
             for condition in &conditions {
                 let cond_runs: Vec<&BenchmarkRun> = results
@@ -421,6 +415,19 @@ fn extract_categories(results: &[BenchmarkRun]) -> Vec<String> {
     categories
 }
 
+/// Collect unique, sorted condition labels from results (excluding empty conditions).
+fn unique_conditions(results: &[BenchmarkRun]) -> Vec<String> {
+    let mut conditions: Vec<String> = results
+        .iter()
+        .filter(|r| !r.condition.is_empty())
+        .map(|r| r.condition.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    conditions.sort();
+    conditions
+}
+
 /// Extract category from a task ID (e.g. "ts-cat-a-01" => "cat-a").
 fn task_category(task_id: &str) -> String {
     let parts: Vec<&str> = task_id.split('-').collect();
@@ -428,49 +435,5 @@ fn task_category(task_id: &str) -> String {
         format!("{}-{}", parts[1], parts[2])
     } else {
         "unknown".to_string()
-    }
-}
-
-// We need Clone on BenchmarkRun and CorrectnessResult for serialization in the wrapper
-impl Clone for BenchmarkRun {
-    fn clone(&self) -> Self {
-        Self {
-            task_id: self.task_id.clone(),
-            repetition: self.repetition,
-            scope_enabled: self.scope_enabled,
-            condition: self.condition.clone(),
-            input_tokens: self.input_tokens,
-            output_tokens: self.output_tokens,
-            cache_creation_input_tokens: self.cache_creation_input_tokens,
-            cache_read_input_tokens: self.cache_read_input_tokens,
-            file_reads: self.file_reads,
-            scope_commands_called: self.scope_commands_called.clone(),
-            correctness: self.correctness.clone(),
-            duration_ms: self.duration_ms,
-            actions: self.actions.clone(),
-            behavior: self.behavior.clone(),
-        }
-    }
-}
-
-impl Clone for CorrectnessResult {
-    fn clone(&self) -> Self {
-        Self {
-            compilation_pass: self.compilation_pass,
-            tests_pass: self.tests_pass,
-            caller_coverage: self.caller_coverage,
-            overall_score: self.overall_score,
-        }
-    }
-}
-
-impl Default for CorrectnessResult {
-    fn default() -> Self {
-        Self {
-            compilation_pass: false,
-            tests_pass: false,
-            caller_coverage: None,
-            overall_score: 0,
-        }
     }
 }

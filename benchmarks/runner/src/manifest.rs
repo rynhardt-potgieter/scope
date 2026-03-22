@@ -124,7 +124,13 @@ fn collect_source_files(fixture_path: &Path) -> Result<Vec<(String, String)>> {
 
     for entry in WalkDir::new(fixture_path)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(|e| match e {
+            Ok(entry) => Some(entry),
+            Err(err) => {
+                eprintln!("  Warning: skipping entry during manifest scan: {}", err);
+                None
+            }
+        })
         .filter(|e| e.file_type().is_file())
     {
         let path = entry.path();

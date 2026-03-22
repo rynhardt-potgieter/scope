@@ -92,6 +92,7 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
     let mut scope_commands_called: Vec<String> = Vec::new();
     let mut actions: Vec<AgentAction> = Vec::new();
     let mut sequence: u32 = 0;
+    let mut skipped_lines: u32 = 0;
 
     for line in ndjson_text.lines() {
         let trimmed = line.trim();
@@ -101,7 +102,10 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
 
         let value: serde_json::Value = match serde_json::from_str(trimmed) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(_) => {
+                skipped_lines += 1;
+                continue;
+            }
         };
 
         // Accumulate usage
@@ -192,6 +196,10 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
                 is_edit,
             });
         }
+    }
+
+    if skipped_lines > 0 {
+        eprintln!("  [ndjson] Skipped {} non-JSON lines", skipped_lines);
     }
 
     NdjsonParseResult {
