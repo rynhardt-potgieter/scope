@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.7.3 (2026-03-22)
+
+### Improvements
+- **Upgraded benchmark output formatting** — box-drawing header with model/output/run count, per-run completion line showing duration/tokens/reads/actions/compilation, cleaner final summary with cost estimate. Removed debug command/workdir output.
+
+---
+
 ## scope-benchmark v0.7.2 (2026-03-22)
 
 ### New Features

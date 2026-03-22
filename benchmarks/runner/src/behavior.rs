@@ -727,7 +727,9 @@ mod tests {
         assert_eq!(extract_scope_subcommand("grep something"), None);
         // cd && scope pattern (Windows agents prefix with cd to temp dir)
         assert_eq!(
-            extract_scope_subcommand("cd \"C:\\Users\\tmp\\.tmp123\" && scope find \"payment decline\""),
+            extract_scope_subcommand(
+                "cd \"C:\\Users\\tmp\\.tmp123\" && scope find \"payment decline\""
+            ),
             Some("scope find".to_string())
         );
         assert_eq!(

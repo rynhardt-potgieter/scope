@@ -373,9 +373,6 @@ pub fn run_agent(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    eprintln!("  [agent] Command: {:?}", cmd);
-    eprintln!("  [agent] Work dir: {}", work_dir.display());
-
     let start = std::time::Instant::now();
 
     let mut child = cmd
@@ -534,7 +531,11 @@ pub fn run_agent(
         }
         if raw_lines.is_empty() {
             eprintln!("  [agent] WARNING: claude CLI produced no stdout output (0 NDJSON lines)");
-            eprintln!("  [agent] Exit code: {}, Duration: {}ms", status.code().unwrap_or(-1), duration_ms);
+            eprintln!(
+                "  [agent] Exit code: {}, Duration: {}ms",
+                status.code().unwrap_or(-1),
+                duration_ms
+            );
         }
     }
 
@@ -706,7 +707,9 @@ fn build_claude_command() -> Result<Command> {
         .output()
         .context("Failed to run 'npm config get prefix'. Is npm installed?")?;
 
-    let npm_prefix = String::from_utf8_lossy(&npm_output.stdout).trim().to_string();
+    let npm_prefix = String::from_utf8_lossy(&npm_output.stdout)
+        .trim()
+        .to_string();
     if npm_prefix.is_empty() {
         anyhow::bail!("npm config get prefix returned empty. Is npm installed?");
     }

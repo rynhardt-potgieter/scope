@@ -422,8 +422,12 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     let mut completed_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     if args.resume && json_path.is_file() {
-        let content = std::fs::read_to_string(&json_path)
-            .with_context(|| format!("Failed to read existing results for resume: {}", json_path.display()))?;
+        let content = std::fs::read_to_string(&json_path).with_context(|| {
+            format!(
+                "Failed to read existing results for resume: {}",
+                json_path.display()
+            )
+        })?;
         match serde_json::from_str::<reporter::ResultsWrapper>(&content) {
             Ok(wrapper) => {
                 for run in &wrapper.runs {
@@ -438,7 +442,10 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                 resumed_runs = wrapper.runs;
             }
             Err(e) => {
-                eprintln!("  [resume] Warning: failed to parse existing results: {}", e);
+                eprintln!(
+                    "  [resume] Warning: failed to parse existing results: {}",
+                    e
+                );
                 eprintln!("  [resume] Starting from scratch.");
             }
         }
@@ -472,10 +479,28 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         return Ok(());
     }
 
+    let model_label = args.model.as_deref().unwrap_or("default");
+    eprintln!("┌─────────────────────────────────────────────────────┐");
     eprintln!(
-        "Total runs: {} (parallel: {})\n",
-        total_runs, args.parallel
+        "│  scope benchmark · {} runs · {} · parallel {}{}│",
+        total_runs,
+        model_label,
+        args.parallel,
+        " ".repeat(53usize.saturating_sub(
+            22 + total_runs.to_string().len() + model_label.len() + args.parallel.to_string().len()
+        ))
     );
+    eprintln!(
+        "│  output: {:<43}│",
+        results_dir
+            .display()
+            .to_string()
+            .chars()
+            .take(43)
+            .collect::<String>()
+    );
+    eprintln!("└─────────────────────────────────────────────────────┘");
+    eprintln!();
     let benchmark_start = std::time::Instant::now();
 
     let all_runs = if args.parallel <= 1 {
@@ -504,7 +529,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                 format_duration(elapsed),
             );
             eprintln!(
-                "  → {} ({}, rep {})",
+                "  ▸ {} │ {} │ rep {}  ⏳ running...",
                 task_def.task.id, job.condition_label, job.rep
             );
 
@@ -523,6 +548,8 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
             let bm = behavior::compute_behavior_metrics(&agent_run.actions);
             let agent_run_duration_ms = agent_run.duration_ms;
             let run_output_tokens = agent_run.output_tokens;
+            let run_file_reads = agent_run.file_reads;
+            let run_action_count = agent_run.actions.len();
 
             runs.push(reporter::BenchmarkRun {
                 task_id: task_def.task.id.clone(),
@@ -546,14 +573,31 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                 behavior: Some(bm),
             });
 
+            let compilation_icon = if verification.compilation_pass {
+                "✓"
+            } else {
+                "✗"
+            };
+
             // Incremental save — write results after every completed run
             reporter::write_json_results(&runs, &json_path)?;
             eprintln!(
-                "    ✓ {}s | {} tokens out | saved ({}/{})\n",
+                "    {} {}s │ {} output tokens │ {} reads │ {} actions │ compile: {}",
+                compilation_icon,
                 agent_run_duration_ms / 1000,
                 run_output_tokens,
+                run_file_reads,
+                run_action_count,
+                if verification.compilation_pass {
+                    "pass"
+                } else {
+                    "FAIL"
+                }
+            );
+            eprintln!(
+                "    saved {}/{}\n",
                 runs.len(),
-                total_runs,
+                runs.len() + (total_runs - i - 1),
             );
 
             // work_dir (TempDir) is dropped here, cleaning up
@@ -589,20 +633,16 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                                 job.ndjson_path.as_deref(),
                             )?;
 
-                            let verification =
-                                verifier::verify_task(work_dir.path(), task_def)?;
-                            let bm =
-                                behavior::compute_behavior_metrics(&agent_run.actions);
+                            let verification = verifier::verify_task(work_dir.path(), task_def)?;
+                            let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
                             Ok(reporter::BenchmarkRun {
                                 task_id: task_def.task.id.clone(),
                                 repetition: job.rep,
                                 scope_enabled: job.scope_enabled,
                                 condition: job.condition_label.clone(),
-                                cache_creation_input_tokens: agent_run
-                                    .cache_creation_input_tokens,
-                                cache_read_input_tokens: agent_run
-                                    .cache_read_input_tokens,
+                                cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
+                                cache_read_input_tokens: agent_run.cache_read_input_tokens,
                                 input_tokens: agent_run.input_tokens,
                                 output_tokens: agent_run.output_tokens,
                                 file_reads: agent_run.file_reads,
@@ -629,19 +669,13 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                             runs.push(run);
                             drop(runs); // Release lock before file I/O
 
-                            let c = completed
-                                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                                + 1;
+                            let c = completed.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                             eprintln!("  [parallel] Completed {}/{}", c, total_runs);
 
                             // Incremental save
                             let runs = runs_mutex.lock().unwrap_or_else(|e| e.into_inner());
-                            if let Err(e) = reporter::write_json_results(&runs, &json_path)
-                            {
-                                eprintln!(
-                                    "  Warning: Failed to save incremental results: {}",
-                                    e
-                                );
+                            if let Err(e) = reporter::write_json_results(&runs, &json_path) {
+                                eprintln!("  Warning: Failed to save incremental results: {}", e);
                             }
                         }
                         Ok(Err(e)) => {
@@ -671,32 +705,53 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     // Final summary
     let total_elapsed = benchmark_start.elapsed().as_secs();
     let total_output: u64 = all_runs.iter().map(|r| r.output_tokens).sum();
-    let total_cache_create: u64 = all_runs.iter().map(|r| r.cache_creation_input_tokens).sum();
-    let total_cache_read: u64 = all_runs.iter().map(|r| r.cache_read_input_tokens).sum();
+    let _total_cache_create: u64 = all_runs.iter().map(|r| r.cache_creation_input_tokens).sum();
+    let _total_cache_read: u64 = all_runs.iter().map(|r| r.cache_read_input_tokens).sum();
 
-    eprintln!("\n=== BENCHMARK COMPLETE ===");
+    let comp_pass = all_runs
+        .iter()
+        .filter(|r| r.correctness.compilation_pass)
+        .count();
+    let est_cost = all_runs
+        .iter()
+        .map(|r| {
+            (r.cache_creation_input_tokens as f64 * 3.75
+                + r.cache_read_input_tokens as f64 * 0.375
+                + r.output_tokens as f64 * 15.0
+                + r.input_tokens as f64 * 3.0)
+                / 1_000_000.0
+        })
+        .sum::<f64>();
+
+    eprintln!();
+    eprintln!("┌─────────────────────────────────────────────────────┐");
+    eprintln!("│  BENCHMARK COMPLETE                                 │");
+    eprintln!("├─────────────────────────────────────────────────────┤");
+    eprintln!("│  Runs:          {}/{:<36}│", all_runs.len(), total_runs);
+    eprintln!("│  Duration:      {:<38}│", format_duration(total_elapsed));
     eprintln!(
-        "  Runs: {}/{} completed in {}",
+        "│  Compilation:   {}/{} pass ({:.0}%){:<24}│",
+        comp_pass,
         all_runs.len(),
-        total_runs,
-        format_duration(total_elapsed)
+        comp_pass as f64 / all_runs.len() as f64 * 100.0,
+        ""
     );
-    eprintln!(
-        "  Tokens: {} output, {} cache create, {} cache read",
-        total_output, total_cache_create, total_cache_read
-    );
+    eprintln!("│  Output tokens: {:<38}│", format!("{}", total_output));
+    eprintln!("│  Est. cost:     ${:<37.2}│", est_cost);
+    eprintln!("└─────────────────────────────────────────────────────┘");
 
     // Final JSON save (ensures we have the complete set even for parallel path)
     reporter::write_json_results(&all_runs, &json_path)?;
-    eprintln!("  Results: {}", json_path.display());
+    eprintln!("\n  📄 {}", json_path.display());
 
     // Write markdown summary and environment (only at the end)
     let md_path = results_dir.join("summary.md");
     reporter::write_markdown_summary(&all_runs, &md_path)?;
-    eprintln!("  Summary: {}", md_path.display());
+    eprintln!("  📊 {}", md_path.display());
 
     let env_path = results_dir.join("environment.json");
     reporter::write_environment(&env_path)?;
+    eprintln!("  🖥  {}", env_path.display());
 
     Ok(())
 }
