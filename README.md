@@ -234,8 +234,8 @@ Your codebase
        +-------+--------+
                v
 +-----------------------------+
-|  scope query engine             |  Combines structural traversal and text search.
-|                              |  Returns labelled, token-efficient output designed
+|  scope query engine         |  Combines structural traversal and text search.
+|                             |  Returns labelled, token-efficient output designed
 +-----------------------------+  for LLM consumption, not human readability.
 ```
 
