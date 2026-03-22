@@ -29,3 +29,4 @@ CLAUDE.md
 # Overview docs — local reference only, never commit
 /overview/
 .env
+*.ndjson
