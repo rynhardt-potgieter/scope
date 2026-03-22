@@ -360,8 +360,7 @@ pub fn run_agent(
     }
 
     if !scope_enabled {
-        cmd.arg("--disallowedTools")
-            .arg("Bash(scope:*)");
+        cmd.arg("--disallowedTools").arg("Bash(scope:*)");
     }
 
     cmd.current_dir(work_dir)
