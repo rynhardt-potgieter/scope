@@ -744,13 +744,13 @@ pub fn print_trace(symbol_name: &str, result: &TraceResult) {
 
         // First step: the entry point (no arrow prefix)
         let entry = &call_path.steps[0];
-        let entry_name = format_step_name(entry);
+        let entry_name = entry.symbol_name.clone();
         println!("Path {}: {}", i + 1, entry_name);
 
         // Subsequent steps: indented with └─→
         for (step_idx, step) in call_path.steps.iter().enumerate().skip(1) {
             let indent = "  ".repeat(step_idx);
-            let step_name = format_step_name(step);
+            let step_name = step.symbol_name.clone();
             let path = normalize_path(&step.file_path);
             let location = format!("{path}:{}", step.line);
             println!(
@@ -955,15 +955,6 @@ pub fn print_map(
             println!("  {:<24}{:<14}{}", dir.directory, file_label, sym_label);
         }
     }
-}
-
-/// Format a step name, using parent.name if it looks like a method with a class parent.
-fn format_step_name(step: &crate::core::graph::CallPathStep) -> String {
-    // If the symbol ID contains a parent class, show ClassName.methodName
-    // ID format: "file::ClassName::class" for classes,
-    //            "file::methodName::method" for methods with parent_id
-    // But we only have the name here. The name is sufficient.
-    step.symbol_name.clone()
 }
 
 /// Human-readable label for an impact depth level.

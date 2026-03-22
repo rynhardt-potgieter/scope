@@ -39,6 +39,10 @@ pub struct TraceArgs {
     #[arg(long, default_value = "10")]
     pub max_depth: usize,
 
+    /// Maximum number of paths to display (default: 20)
+    #[arg(long, default_value = "20")]
+    pub limit: usize,
+
     /// Output as JSON instead of human-readable format
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -68,20 +72,28 @@ pub fn run(args: &TraceArgs, project_root: &Path) -> Result<()> {
         )
     })?;
 
-    let result = graph.find_call_paths(&symbol.id, &symbol.name, args.max_depth)?;
+    let mut result = graph.find_call_paths(&symbol.id, &symbol.name, args.max_depth)?;
+    let total = result.paths.len();
+    let truncated = total > args.limit;
+
+    if truncated {
+        result.paths.truncate(args.limit);
+    }
 
     if args.json {
-        let total = result.paths.len();
         let output = JsonOutput {
             command: "trace",
             symbol: Some(args.symbol.clone()),
             data: &result,
-            truncated: false,
+            truncated,
             total,
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         formatter::print_trace(&args.symbol, &result);
+        if truncated {
+            println!("... {} more paths (use --limit to show more)", total - args.limit);
+        }
     }
 
     Ok(())

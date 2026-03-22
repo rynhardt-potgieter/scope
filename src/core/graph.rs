@@ -588,38 +588,39 @@ impl Graph {
             .filter_map(|r| r.ok())
             .collect();
 
-        // Step 3: Filter — keep symbols not in the called set.
-        // A symbol is "called" if its id, name, or any member-call pattern (*.name) appears
-        // in the called set.
-        let mut entrypoints = Vec::new();
+        // Step 3: Build a HashSet of bare names from called targets for O(1) suffix matching.
+        let bare_called_names: std::collections::HashSet<&str> = called_set
+            .iter()
+            .filter_map(|to_id| to_id.rsplit('.').next())
+            .collect();
+
+        // Step 4: Pre-compute outgoing call counts in a single aggregate query.
+        let mut outgoing_stmt = self
+            .conn
+            .prepare("SELECT from_id, COUNT(*) FROM edges WHERE kind = 'calls' GROUP BY from_id")?;
+        let outgoing_counts: HashMap<String, usize> = outgoing_stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))?
+            .filter_map(|r| r.ok())
+            .map(|(id, count)| (id, count as usize))
+            .collect();
+
+        // Step 5: Filter — keep symbols not in the called set.
+        let mut results = Vec::new();
         for sym in &all_symbols {
             // Skip test files
-            let path_lower = sym.file_path.to_lowercase();
-            if path_lower.contains("test") || path_lower.contains("spec") {
+            if is_test_file(&sym.file_path) {
                 continue;
             }
 
-            // Check if this symbol is called by any edge
+            // Check if this symbol is called by any edge (3 patterns, all O(1))
             let is_called = called_set.contains(&sym.id)
                 || called_set.contains(&sym.name)
-                || called_set
-                    .iter()
-                    .any(|to_id| to_id.ends_with(&format!(".{}", sym.name)));
+                || bare_called_names.contains(sym.name.as_str());
 
             if !is_called {
-                entrypoints.push(sym.clone());
+                let outgoing = outgoing_counts.get(&sym.id).copied().unwrap_or(0);
+                results.push((sym.clone(), outgoing));
             }
-        }
-
-        // Step 4: For each entry point, count outgoing calls.
-        let mut results = Vec::new();
-        for sym in entrypoints {
-            let outgoing: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM edges WHERE from_id = ?1 AND kind = 'calls'",
-                params![sym.id],
-                |row| row.get(0),
-            )?;
-            results.push((sym, outgoing as usize));
         }
 
         Ok(results)
@@ -1675,8 +1676,10 @@ impl Graph {
     /// Uses the same matching logic as `get_caller_count`: exact ID, bare name,
     /// and member-call patterns (e.g. `svc.processPayment`).
     pub fn get_symbols_by_importance(&self, limit: usize) -> Result<Vec<(Symbol, usize)>> {
-        // Fetch all function/method symbols first, then compute caller counts
-        // using the same matching logic as get_caller_count.
+        // Pre-compute all caller counts in a single aggregate query to avoid N+1.
+        let caller_counts = self.get_all_caller_counts()?;
+
+        // Fetch all function/method symbols.
         let mut stmt = self
             .conn
             .prepare("SELECT * FROM symbols WHERE kind IN ('function', 'method')")?;
@@ -1686,10 +1689,10 @@ impl Graph {
             .collect();
 
         let mut scored: Vec<(Symbol, usize)> = Vec::new();
-        for sym in all_symbols {
-            let count = self.get_caller_count(&sym.id)?;
+        for sym in &all_symbols {
+            let count = resolve_caller_count(&caller_counts, &sym.id, &sym.name);
             if count > 0 {
-                scored.push((sym, count));
+                scored.push((sym.clone(), count));
             }
         }
 
@@ -1699,11 +1702,32 @@ impl Graph {
         Ok(scored)
     }
 
+    /// Fetch all call-edge target counts in a single aggregate query.
+    ///
+    /// Returns a map from `to_id` to the number of call edges targeting it.
+    /// Used to avoid N+1 queries when computing importance for many symbols.
+    fn get_all_caller_counts(&self) -> Result<HashMap<String, usize>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT to_id, COUNT(*) FROM edges WHERE kind = 'calls' GROUP BY to_id")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        let mut counts = HashMap::new();
+        for row in rows {
+            let (to_id, count) = row?;
+            counts.insert(to_id, count as usize);
+        }
+        Ok(counts)
+    }
+
     /// Get directory-level statistics.
     ///
     /// Returns `(directory_path, file_count, symbol_count)` tuples grouped by
     /// the top-level directory component (after stripping a leading `src/`).
     pub fn get_directory_stats(&self) -> Result<Vec<(String, usize, usize)>> {
+
+
         let mut stmt = self.conn.prepare("SELECT file_path FROM symbols")?;
         let paths: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(0))?
@@ -1863,4 +1887,36 @@ pub fn is_test_file(file_path: &str) -> bool {
         || lower.contains("_spec.")
         || lower.starts_with("test/")
         || lower.starts_with("tests/")
+}
+
+/// Resolve a symbol's caller count from a pre-computed counts map.
+///
+/// Matches using the same three patterns as `get_caller_count`:
+/// 1. Exact ID match
+/// 2. Bare name match
+/// 3. Member-call suffix match (e.g., `svc.processPayment`)
+fn resolve_caller_count(
+    counts: &HashMap<String, usize>,
+    symbol_id: &str,
+    symbol_name: &str,
+) -> usize {
+    let mut total = 0usize;
+    // Pattern 1: exact ID match
+    if let Some(&c) = counts.get(symbol_id) {
+        total += c;
+    }
+    // Pattern 2: bare name match (only if different from ID)
+    if symbol_name != symbol_id {
+        if let Some(&c) = counts.get(symbol_name) {
+            total += c;
+        }
+    }
+    // Pattern 3: member-call suffix (e.g., "svc.processPayment")
+    let suffix = format!(".{}", symbol_name);
+    for (to_id, &count) in counts {
+        if to_id.ends_with(&suffix) && to_id != symbol_id && to_id != symbol_name {
+            total += count;
+        }
+    }
+    total
 }

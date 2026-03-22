@@ -14,7 +14,7 @@ use clap::Args;
 use serde::Serialize;
 use std::path::Path;
 
-use crate::commands::entrypoints::{classify_group, EntrypointInfo};
+use crate::commands::entrypoints::EntrypointInfo;
 use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
@@ -117,62 +117,10 @@ pub fn run(args: &MapArgs, project_root: &Path) -> Result<()> {
         languages: graph.get_languages()?,
     };
 
-    // 2. Get entry points (reuse entrypoints logic).
+    // 2. Get entry points (reuse shared collapse_and_group logic).
     let raw_entrypoints = graph.get_entrypoints()?;
-
-    // Collapse class entries: count child methods and skip individual methods.
-    let mut class_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut class_method_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-
-    for (sym, _) in &raw_entrypoints {
-        if sym.kind == "class" {
-            class_ids.insert(sym.id.clone());
-            let methods = graph.get_methods(&sym.id).unwrap_or_default();
-            class_method_counts.insert(sym.id.clone(), methods.len());
-        }
-    }
-
-    let mut ep_infos: Vec<EntrypointInfo> = Vec::new();
-    for (sym, outgoing) in &raw_entrypoints {
-        if let Some(ref parent) = sym.parent_id {
-            if class_ids.contains(parent) {
-                continue;
-            }
-        }
-
-        let method_count = class_method_counts.get(&sym.id).copied().unwrap_or(0);
-
-        ep_infos.push(EntrypointInfo {
-            name: sym.name.clone(),
-            file_path: sym.file_path.clone(),
-            method_count,
-            outgoing_call_count: *outgoing,
-            kind: sym.kind.clone(),
-        });
-    }
-
-    // Group entry points by classification, limit to 8.
-    let group_order = [
-        "API Controllers",
-        "Background Workers",
-        "Event Handlers",
-        "Other",
-    ];
-    let mut ep_groups: Vec<(String, Vec<EntrypointInfo>)> = Vec::new();
-    let mut ep_total = 0usize;
-
-    for &group_name in &group_order {
-        let members: Vec<EntrypointInfo> = ep_infos
-            .iter()
-            .filter(|e| classify_group(&e.file_path) == group_name)
-            .cloned()
-            .collect();
-        if !members.is_empty() {
-            ep_total += members.len();
-            ep_groups.push((group_name.to_string(), members));
-        }
-    }
+    let (ep_groups, ep_total, _ep_file_count) =
+        crate::commands::entrypoints::collapse_and_group(&raw_entrypoints, &graph);
 
     // 3. Get core symbols by importance.
     let raw_core = graph.get_symbols_by_importance(args.limit)?;

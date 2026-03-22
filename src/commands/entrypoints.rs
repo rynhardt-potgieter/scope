@@ -61,42 +61,31 @@ pub fn classify_group(file_path: &str) -> &'static str {
     }
 }
 
-/// Run the `scope entrypoints` command.
-pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
-    let scope_dir = project_root.join(".scope");
-
-    if !scope_dir.exists() {
-        bail!("No .scope/ directory found. Run 'scope init' first.");
-    }
-
-    let db_path = scope_dir.join("graph.db");
-    if !db_path.exists() {
-        bail!("No index found. Run 'scope index' to build one first.");
-    }
-
-    let graph = Graph::open(&db_path)?;
-    let raw_entrypoints = graph.get_entrypoints()?;
-
-    // Collapse class entries: if a class is an entry point, count its child
-    // methods and skip individual methods that belong to that class.
+/// Collapse and group raw entrypoints into classified groups.
+///
+/// Collapses class-level entries (counts child methods, skips individual
+/// methods belonging to entry-point classes), then groups by classification
+/// (API Controllers, Background Workers, Event Handlers, Other).
+///
+/// Returns `(groups, total_count, file_count)`.
+pub(crate) fn collapse_and_group(
+    raw_entrypoints: &[(crate::core::graph::Symbol, usize)],
+    graph: &Graph,
+) -> (Vec<(String, Vec<EntrypointInfo>)>, usize, usize) {
     let mut class_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut class_method_counts: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
 
-    // First pass: identify classes and count their methods.
-    for (sym, _) in &raw_entrypoints {
+    for (sym, _) in raw_entrypoints {
         if sym.kind == "class" {
             class_ids.insert(sym.id.clone());
-            // Count methods from the graph (not just entry-point methods).
             let methods = graph.get_methods(&sym.id).unwrap_or_default();
             class_method_counts.insert(sym.id.clone(), methods.len());
         }
     }
 
-    // Second pass: build EntrypointInfo, skipping methods whose parent is an entry-point class.
     let mut infos: Vec<EntrypointInfo> = Vec::new();
-    for (sym, outgoing) in &raw_entrypoints {
-        // Skip methods that belong to an entry-point class.
+    for (sym, outgoing) in raw_entrypoints {
         if let Some(ref parent) = sym.parent_id {
             if class_ids.contains(parent) {
                 continue;
@@ -114,13 +103,11 @@ pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
         });
     }
 
-    // Count unique files.
     let unique_files: std::collections::HashSet<&str> =
         infos.iter().map(|e| e.file_path.as_str()).collect();
     let file_count = unique_files.len();
     let total = infos.len();
 
-    // Group by classification.
     let group_order = [
         "API Controllers",
         "Background Workers",
@@ -139,6 +126,26 @@ pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
             groups.push((group_name.to_string(), members));
         }
     }
+
+    (groups, total, file_count)
+}
+
+/// Run the `scope entrypoints` command.
+pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
+    let scope_dir = project_root.join(".scope");
+
+    if !scope_dir.exists() {
+        bail!("No .scope/ directory found. Run 'scope init' first.");
+    }
+
+    let db_path = scope_dir.join("graph.db");
+    if !db_path.exists() {
+        bail!("No index found. Run 'scope index' to build one first.");
+    }
+
+    let graph = Graph::open(&db_path)?;
+    let raw_entrypoints = graph.get_entrypoints()?;
+    let (groups, total, file_count) = collapse_and_group(&raw_entrypoints, &graph);
 
     if args.json {
         let output = JsonOutput {
