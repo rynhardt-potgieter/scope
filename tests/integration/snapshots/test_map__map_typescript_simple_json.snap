@@ -56,27 +56,27 @@ expression: normalized
     ],
     "core_symbols": [
       {
-        "name": "processPayment",
-        "kind": "method",
-        "file_path": "src/payments/service.ts",
-        "caller_count": 2
-      },
-      {
         "name": "info",
         "kind": "method",
         "file_path": "src/utils/logger.ts",
         "caller_count": 2
       },
       {
-        "name": "refundPayment",
+        "name": "processPayment",
         "kind": "method",
         "file_path": "src/payments/service.ts",
-        "caller_count": 1
+        "caller_count": 2
       },
       {
         "name": "error",
         "kind": "method",
         "file_path": "src/utils/logger.ts",
+        "caller_count": 1
+      },
+      {
+        "name": "refundPayment",
+        "kind": "method",
+        "file_path": "src/payments/service.ts",
         "caller_count": 1
       }
     ],

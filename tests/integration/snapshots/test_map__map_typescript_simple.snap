@@ -13,10 +13,10 @@ Entry points:
   Logger                          utils/                             → 2 methods
 
 Core symbols (by caller count):
-  processPayment                  2 callers     payments/service.ts
   info                            2 callers     utils/logger.ts
-  refundPayment                   1 caller      payments/service.ts
+  processPayment                  2 callers     payments/service.ts
   error                           1 caller      utils/logger.ts
+  refundPayment                   1 caller      payments/service.ts
 
 Architecture:
   controllers/            2 files       9 symbols

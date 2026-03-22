@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.3 (2026-03-23)
+
+### Fix
+- **Deterministic sort in `scope map` core symbols** — symbols with equal caller counts now sort by name as a tiebreaker. Fixes non-deterministic output order that caused snapshot test failures in CI.
+
+---
+
 ## scope-benchmark v0.7.4 (2026-03-22)
 
 ### Improvements

@@ -1698,8 +1698,8 @@ impl Graph {
             }
         }
 
-        // Sort by caller count descending, take top N.
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        // Sort by caller count descending, then by name for deterministic output.
+        scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.name.cmp(&b.0.name)));
         scored.truncate(limit);
         Ok(scored)
     }
