@@ -6,7 +6,7 @@ mod reporter;
 mod task;
 mod verifier;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 /// Benchmark harness for the Scope CLI tool.
@@ -137,6 +137,11 @@ pub struct PrepareArgs {
     #[arg(long)]
     pub compare: bool,
 
+    /// Number of experimental conditions (default: 1 = with-scope only,
+    /// 2 = with --compare, 3 = without-scope + with-scope + with-scope-preloaded)
+    #[arg(long, default_value = "1")]
+    pub conditions: u32,
+
     /// Output directory for prepared work dirs (default: benchmarks/prepared/)
     #[arg(long)]
     pub output_dir: Option<String>,
@@ -147,6 +152,12 @@ pub struct ImportArgs {
     /// Path to a JSON file with manually captured results
     #[arg(long)]
     pub input: String,
+
+    /// Directory containing raw NDJSON files from Claude CLI sessions.
+    /// Files should be named: <task_id>-<condition>.ndjson
+    /// (e.g. "ts-cat-a-01-with-scope.ndjson")
+    #[arg(long)]
+    pub ndjson_dir: Option<String>,
 
     /// Output format for the analysis report
     #[arg(long, value_enum, default_value = "markdown")]
@@ -263,12 +274,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     rep
                 );
 
-                let agent_run = agent::run_agent(
-                    task_def,
-                    true,
-                    &corpus_path,
-                    backup.as_deref(),
-                )?;
+                let agent_run = agent::run_agent(task_def, true, &corpus_path, backup.as_deref())?;
                 let verification = verifier::verify_task(&corpus_path, task_def)?;
                 let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
@@ -276,6 +282,9 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     task_id: task_def.task.id.clone(),
                     repetition: rep,
                     scope_enabled: true,
+                    cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
+                    cache_read_input_tokens: agent_run.cache_read_input_tokens,
+                    condition: String::new(),
                     input_tokens: agent_run.input_tokens,
                     output_tokens: agent_run.output_tokens,
                     file_reads: agent_run.file_reads,
@@ -311,12 +320,7 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     rep
                 );
 
-                let agent_run = agent::run_agent(
-                    task_def,
-                    false,
-                    &corpus_path,
-                    backup.as_deref(),
-                )?;
+                let agent_run = agent::run_agent(task_def, false, &corpus_path, backup.as_deref())?;
                 let verification = verifier::verify_task(&corpus_path, task_def)?;
                 let bm = behavior::compute_behavior_metrics(&agent_run.actions);
 
@@ -324,6 +328,9 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                     task_id: task_def.task.id.clone(),
                     repetition: rep,
                     scope_enabled: false,
+                    cache_creation_input_tokens: agent_run.cache_creation_input_tokens,
+                    cache_read_input_tokens: agent_run.cache_read_input_tokens,
+                    condition: String::new(),
                     input_tokens: agent_run.input_tokens,
                     output_tokens: agent_run.output_tokens,
                     file_reads: agent_run.file_reads,
@@ -383,10 +390,7 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
     let tasks = if args.all {
         all_tasks.iter().collect::<Vec<_>>()
     } else if let Some(ref task_id) = args.task {
-        all_tasks
-            .iter()
-            .filter(|t| t.task.id == *task_id)
-            .collect()
+        all_tasks.iter().filter(|t| t.task.id == *task_id).collect()
     } else if let Some(ref lang) = args.language {
         all_tasks
             .iter()
@@ -403,16 +407,22 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
     // Verify fixture integrity before preparing
     let mut verified_fixtures: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    let output_base = args
-        .output_dir
-        .as_deref()
-        .unwrap_or("benchmarks/prepared");
+    let output_base = args.output_dir.as_deref().unwrap_or("benchmarks/prepared");
     std::fs::create_dir_all(output_base)?;
 
-    let conditions: Vec<bool> = if args.compare {
-        vec![true, false]
+    let ndjson_dir = std::path::PathBuf::from(output_base).join("ndjson");
+    std::fs::create_dir_all(&ndjson_dir)?;
+
+    let conditions: Vec<(&str, bool)> = if args.conditions >= 3 {
+        vec![
+            ("without-scope", false),
+            ("with-scope", true),
+            ("with-scope-preloaded", true),
+        ]
+    } else if args.compare || args.conditions == 2 {
+        vec![("with-scope", true), ("without-scope", false)]
     } else {
-        vec![true]
+        vec![("with-scope", true)]
     };
 
     let mut manifest = Vec::new();
@@ -435,12 +445,7 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
             verified_fixtures.insert(corpus_key);
         }
 
-        for &scope_enabled in &conditions {
-            let condition_label = if scope_enabled {
-                "with-scope"
-            } else {
-                "without-scope"
-            };
+        for &(condition_label, scope_enabled) in &conditions {
             let dir_name = format!("{}-{}", task_def.task.id, condition_label);
             let work_dir = std::path::PathBuf::from(output_base).join(&dir_name);
 
@@ -472,11 +477,49 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
                 }
             }
 
+            // Handle pre-loaded scope map variant
+            if condition_label == "with-scope-preloaded" {
+                let preloaded_variant = work_dir.join("CLAUDE.md.with-scope-preloaded");
+                if preloaded_variant.is_file() {
+                    // Try to run scope map on the work directory
+                    let map_output = std::process::Command::new("scope")
+                        .args(["map"])
+                        .current_dir(&work_dir)
+                        .output();
+
+                    match map_output {
+                        Ok(output) if output.status.success() => {
+                            let map_text = String::from_utf8_lossy(&output.stdout);
+                            let template = std::fs::read_to_string(&preloaded_variant)?;
+                            let rendered = template.replace("{{SCOPE_MAP_OUTPUT}}", &map_text);
+                            std::fs::write(work_dir.join("CLAUDE.md"), rendered)?;
+                        }
+                        _ => {
+                            eprintln!(
+                                "  Warning: scope map failed for {}. Falling back to with-scope variant.",
+                                dir_name
+                            );
+                            let fallback = work_dir.join("CLAUDE.md.with-scope");
+                            if fallback.is_file() {
+                                std::fs::copy(&fallback, work_dir.join("CLAUDE.md"))?;
+                            }
+                        }
+                    }
+                } else {
+                    // No preloaded template — fall back to with-scope
+                    let fallback = work_dir.join("CLAUDE.md.with-scope");
+                    if fallback.is_file() {
+                        std::fs::copy(&fallback, work_dir.join("CLAUDE.md"))?;
+                    }
+                }
+            }
+
             let entry = serde_json::json!({
                 "task_id": task_def.task.id,
                 "category": task_def.task.category,
                 "language": task_def.task.language,
                 "scope_enabled": scope_enabled,
+                "condition": condition_label,
                 "work_dir": work_dir.display().to_string(),
                 "prompt": task_def.prompt.text,
             });
@@ -499,8 +542,12 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
     eprintln!("\nTo run manually, for each entry in manifest.json:");
     eprintln!("  1. cd into the work_dir");
     eprintln!("  2. Run the prompt as a Claude Code agent");
-    eprintln!("  3. Record: total_tokens, tool_uses, duration_ms from agent metadata");
-    eprintln!("  4. Use `benchmark import` to ingest results");
+    eprintln!("  3. Save the raw NDJSON output: claude -p \"<prompt>\" --output-format stream-json > {}/{{task_id}}-{{condition}}.ndjson", ndjson_dir.display());
+    eprintln!("  4. Record: total_tokens, tool_uses, duration_ms from agent metadata");
+    eprintln!(
+        "  5. Use `benchmark import --input <results.json> --ndjson-dir {}` to ingest",
+        ndjson_dir.display()
+    );
 
     Ok(())
 }
@@ -524,9 +571,8 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
 /// ]
 /// ```
 fn import_results(args: &ImportArgs) -> Result<()> {
-    let content = std::fs::read_to_string(&args.input).map_err(|e| {
-        anyhow::anyhow!("Failed to read import file {}: {}", args.input, e)
-    })?;
+    let content = std::fs::read_to_string(&args.input)
+        .map_err(|e| anyhow::anyhow!("Failed to read import file {}: {}", args.input, e))?;
 
     // Try parsing as array of runs or as ResultsWrapper
     let runs: Vec<reporter::BenchmarkRun> =
@@ -546,7 +592,7 @@ fn import_results(args: &ImportArgs) -> Result<()> {
     }
 
     // Recompute behavior metrics if missing
-    let runs: Vec<reporter::BenchmarkRun> = runs
+    let mut runs: Vec<reporter::BenchmarkRun> = runs
         .into_iter()
         .map(|mut run| {
             if run.behavior.is_none() && !run.actions.is_empty() {
@@ -555,6 +601,66 @@ fn import_results(args: &ImportArgs) -> Result<()> {
             run
         })
         .collect();
+
+    // Populate actions from NDJSON files if provided
+    if let Some(ref ndjson_dir) = args.ndjson_dir {
+        let ndjson_path = std::path::Path::new(ndjson_dir);
+        if !ndjson_path.is_dir() {
+            anyhow::bail!("NDJSON directory does not exist: {}", ndjson_dir);
+        }
+
+        let mut parsed_count = 0u32;
+        for run in &mut runs {
+            if !run.actions.is_empty() {
+                continue; // Already has actions, skip
+            }
+
+            let condition_label = if !run.condition.is_empty() {
+                run.condition.clone()
+            } else if run.scope_enabled {
+                "with-scope".to_string()
+            } else {
+                "without-scope".to_string()
+            };
+
+            let ndjson_file =
+                ndjson_path.join(format!("{}-{}.ndjson", run.task_id, condition_label));
+
+            if ndjson_file.is_file() {
+                let ndjson_text = std::fs::read_to_string(&ndjson_file).with_context(|| {
+                    format!("Failed to read NDJSON file: {}", ndjson_file.display())
+                })?;
+                let parsed = agent::parse_ndjson_actions(&ndjson_text);
+
+                run.actions = parsed.actions;
+                run.scope_commands_called = parsed.scope_commands_called;
+                if run.file_reads == 0 {
+                    run.file_reads = parsed.file_reads;
+                }
+
+                // Recompute behavior metrics with the new actions
+                if !run.actions.is_empty() {
+                    run.behavior = Some(behavior::compute_behavior_metrics(&run.actions));
+                }
+
+                parsed_count += 1;
+                eprintln!(
+                    "  Parsed {} actions from NDJSON for {} ({})",
+                    run.actions.len(),
+                    run.task_id,
+                    condition_label
+                );
+            }
+        }
+
+        if parsed_count > 0 {
+            eprintln!("Enriched {} runs with NDJSON action data.", parsed_count);
+        } else {
+            eprintln!(
+                "Warning: --ndjson-dir provided but no matching NDJSON files found for any runs."
+            );
+        }
+    }
 
     eprintln!("Imported {} runs.", runs.len());
 
@@ -799,10 +905,7 @@ fn verify_work_dir(args: &VerifyArgs) -> Result<()> {
         id.clone()
     } else {
         // Extract from dir name: e.g. "ts-cat-a-01-with-scope" -> "ts-cat-a-01"
-        let dir_name = work_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let dir_name = work_dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
         extract_task_id_from_dir_name(dir_name).ok_or_else(|| {
             anyhow::anyhow!(
                 "Could not extract task ID from directory name '{}'. Use --task to specify.",
@@ -838,16 +941,18 @@ fn verify_work_dir(args: &VerifyArgs) -> Result<()> {
 
 /// Extract task ID from a prepared directory name.
 ///
-/// Directory names look like "ts-cat-a-01-with-scope" or "cs-cat-b-01-without-scope".
-/// The task ID is everything before "-with-scope" or "-without-scope".
+/// Directory names look like "ts-cat-a-01-with-scope", "cs-cat-b-01-without-scope",
+/// or "ts-cat-a-01-with-scope-preloaded".
+/// The task ID is everything before the condition suffix.
 fn extract_task_id_from_dir_name(dir_name: &str) -> Option<String> {
-    if let Some(idx) = dir_name.find("-with-scope") {
-        Some(dir_name[..idx].to_string())
-    } else if let Some(idx) = dir_name.find("-without-scope") {
-        Some(dir_name[..idx].to_string())
-    } else {
-        None
+    // Check longest suffix first to avoid partial match
+    let suffixes = ["-with-scope-preloaded", "-without-scope", "-with-scope"];
+    for suffix in &suffixes {
+        if let Some(idx) = dir_name.find(suffix) {
+            return Some(dir_name[..idx].to_string());
+        }
     }
+    None
 }
 
 /// Find all fixture directories.
@@ -905,5 +1010,13 @@ mod tests {
     #[test]
     fn test_extract_task_id_unknown_format() {
         assert_eq!(extract_task_id_from_dir_name("random-dir-name"), None);
+    }
+
+    #[test]
+    fn test_extract_task_id_with_scope_preloaded() {
+        assert_eq!(
+            extract_task_id_from_dir_name("ts-cat-a-01-with-scope-preloaded"),
+            Some("ts-cat-a-01".to_string())
+        );
     }
 }

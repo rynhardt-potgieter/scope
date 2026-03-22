@@ -34,6 +34,10 @@ pub struct AgentRun {
     pub input_tokens: u64,
     /// Total output tokens produced by the agent
     pub output_tokens: u64,
+    /// Cache creation input tokens (tokens computed fresh for caching)
+    pub cache_creation_input_tokens: u64,
+    /// Cache read input tokens (tokens read from prompt cache)
+    pub cache_read_input_tokens: u64,
     /// Number of full source file reads during the task
     pub file_reads: u32,
     /// Number of file edit/write operations
@@ -52,6 +56,153 @@ pub struct AgentRun {
     pub exit_code: i32,
     /// Ordered list of all tool actions taken by the agent
     pub actions: Vec<AgentAction>,
+}
+
+/// Parsed data from a saved NDJSON stream.
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct NdjsonParseResult {
+    /// Ordered list of agent tool actions
+    pub actions: Vec<AgentAction>,
+    /// Total input tokens from usage events
+    pub input_tokens: u64,
+    /// Total output tokens from usage events
+    pub output_tokens: u64,
+    /// Cache creation input tokens
+    pub cache_creation_input_tokens: u64,
+    /// Cache read input tokens
+    pub cache_read_input_tokens: u64,
+    /// Scope commands detected in Bash calls
+    pub scope_commands_called: Vec<String>,
+    /// Count of file Read operations
+    pub file_reads: u32,
+}
+
+/// Parse a saved NDJSON stream into structured action data.
+///
+/// Reuses the same extraction logic as `run_agent()` but operates on saved
+/// text rather than a live process stream. Use this when importing manually
+/// captured benchmark results that include raw Claude CLI output.
+pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
+    let mut input_tokens: u64 = 0;
+    let mut output_tokens: u64 = 0;
+    let mut cache_creation_input_tokens: u64 = 0;
+    let mut cache_read_input_tokens: u64 = 0;
+    let mut file_reads: u32 = 0;
+    let mut scope_commands_called: Vec<String> = Vec::new();
+    let mut actions: Vec<AgentAction> = Vec::new();
+    let mut sequence: u32 = 0;
+
+    for line in ndjson_text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let value: serde_json::Value = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Accumulate usage
+        if let Some(usage) = value.get("usage") {
+            input_tokens += usage
+                .get("input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            output_tokens += usage
+                .get("output_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            cache_creation_input_tokens += usage
+                .get("cache_creation_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            cache_read_input_tokens += usage
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+        }
+
+        // Check nested result.usage
+        if value.get("type").and_then(|t| t.as_str()) == Some("result") {
+            if let Some(result) = value.get("result") {
+                if let Some(usage) = result.get("usage") {
+                    input_tokens += usage
+                        .get("input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    output_tokens += usage
+                        .get("output_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    cache_creation_input_tokens += usage
+                        .get("cache_creation_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    cache_read_input_tokens += usage
+                        .get("cache_read_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                }
+            }
+        }
+
+        // Extract tool_use events
+        let content_items = extract_tool_use_items(&value);
+
+        for item in content_items {
+            let tool_name = match item.get("name").and_then(|n| n.as_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+
+            let input_obj = item.get("input");
+            let arguments_summary = extract_argument_summary(&tool_name, input_obj);
+
+            let is_navigation = is_navigation_tool(&tool_name);
+            let is_edit = is_edit_tool(&tool_name);
+            let mut is_scope_cmd = false;
+
+            match tool_name.as_str() {
+                "Read" => file_reads += 1,
+                "Bash" => {
+                    if let Some(cmd_str) = input_obj
+                        .and_then(|i| i.get("command"))
+                        .and_then(|c| c.as_str())
+                    {
+                        if let Some(scope_cmd) = extract_scope_command(cmd_str) {
+                            is_scope_cmd = true;
+                            if !scope_commands_called.contains(&scope_cmd) {
+                                scope_commands_called.push(scope_cmd);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            sequence += 1;
+            actions.push(AgentAction {
+                sequence,
+                tool_name,
+                arguments_summary,
+                is_navigation,
+                is_scope_command: is_scope_cmd,
+                is_edit,
+            });
+        }
+    }
+
+    NdjsonParseResult {
+        actions,
+        input_tokens,
+        output_tokens,
+        cache_creation_input_tokens,
+        cache_read_input_tokens,
+        scope_commands_called,
+        file_reads,
+    }
 }
 
 /// Set up an isolated temporary directory for a benchmark run.
@@ -81,21 +232,14 @@ fn setup_temp_corpus(
     let claude_md_dest = dest.join("CLAUDE.md");
 
     if variant_src.is_file() {
-        std::fs::copy(&variant_src, &claude_md_dest).with_context(|| {
-            format!(
-                "Failed to copy {} to CLAUDE.md",
-                variant_src.display()
-            )
-        })?;
+        std::fs::copy(&variant_src, &claude_md_dest)
+            .with_context(|| format!("Failed to copy {} to CLAUDE.md", variant_src.display()))?;
     } else {
         // Also check the original corpus path in case the variant wasn't copied
         let variant_original = corpus_path.join(variant_name);
         if variant_original.is_file() {
             std::fs::copy(&variant_original, &claude_md_dest).with_context(|| {
-                format!(
-                    "Failed to copy {} to CLAUDE.md",
-                    variant_original.display()
-                )
+                format!("Failed to copy {} to CLAUDE.md", variant_original.display())
             })?;
         }
     }
@@ -181,6 +325,8 @@ pub fn run_agent(
 
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
+    let mut cache_creation_input_tokens: u64 = 0;
+    let mut cache_read_input_tokens: u64 = 0;
     let mut file_reads: u32 = 0;
     let mut file_edits: u32 = 0;
     let mut grep_calls: u32 = 0;
@@ -216,6 +362,14 @@ pub fn run_agent(
                 .get("output_tokens")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
+            cache_creation_input_tokens += usage
+                .get("cache_creation_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            cache_read_input_tokens += usage
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
         }
 
         // Also check for usage nested inside a result event's sub-object
@@ -230,6 +384,14 @@ pub fn run_agent(
                         .unwrap_or(0);
                     output_tokens += usage
                         .get("output_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    cache_creation_input_tokens += usage
+                        .get("cache_creation_input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    cache_read_input_tokens += usage
+                        .get("cache_read_input_tokens")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
                 }
@@ -296,6 +458,8 @@ pub fn run_agent(
         scope_enabled,
         input_tokens,
         output_tokens,
+        cache_creation_input_tokens,
+        cache_read_input_tokens,
         file_reads,
         file_edits,
         grep_calls,
@@ -313,7 +477,7 @@ pub fn run_agent(
 /// Handles multiple nesting patterns:
 /// - `{"type": "assistant", "message": {"content": [{"type": "tool_use", ...}]}}`
 /// - `{"type": "content_block_start", "content_block": {"type": "tool_use", ...}}`
-fn extract_tool_use_items(value: &serde_json::Value) -> Vec<&serde_json::Value> {
+pub(crate) fn extract_tool_use_items(value: &serde_json::Value) -> Vec<&serde_json::Value> {
     let mut items = Vec::new();
 
     // Pattern 1: assistant message with content array
@@ -340,7 +504,10 @@ fn extract_tool_use_items(value: &serde_json::Value) -> Vec<&serde_json::Value> 
 }
 
 /// Extract a short human-readable summary of a tool call's arguments.
-fn extract_argument_summary(tool_name: &str, input: Option<&serde_json::Value>) -> String {
+pub(crate) fn extract_argument_summary(
+    tool_name: &str,
+    input: Option<&serde_json::Value>,
+) -> String {
     let input = match input {
         Some(i) => i,
         None => return String::new(),
@@ -368,10 +535,7 @@ fn extract_argument_summary(tool_name: &str, input: Option<&serde_json::Value>) 
             .unwrap_or("")
             .to_string(),
         "Bash" => {
-            let cmd = input
-                .get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
             if cmd.len() > 100 {
                 format!("{}...", &cmd[..100])
             } else {
@@ -391,12 +555,12 @@ fn extract_argument_summary(tool_name: &str, input: Option<&serde_json::Value>) 
 }
 
 /// Check if a tool name is a navigation/exploration tool.
-fn is_navigation_tool(name: &str) -> bool {
+pub(crate) fn is_navigation_tool(name: &str) -> bool {
     matches!(name, "Read" | "Grep" | "Glob" | "Bash")
 }
 
 /// Check if a tool name is a file-editing tool.
-fn is_edit_tool(name: &str) -> bool {
+pub(crate) fn is_edit_tool(name: &str) -> bool {
     matches!(name, "Edit" | "Write")
 }
 
@@ -407,7 +571,7 @@ fn is_edit_tool(name: &str) -> bool {
 /// - `"scope sketch PaymentService"` -> `Some("scope sketch")`
 /// - `"cd foo && scope refs bar"` -> `Some("scope refs")`
 /// - `"echo hello"` -> `None`
-fn extract_scope_command(bash_command: &str) -> Option<String> {
+pub(crate) fn extract_scope_command(bash_command: &str) -> Option<String> {
     // Find "scope " in the command
     let idx = bash_command.find("scope ")?;
     let after_scope = &bash_command[idx + "scope ".len()..];
@@ -521,9 +685,11 @@ mod tests {
 
     #[test]
     fn test_extract_argument_summary_read() {
-        let input: serde_json::Value =
-            serde_json::json!({"file_path": "src/main.rs"});
-        assert_eq!(extract_argument_summary("Read", Some(&input)), "src/main.rs");
+        let input: serde_json::Value = serde_json::json!({"file_path": "src/main.rs"});
+        assert_eq!(
+            extract_argument_summary("Read", Some(&input)),
+            "src/main.rs"
+        );
     }
 
     #[test]
@@ -582,5 +748,47 @@ mod tests {
         let event = serde_json::json!({"type": "ping"});
         let items = extract_tool_use_items(&event);
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_parse_ndjson_actions_empty() {
+        let result = parse_ndjson_actions("");
+        assert!(result.actions.is_empty());
+        assert_eq!(result.input_tokens, 0);
+        assert_eq!(result.output_tokens, 0);
+        assert_eq!(result.file_reads, 0);
+    }
+
+    #[test]
+    fn test_parse_ndjson_actions_basic() {
+        let ndjson = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/main.rs"}},{"type":"tool_use","name":"Bash","input":{"command":"scope sketch PaymentService"}}]}}
+{"usage":{"input_tokens":5000,"output_tokens":1000,"cache_creation_input_tokens":200,"cache_read_input_tokens":4000}}"#;
+
+        let result = parse_ndjson_actions(ndjson);
+        assert_eq!(result.actions.len(), 2);
+        assert_eq!(result.actions[0].tool_name, "Read");
+        assert_eq!(result.actions[0].sequence, 1);
+        assert!(result.actions[0].is_navigation);
+        assert!(!result.actions[0].is_edit);
+        assert_eq!(result.actions[1].tool_name, "Bash");
+        assert!(result.actions[1].is_scope_command);
+        assert_eq!(result.input_tokens, 5000);
+        assert_eq!(result.output_tokens, 1000);
+        assert_eq!(result.cache_creation_input_tokens, 200);
+        assert_eq!(result.cache_read_input_tokens, 4000);
+        assert_eq!(result.file_reads, 1);
+        assert_eq!(
+            result.scope_commands_called,
+            vec!["scope sketch".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_parse_ndjson_actions_with_malformed_lines() {
+        let ndjson = "not json\n{\"usage\":{\"input_tokens\":100,\"output_tokens\":50}}\n\n";
+        let result = parse_ndjson_actions(ndjson);
+        assert!(result.actions.is_empty());
+        assert_eq!(result.input_tokens, 100);
+        assert_eq!(result.output_tokens, 50);
     }
 }

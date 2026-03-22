@@ -1,5 +1,25 @@
 # Changelog
 
+## scope-benchmark v0.5.0 (2026-03-22)
+
+### Phase 11 Infrastructure
+Based on the Phase 10 Technical Review, this release adds the infrastructure needed for the 3-arm benchmark experiment (without-scope / with-scope / with-scope-preloaded).
+
+### New Features
+- **NDJSON action import**: `benchmark import --ndjson-dir <path>` parses saved Claude CLI NDJSON streams to populate action-level data (tools used, scope commands, file reads). Fixes the P10 gap where 0/72 runs had action data.
+- **3-arm experiment support**: `benchmark prepare --conditions 3` generates three variants per task: without-scope, with-scope, and with-scope-preloaded (scope map output baked into CLAUDE.md)
+- **Caller coverage verification**: Replaced stub in verifier.rs with real unified diff parser that checks ground truth callers against agent changes (±5 line context window)
+- **Token decomposition**: Captures `cache_creation_input_tokens` and `cache_read_input_tokens` from NDJSON usage events. New "Token Decomposition" section in markdown reports shows fresh vs cached input tokens.
+- **Condition-aware reporting**: Markdown reports now group by experimental condition (not just scope_enabled bool), supporting the 3-arm analysis
+
+### Fixture Changes
+- Added `CLAUDE.md.with-scope-preloaded` templates for both TypeScript and C# fixtures — includes `{{SCOPE_MAP_OUTPUT}}` placeholder replaced at prepare time
+
+### Task Definition
+- Added optional `[ground_truth]` section to task TOML schema with `callers` field for caller coverage verification
+
+---
+
 ## scope-benchmark v0.4.0 (2026-03-21)
 
 ### Fixture Overhaul

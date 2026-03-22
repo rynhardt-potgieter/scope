@@ -100,10 +100,98 @@ fn run_tests(corpus_path: &Path, language: &str) -> Result<bool> {
     Ok(status.success())
 }
 
+/// Parse a unified diff and extract modified line numbers per file.
+///
+/// Returns a map from file path to set of modified line numbers.
+/// Only tracks lines in the new version (lines with `+` prefix in the diff).
+fn parse_diff_modifications(
+    diff_text: &str,
+) -> std::collections::HashMap<String, std::collections::HashSet<i64>> {
+    let mut modifications: std::collections::HashMap<String, std::collections::HashSet<i64>> =
+        std::collections::HashMap::new();
+    let mut current_file: Option<String> = None;
+    let mut current_line: i64 = 0;
+
+    for line in diff_text.lines() {
+        // Track current file from "+++ b/path" lines
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            current_file = Some(path.to_string());
+            continue;
+        }
+        if line.starts_with("+++ ") || line.starts_with("--- ") {
+            continue;
+        }
+
+        // Parse hunk headers: @@ -old_start,old_count +new_start,new_count @@
+        if line.starts_with("@@ ") {
+            if let Some(plus_idx) = line.find('+') {
+                let after_plus = &line[plus_idx + 1..];
+                let num_str: String = after_plus
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                if let Ok(start) = num_str.parse::<i64>() {
+                    current_line = start;
+                }
+            }
+            continue;
+        }
+
+        // Track modifications
+        if let Some(ref file) = current_file {
+            if line.starts_with('+') {
+                modifications
+                    .entry(file.clone())
+                    .or_default()
+                    .insert(current_line);
+                current_line += 1;
+            } else if line.starts_with('-') {
+                // Deleted line — don't increment new line counter
+            } else {
+                // Context line
+                current_line += 1;
+            }
+        }
+    }
+
+    modifications
+}
+
+/// Check if a line (within a context window) appears in the diff modifications.
+fn is_line_modified(
+    modifications: &std::collections::HashMap<String, std::collections::HashSet<i64>>,
+    file_path: &str,
+    line: i64,
+    context: i64,
+) -> bool {
+    if let Some(file_mods) = modifications.get(file_path) {
+        file_mods
+            .iter()
+            .any(|&mod_line| (line - mod_line).abs() <= context)
+    } else {
+        false
+    }
+}
+
+/// Parse a caller location string in "file_path:line" format.
+fn parse_caller_location(s: &str) -> Result<(&str, i64)> {
+    let colon_idx = s.rfind(':').ok_or_else(|| {
+        anyhow::anyhow!(
+            "Invalid caller location format '{}': expected 'file:line'",
+            s
+        )
+    })?;
+    let file_path = &s[..colon_idx];
+    let line: i64 = s[colon_idx + 1..]
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid line number in caller location '{}': {}", s, e))?;
+    Ok((file_path, line))
+}
+
 /// Check caller coverage by comparing the git diff against ground truth callers.
 ///
-/// Uses the Python verification script to cross-reference the diff against
-/// the known callers from `scope refs --json`.
+/// Cross-references the diff against the known callers from the task's
+/// ground truth definition.
 fn check_caller_coverage(corpus_path: &Path, task: &TaskDef) -> Result<f64> {
     // Generate the diff
     let diff_output = Command::new("git")
@@ -119,19 +207,44 @@ fn check_caller_coverage(corpus_path: &Path, task: &TaskDef) -> Result<f64> {
     let diff_text = String::from_utf8_lossy(&diff_output.stdout);
 
     if diff_text.is_empty() {
-        // No changes made — 0% coverage
         return Ok(0.0);
     }
 
-    // For now, return a placeholder. The full implementation will invoke
-    // the Python verification script or implement the logic in Rust.
-    //
-    // TODO: Integrate with benchmarks/verify/verify_caller_coverage.py
+    // Get ground truth callers from task definition
+    let callers = &task.ground_truth.callers;
+    if callers.is_empty() {
+        eprintln!(
+            "  [verifier] No ground truth callers defined for {}. Skipping coverage check.",
+            task.target.symbol
+        );
+        return Ok(0.0);
+    }
+
+    // Parse the diff to find modified lines
+    let modifications = parse_diff_modifications(&diff_text);
+
+    // Check which callers were touched (±5 line context window)
+    let context = 5i64;
+    let total = callers.len();
+    let mut covered = 0usize;
+
+    for caller in callers {
+        let (file_path, line) = parse_caller_location(caller)?;
+        if is_line_modified(&modifications, file_path, line, context) {
+            covered += 1;
+        }
+    }
+
+    let coverage = covered as f64 / total as f64;
     eprintln!(
-        "  [verifier] Caller coverage check for {} — stub returning 0.0",
-        task.target.symbol
+        "  [verifier] Caller coverage for {}: {}/{} ({:.0}%)",
+        task.target.symbol,
+        covered,
+        total,
+        coverage * 100.0
     );
-    Ok(0.0)
+
+    Ok(coverage)
 }
 
 /// Calculate the overall correctness score (0–100) from individual checks.
@@ -182,7 +295,7 @@ fn calculate_score(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task::{CorrectnessDef, PromptDef, ScopeDef, TargetDef, TaskMeta};
+    use crate::task::{CorrectnessDef, GroundTruthDef, PromptDef, ScopeDef, TargetDef, TaskMeta};
 
     fn make_task_def(require_caller_coverage: bool) -> TaskDef {
         TaskDef {
@@ -207,6 +320,7 @@ mod tests {
                 caller_coverage_threshold: 1.0,
                 pattern_match_threshold: 0.0,
             },
+            ground_truth: GroundTruthDef::default(),
             scope: ScopeDef {
                 expected_commands: vec!["scope refs".to_string()],
             },
@@ -235,5 +349,90 @@ mod tests {
         let task = make_task_def(true);
         // 0.8 coverage with 1.0 threshold => 16 points from coverage
         assert_eq!(calculate_score(true, true, Some(0.8), &task), 96);
+    }
+
+    #[test]
+    fn test_parse_diff_modifications_basic() {
+        let diff = "\
+diff --git a/src/foo.ts b/src/foo.ts
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -10,3 +10,4 @@ function foo() {
+     existing line
++    new line
+     another line
+";
+        let mods = parse_diff_modifications(diff);
+        assert!(mods.contains_key("src/foo.ts"));
+        assert!(mods["src/foo.ts"].contains(&11));
+        assert!(!mods["src/foo.ts"].contains(&10));
+    }
+
+    #[test]
+    fn test_parse_diff_modifications_multifile() {
+        let diff = "\
+diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -5,2 +5,3 @@
+     context
++    added in a
+diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -20,2 +20,3 @@
+     context
++    added in b
+";
+        let mods = parse_diff_modifications(diff);
+        assert_eq!(mods.len(), 2);
+        assert!(mods.contains_key("src/a.ts"));
+        assert!(mods.contains_key("src/b.ts"));
+        assert!(mods["src/a.ts"].contains(&6));
+        assert!(mods["src/b.ts"].contains(&21));
+    }
+
+    #[test]
+    fn test_parse_diff_modifications_empty() {
+        let mods = parse_diff_modifications("");
+        assert!(mods.is_empty());
+    }
+
+    #[test]
+    fn test_is_line_modified_within_context() {
+        let mut mods = std::collections::HashMap::new();
+        let mut lines = std::collections::HashSet::new();
+        lines.insert(50i64);
+        mods.insert("src/foo.ts".to_string(), lines);
+
+        assert!(is_line_modified(&mods, "src/foo.ts", 48, 5));
+        assert!(is_line_modified(&mods, "src/foo.ts", 55, 5));
+        assert!(is_line_modified(&mods, "src/foo.ts", 50, 5));
+    }
+
+    #[test]
+    fn test_is_line_modified_outside_context() {
+        let mut mods = std::collections::HashMap::new();
+        let mut lines = std::collections::HashSet::new();
+        lines.insert(50i64);
+        mods.insert("src/foo.ts".to_string(), lines);
+
+        assert!(!is_line_modified(&mods, "src/foo.ts", 60, 5));
+        assert!(!is_line_modified(&mods, "src/foo.ts", 40, 5));
+        assert!(!is_line_modified(&mods, "other.ts", 50, 5));
+    }
+
+    #[test]
+    fn test_parse_caller_location() {
+        let (file, line) =
+            parse_caller_location("src/Api/Controllers/PaymentController.cs:45").unwrap();
+        assert_eq!(file, "src/Api/Controllers/PaymentController.cs");
+        assert_eq!(line, 45);
+    }
+
+    #[test]
+    fn test_parse_caller_location_invalid() {
+        assert!(parse_caller_location("no-colon").is_err());
+        assert!(parse_caller_location("file:notanumber").is_err());
     }
 }

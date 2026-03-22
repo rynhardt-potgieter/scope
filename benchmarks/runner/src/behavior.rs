@@ -87,10 +87,7 @@ pub fn compute_behavior_metrics(actions: &[AgentAction]) -> BehaviorMetrics {
 
     // scope_commands_before_first_edit
     let scope_commands_before_first_edit = match first_edit_idx {
-        Some(idx) => actions[..idx]
-            .iter()
-            .filter(|a| a.is_scope_command)
-            .count() as u32,
+        Some(idx) => actions[..idx].iter().filter(|a| a.is_scope_command).count() as u32,
         None => scope_commands_total,
     };
 
@@ -132,8 +129,7 @@ pub fn aggregate_behavior(
     without_scope: &[BehaviorMetrics],
 ) -> BehaviorComparison {
     let mean_actions_before_edit_with = mean_u32(with_scope, |m| m.actions_before_first_edit);
-    let mean_actions_before_edit_without =
-        mean_u32(without_scope, |m| m.actions_before_first_edit);
+    let mean_actions_before_edit_without = mean_u32(without_scope, |m| m.actions_before_first_edit);
 
     let mean_nav_ratio_with = mean_f64_finite(with_scope, |m| m.navigation_to_edit_ratio);
     let mean_nav_ratio_without = mean_f64_finite(without_scope, |m| m.navigation_to_edit_ratio);
@@ -278,8 +274,7 @@ pub fn generate_recommendations(
             "**Over-navigation with scope ({:.1} vs {:.1} actions before first edit)** \u{2014} \
              scope may be encouraging exploration over action. \
              Review whether scope output is actionable enough.",
-            comparison.mean_actions_before_edit_with,
-            comparison.mean_actions_before_edit_without
+            comparison.mean_actions_before_edit_with, comparison.mean_actions_before_edit_without
         ));
     }
 
@@ -328,7 +323,8 @@ fn compute_scope_then_read(actions: &[AgentAction]) -> u32 {
         }
         // Check subsequent Read actions for file paths appearing in this scope command's args
         for later in actions.iter().skip(i + 1) {
-            if later.tool_name == "Read" && action.arguments_summary.contains(&later.arguments_summary)
+            if later.tool_name == "Read"
+                && action.arguments_summary.contains(&later.arguments_summary)
             {
                 count += 1;
                 break;

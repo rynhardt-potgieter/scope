@@ -12,8 +12,15 @@ pub struct BenchmarkRun {
     pub task_id: String,
     pub repetition: u32,
     pub scope_enabled: bool,
+    /// Experimental condition label (e.g. "with-scope", "without-scope", "with-scope-preloaded")
+    #[serde(default)]
+    pub condition: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    #[serde(default)]
+    pub cache_creation_input_tokens: u64,
+    #[serde(default)]
+    pub cache_read_input_tokens: u64,
     pub file_reads: u32,
     pub scope_commands_called: Vec<String>,
     #[serde(default)]
@@ -118,6 +125,38 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
         ));
     }
 
+    // Check if we have 3-arm data (condition field populated)
+    let has_conditions = results.iter().any(|r| !r.condition.is_empty());
+
+    if has_conditions {
+        out.push_str("\n### Token Consumption by Condition\n\n");
+        out.push_str("| Condition | Mean input tokens | Std Dev | Runs |\n");
+        out.push_str("|-----------|-------------------|---------|------|\n");
+
+        let mut conditions: Vec<String> = results
+            .iter()
+            .filter(|r| !r.condition.is_empty())
+            .map(|r| r.condition.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        conditions.sort();
+
+        for condition in &conditions {
+            let cond_runs: Vec<&BenchmarkRun> = results
+                .iter()
+                .filter(|r| r.condition == *condition)
+                .collect();
+            out.push_str(&format!(
+                "| {} | {:.0} | \u{00b1}{:.0} | {} |\n",
+                condition,
+                mean_tokens(&cond_runs),
+                std_dev_tokens(&cond_runs),
+                cond_runs.len()
+            ));
+        }
+    }
+
     // Correctness summary
     out.push_str("\n### Task Correctness\n\n");
     out.push_str("| Condition | Compilation pass | Tests pass | Mean score |\n");
@@ -150,6 +189,65 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
     if !with_scope.is_empty() {
         let mean_reads = mean_file_reads(&with_scope);
         out.push_str(&format!("| With Scope | {:.1} |\n", mean_reads));
+    }
+
+    // Token decomposition (cache vs fresh)
+    let has_cache_data = results
+        .iter()
+        .any(|r| r.cache_read_input_tokens > 0 || r.cache_creation_input_tokens > 0);
+
+    if has_cache_data {
+        out.push_str("\n### Token Decomposition\n\n");
+        out.push_str("| Condition | Total input | Fresh input | Cache read | Cache hit rate |\n");
+        out.push_str("|-----------|------------|-------------|------------|----------------|\n");
+
+        let format_decomp = |runs: &[&BenchmarkRun], label: &str| -> String {
+            if runs.is_empty() {
+                return String::new();
+            }
+            let total: u64 = runs.iter().map(|r| r.input_tokens).sum();
+            let cache_read: u64 = runs.iter().map(|r| r.cache_read_input_tokens).sum();
+            let n = runs.len() as f64;
+            let mean_total = total as f64 / n;
+            let mean_cache = cache_read as f64 / n;
+            let mean_fresh = mean_total - mean_cache;
+            let hit_rate = if total > 0 {
+                cache_read as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
+            format!(
+                "| {} | {:.0} | {:.0} | {:.0} | {:.1}% |\n",
+                label, mean_total, mean_fresh, mean_cache, hit_rate
+            )
+        };
+
+        if !without_scope.is_empty() {
+            out.push_str(&format_decomp(&without_scope, "Without Scope"));
+        }
+        if !with_scope.is_empty() {
+            out.push_str(&format_decomp(&with_scope, "With Scope"));
+        }
+
+        // Per-condition decomposition if 3-arm
+        if has_conditions {
+            let mut conditions: Vec<String> = results
+                .iter()
+                .filter(|r| !r.condition.is_empty())
+                .map(|r| r.condition.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            conditions.sort();
+
+            for condition in &conditions {
+                let cond_runs: Vec<&BenchmarkRun> = results
+                    .iter()
+                    .filter(|r| r.condition == *condition)
+                    .collect();
+                out.push_str(&format_decomp(&cond_runs, condition));
+            }
+        }
     }
 
     // Per-category breakdown
@@ -209,7 +307,10 @@ pub fn write_markdown_summary(results: &[BenchmarkRun], path: &Path) -> Result<(
             .map(|b| b.scope_command_sequence.clone())
             .collect();
         out.push('\n');
-        out.push_str(&behavior::generate_recommendations(&comparison, &scope_sequences));
+        out.push_str(&behavior::generate_recommendations(
+            &comparison,
+            &scope_sequences,
+        ));
     }
 
     let mut file = std::fs::File::create(path)
@@ -337,8 +438,11 @@ impl Clone for BenchmarkRun {
             task_id: self.task_id.clone(),
             repetition: self.repetition,
             scope_enabled: self.scope_enabled,
+            condition: self.condition.clone(),
             input_tokens: self.input_tokens,
             output_tokens: self.output_tokens,
+            cache_creation_input_tokens: self.cache_creation_input_tokens,
+            cache_read_input_tokens: self.cache_read_input_tokens,
             file_reads: self.file_reads,
             scope_commands_called: self.scope_commands_called.clone(),
             correctness: self.correctness.clone(),

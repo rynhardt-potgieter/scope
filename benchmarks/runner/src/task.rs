@@ -11,6 +11,8 @@ pub struct TaskDef {
     pub prompt: PromptDef,
     pub target: TargetDef,
     pub correctness: CorrectnessDef,
+    #[serde(default)]
+    pub ground_truth: GroundTruthDef,
     pub scope: ScopeDef,
 }
 
@@ -61,6 +63,19 @@ pub struct CorrectnessDef {
     pub caller_coverage_threshold: f64,
     /// Minimum pattern match threshold (0.0–1.0). Only used for Category F tasks.
     pub pattern_match_threshold: f64,
+}
+
+/// Ground truth data for verification (optional).
+///
+/// Used by the verifier to check whether an agent's changes cover
+/// all known callers of the target symbol.
+#[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
+pub struct GroundTruthDef {
+    /// Known caller locations in "file_path:line" format.
+    /// Example: ["src/Api/Controllers/PaymentController.cs:45"]
+    #[serde(default)]
+    pub callers: Vec<String>,
 }
 
 /// Expected Scope commands for verifying the agent used Scope.
