@@ -1,5 +1,14 @@
 # Changelog
 
+## scope-benchmark v0.7.4 (2026-03-22)
+
+### Improvements
+- **Live agent progress** — during each run, a live-updating status line shows elapsed time, action count, file reads, output tokens, and the last tool called. Updates on every tool_use event so you can see the agent working in real time.
+- **Clean output redesign** — header shows model/runs/conditions/reps in a readable layout, per-run lines show start time and overall progress bar, completion shows full metrics with compilation status.
+- **Removed debug output** — no more `[agent] Command:` and `[agent] Work dir:` lines cluttering the output.
+
+---
+
 ## scope-benchmark v0.7.3 (2026-03-22)
 
 ### Improvements

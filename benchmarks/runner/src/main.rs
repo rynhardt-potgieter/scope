@@ -480,26 +480,20 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     }
 
     let model_label = args.model.as_deref().unwrap_or("default");
-    eprintln!("┌─────────────────────────────────────────────────────┐");
+    eprintln!();
+    eprintln!("  scope benchmark");
+    eprintln!("  ─────────────────────────────────────────────────────────");
+    eprintln!("  model:      {}", model_label);
     eprintln!(
-        "│  scope benchmark · {} runs · {} · parallel {}{}│",
+        "  runs:       {} total ({} tasks × {} conditions × {} reps)",
         total_runs,
-        model_label,
-        args.parallel,
-        " ".repeat(53usize.saturating_sub(
-            22 + total_runs.to_string().len() + model_label.len() + args.parallel.to_string().len()
-        ))
+        tasks.len(),
+        conditions.len(),
+        args.reps
     );
-    eprintln!(
-        "│  output: {:<43}│",
-        results_dir
-            .display()
-            .to_string()
-            .chars()
-            .take(43)
-            .collect::<String>()
-    );
-    eprintln!("└─────────────────────────────────────────────────────┘");
+    eprintln!("  parallel:   {}", args.parallel);
+    eprintln!("  output:     {}", results_dir.display());
+    eprintln!("  ─────────────────────────────────────────────────────────");
     eprintln!();
     let benchmark_start = std::time::Instant::now();
 
@@ -510,28 +504,36 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         for (i, job) in jobs.iter().enumerate() {
             let task_def = tasks[job.task_def_idx];
 
-            // Progress bar and ETA
+            // Overall progress line
             let elapsed = benchmark_start.elapsed().as_secs();
             let eta = if i > 0 {
                 let avg_per_run = elapsed as f64 / i as f64;
                 let remaining = avg_per_run * (total_runs - i) as f64;
                 format_duration(remaining as u64)
             } else {
-                "estimating...".to_string()
+                "calculating".to_string()
             };
             let pct = (i as f64 / total_runs as f64 * 100.0) as u32;
-            let bar_width = 30;
+            let bar_width = 20;
             let filled = (bar_width as f64 * i as f64 / total_runs as f64) as usize;
-            let bar: String = "█".repeat(filled) + &"░".repeat(bar_width - filled);
+            let bar: String = "━".repeat(filled) + &"╌".repeat(bar_width - filled);
+
+            let started_at = chrono::Local::now().format("%H:%M:%S").to_string();
             eprintln!(
-                "  [{bar}] {pct:>3}%  {}/{total_runs}  elapsed: {}  eta: {eta}",
-                i,
-                format_duration(elapsed),
+                "  [{}/{}] {} {} │ {} │ rep {}",
+                i + 1,
+                total_runs,
+                task_def.task.id,
+                job.condition_label,
+                task_def.task.category,
+                job.rep
             );
             eprintln!(
-                "  ▸ {} │ {} │ rep {}  ⏳ running...",
-                task_def.task.id, job.condition_label, job.rep
+                "         {bar} {pct}%  {elapsed}  eta {eta}  started {started_at}",
+                elapsed = format_duration(elapsed),
             );
+
+            // Agent.rs emits live status updates via \r on stderr during the run
 
             // Pass model through the job by calling run_agent directly
             let (agent_run, work_dir) = agent::run_agent(
@@ -573,32 +575,23 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
                 behavior: Some(bm),
             });
 
-            let compilation_icon = if verification.compilation_pass {
-                "✓"
-            } else {
-                "✗"
-            };
-
-            // Incremental save — write results after every completed run
+            // Incremental save
             reporter::write_json_results(&runs, &json_path)?;
+
+            let comp_str = if verification.compilation_pass {
+                "✓ pass"
+            } else {
+                "✗ FAIL"
+            };
             eprintln!(
-                "    {} {}s │ {} output tokens │ {} reads │ {} actions │ compile: {}",
-                compilation_icon,
+                "         done in {}s  │  {} tokens out  │  {} reads  │  {} actions  │  {}",
                 agent_run_duration_ms / 1000,
                 run_output_tokens,
                 run_file_reads,
                 run_action_count,
-                if verification.compilation_pass {
-                    "pass"
-                } else {
-                    "FAIL"
-                }
+                comp_str,
             );
-            eprintln!(
-                "    saved {}/{}\n",
-                runs.len(),
-                runs.len() + (total_runs - i - 1),
-            );
+            eprintln!();
 
             // work_dir (TempDir) is dropped here, cleaning up
         }
@@ -724,21 +717,19 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
         .sum::<f64>();
 
     eprintln!();
-    eprintln!("┌─────────────────────────────────────────────────────┐");
-    eprintln!("│  BENCHMARK COMPLETE                                 │");
-    eprintln!("├─────────────────────────────────────────────────────┤");
-    eprintln!("│  Runs:          {}/{:<36}│", all_runs.len(), total_runs);
-    eprintln!("│  Duration:      {:<38}│", format_duration(total_elapsed));
+    eprintln!("  benchmark complete");
+    eprintln!("  ─────────────────────────────────────────────────────────");
+    eprintln!("  runs:         {}/{}", all_runs.len(), total_runs);
+    eprintln!("  duration:     {}", format_duration(total_elapsed));
     eprintln!(
-        "│  Compilation:   {}/{} pass ({:.0}%){:<24}│",
+        "  compilation:  {}/{} pass ({:.0}%)",
         comp_pass,
         all_runs.len(),
         comp_pass as f64 / all_runs.len() as f64 * 100.0,
-        ""
     );
-    eprintln!("│  Output tokens: {:<38}│", format!("{}", total_output));
-    eprintln!("│  Est. cost:     ${:<37.2}│", est_cost);
-    eprintln!("└─────────────────────────────────────────────────────┘");
+    eprintln!("  output tkns:  {}", total_output);
+    eprintln!("  est. cost:    ${:.2}", est_cost);
+    eprintln!("  ─────────────────────────────────────────────────────────");
 
     // Final JSON save (ensures we have the complete set even for parallel path)
     reporter::write_json_results(&all_runs, &json_path)?;

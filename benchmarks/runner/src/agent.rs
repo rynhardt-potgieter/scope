@@ -502,6 +502,7 @@ pub fn run_agent(
             }
 
             sequence += 1;
+            let tool_display = tool_name.clone();
             actions.push(AgentAction {
                 sequence,
                 tool_name,
@@ -510,8 +511,18 @@ pub fn run_agent(
                 is_scope_command: is_scope_cmd,
                 is_edit,
             });
+
+            // Live status update
+            let elapsed_secs = start.elapsed().as_secs();
+            eprint!(
+                "\r         ⏳ {}s │ {} actions │ {} reads │ {} out tokens │ last: {}        ",
+                elapsed_secs, sequence, file_reads, output_tokens, tool_display
+            );
         }
     }
+    eprint!(
+        "\r                                                                                    \r"
+    ); // clear
 
     let status = child.wait().context("Failed to wait for claude process")?;
     let duration_ms = start.elapsed().as_millis() as u64;
