@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.6.6 (2026-03-22)
+
+### Fix
+- **Add `--verbose` flag for stream-json output** — Claude CLI now requires `--verbose` when using `--output-format stream-json` with `-p` (print mode). Without it, the CLI exits with an error and no NDJSON is produced.
+
+---
+
 ## scope-benchmark v0.6.5 (2026-03-22)
 
 ### Fix

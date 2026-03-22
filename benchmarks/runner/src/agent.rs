@@ -355,6 +355,7 @@ pub fn run_agent(
         .arg(work_dir)
         .arg("--output-format")
         .arg("stream-json")
+        .arg("--verbose")
         .arg("--max-turns")
         .arg("30")
         .arg("--allowedTools")
@@ -371,6 +372,9 @@ pub fn run_agent(
     cmd.current_dir(work_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    eprintln!("  [agent] Command: {:?}", cmd);
+    eprintln!("  [agent] Work dir: {}", work_dir.display());
 
     let start = std::time::Instant::now();
 
@@ -514,6 +518,25 @@ pub fn run_agent(
 
     let status = child.wait().context("Failed to wait for claude process")?;
     let duration_ms = start.elapsed().as_millis() as u64;
+
+    // Capture and log stderr if the process failed or produced no output
+    if !status.success() || raw_lines.is_empty() {
+        if let Some(mut stderr_stream) = child.stderr.take() {
+            let mut stderr_text = String::new();
+            std::io::Read::read_to_string(&mut stderr_stream, &mut stderr_text).ok();
+            if !stderr_text.is_empty() {
+                eprintln!(
+                    "  [agent] claude CLI stderr (exit code {}):\n{}",
+                    status.code().unwrap_or(-1),
+                    stderr_text.trim()
+                );
+            }
+        }
+        if raw_lines.is_empty() {
+            eprintln!("  [agent] WARNING: claude CLI produced no stdout output (0 NDJSON lines)");
+            eprintln!("  [agent] Exit code: {}, Duration: {}ms", status.code().unwrap_or(-1), duration_ms);
+        }
+    }
 
     // Save raw NDJSON if path provided
     if let Some(save_path) = ndjson_save_path {
