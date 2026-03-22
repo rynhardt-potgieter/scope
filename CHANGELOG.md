@@ -1,5 +1,13 @@
 # Changelog
 
+## scope-benchmark v0.6.3 (2026-03-22)
+
+### Windows Compatibility
+- **Fix all npm-installed CLI tools on Windows** — `npx`, `npm`, and `claude` are installed as `.cmd` scripts by npm. Rust's `Command::new()` can't find `.cmd` files. Added `cmd /C` wrapper for all npm-installed tools. Extracted `shell_command()` helper in verifier.rs.
+- **Audited all Command::new calls** — `dotnet`, `git`, `scope` are real .exe binaries and work without wrapping.
+
+---
+
 ## scope-benchmark v0.6.2 (2026-03-22)
 
 ### Critical Fix

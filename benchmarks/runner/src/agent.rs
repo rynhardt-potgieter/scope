@@ -344,7 +344,15 @@ pub fn run_agent(
     let work_dir = temp_dir.path();
 
     // Build the claude command
-    let mut cmd = Command::new("claude");
+    // On Windows, npm installs claude as claude.cmd — Command::new("claude")
+    // won't find it. Use cmd.exe /C to resolve .cmd scripts on PATH.
+    let mut cmd = if cfg!(windows) {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "claude"]);
+        c
+    } else {
+        Command::new("claude")
+    };
     cmd.arg("-p")
         .arg(&task.prompt.text)
         .arg("--bare")

@@ -51,9 +51,23 @@ pub fn verify_task(corpus_path: &Path, task: &TaskDef) -> Result<VerificationRes
 }
 
 /// Run the language-specific compilation check.
+/// Build a Command that works on both Unix and Windows.
+///
+/// On Windows, npm-installed tools (npx, npm) are .cmd scripts that
+/// `Command::new("npx")` won't find. Wrap them in `cmd /C` to resolve.
+fn shell_command(program: &str) -> Command {
+    if cfg!(windows) {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", program]);
+        cmd
+    } else {
+        Command::new(program)
+    }
+}
+
 fn run_compilation(corpus_path: &Path, language: &str) -> Result<bool> {
     let status = match language {
-        "typescript" => Command::new("npx")
+        "typescript" => shell_command("npx")
             .args(["tsc", "--noEmit"])
             .current_dir(corpus_path)
             .stdout(std::process::Stdio::piped())
@@ -78,7 +92,7 @@ fn run_compilation(corpus_path: &Path, language: &str) -> Result<bool> {
 /// Run the language-specific test suite.
 fn run_tests(corpus_path: &Path, language: &str) -> Result<bool> {
     let status = match language {
-        "typescript" => Command::new("npm")
+        "typescript" => shell_command("npm")
             .args(["test"])
             .current_dir(corpus_path)
             .stdout(std::process::Stdio::piped())
