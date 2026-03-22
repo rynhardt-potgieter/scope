@@ -599,7 +599,9 @@ impl Graph {
             .conn
             .prepare("SELECT from_id, COUNT(*) FROM edges WHERE kind = 'calls' GROUP BY from_id")?;
         let outgoing_counts: HashMap<String, usize> = outgoing_stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))?
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
             .filter_map(|r| r.ok())
             .map(|(id, count)| (id, count as usize))
             .collect();
@@ -1735,8 +1737,6 @@ impl Graph {
     /// Returns `(directory_path, file_count, symbol_count)` tuples grouped by
     /// the top-level directory component (after stripping a leading `src/`).
     pub fn get_directory_stats(&self) -> Result<Vec<(String, usize, usize)>> {
-
-
         let mut stmt = self.conn.prepare("SELECT file_path FROM symbols")?;
         let paths: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(0))?
@@ -1912,11 +1912,7 @@ struct CallerCountMaps {
 /// 1. Exact ID match (O(1) HashMap lookup)
 /// 2. Bare name match (O(1) HashMap lookup)
 /// 3. Member-call suffix match via pre-computed suffix map (O(1) lookup)
-fn resolve_caller_count(
-    maps: &CallerCountMaps,
-    symbol_id: &str,
-    symbol_name: &str,
-) -> usize {
+fn resolve_caller_count(maps: &CallerCountMaps, symbol_id: &str, symbol_name: &str) -> usize {
     let mut total = 0usize;
     // Pattern 1: exact ID match
     if let Some(&c) = maps.by_id.get(symbol_id) {
@@ -1946,7 +1942,11 @@ mod tests {
             by_suffix: HashMap::new(),
         };
         assert_eq!(
-            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            resolve_caller_count(
+                &maps,
+                "src/foo.ts::processPayment::function::10",
+                "processPayment"
+            ),
             3
         );
     }
@@ -1958,7 +1958,11 @@ mod tests {
             by_suffix: HashMap::new(),
         };
         assert_eq!(
-            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            resolve_caller_count(
+                &maps,
+                "src/foo.ts::processPayment::function::10",
+                "processPayment"
+            ),
             2
         );
     }
@@ -1970,7 +1974,11 @@ mod tests {
             by_suffix: HashMap::from([("processPayment".to_string(), 5)]),
         };
         assert_eq!(
-            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            resolve_caller_count(
+                &maps,
+                "src/foo.ts::processPayment::function::10",
+                "processPayment"
+            ),
             5
         );
     }
@@ -1986,7 +1994,11 @@ mod tests {
         };
         // All three patterns match: 1 + 2 + 3 = 6
         assert_eq!(
-            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            resolve_caller_count(
+                &maps,
+                "src/foo.ts::processPayment::function::10",
+                "processPayment"
+            ),
             6
         );
     }
@@ -1998,7 +2010,11 @@ mod tests {
             by_suffix: HashMap::from([("other".to_string(), 5)]),
         };
         assert_eq!(
-            resolve_caller_count(&maps, "src/foo.ts::processPayment::function::10", "processPayment"),
+            resolve_caller_count(
+                &maps,
+                "src/foo.ts::processPayment::function::10",
+                "processPayment"
+            ),
             0
         );
     }

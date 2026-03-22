@@ -767,7 +767,10 @@ pub fn print_trace(symbol_name: &str, result: &TraceResult, total: usize, trunca
     }
 
     if truncated {
-        println!("... {} more paths (use --limit to show more)", total - path_count);
+        println!(
+            "... {} more paths (use --limit to show more)",
+            total - path_count
+        );
     }
 }
 
