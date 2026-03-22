@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.6.7 (2026-03-22)
+
+### Fix
+- **Fix scope_command_sequence empty for `cd && scope` pattern** — On Windows, agents prefix scope commands with `cd "tempdir" &&`. The `extract_scope_subcommand` function only matched commands starting with `scope `, missing the `cd` prefix. Now searches for `scope ` anywhere in the command string.
+
+---
+
 ## scope-benchmark v0.6.6 (2026-03-22)
 
 ### Fix

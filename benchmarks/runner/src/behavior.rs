@@ -302,14 +302,14 @@ pub fn generate_recommendations(
 /// E.g. "scope sketch PaymentService" -> "scope sketch"
 fn extract_scope_subcommand(arguments_summary: &str) -> Option<String> {
     let trimmed = arguments_summary.trim();
-    if !trimmed.starts_with("scope ") {
-        return None;
-    }
-    let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
+    // Find "scope " anywhere in the command (handles "cd /path && scope find ...")
+    let scope_idx = trimmed.find("scope ")?;
+    let from_scope = &trimmed[scope_idx..];
+    let parts: Vec<&str> = from_scope.splitn(3, ' ').collect();
     if parts.len() >= 2 {
         Some(format!("{} {}", parts[0], parts[1]))
     } else {
-        Some(trimmed.to_string())
+        Some(from_scope.to_string())
     }
 }
 
@@ -716,5 +716,14 @@ mod tests {
             Some("scope find".to_string())
         );
         assert_eq!(extract_scope_subcommand("grep something"), None);
+        // cd && scope pattern (Windows agents prefix with cd to temp dir)
+        assert_eq!(
+            extract_scope_subcommand("cd \"C:\\Users\\tmp\\.tmp123\" && scope find \"payment decline\""),
+            Some("scope find".to_string())
+        );
+        assert_eq!(
+            extract_scope_subcommand("cd /tmp/work && scope sketch PaymentService"),
+            Some("scope sketch".to_string())
+        );
     }
 }
