@@ -1,0 +1,50 @@
+---
+source: tests/integration/test_entrypoints.rs
+expression: normalized
+---
+{
+  "command": "entrypoints",
+  "symbol": null,
+  "data": [
+    [
+      "API Controllers",
+      [
+        {
+          "name": "OrderController",
+          "file_path": "src/controllers/order.ts",
+          "method_count": 4,
+          "outgoing_call_count": 0,
+          "kind": "class"
+        },
+        {
+          "name": "RefundController",
+          "file_path": "src/controllers/refund.ts",
+          "method_count": 3,
+          "outgoing_call_count": 0,
+          "kind": "class"
+        }
+      ]
+    ],
+    [
+      "Other",
+      [
+        {
+          "name": "PaymentService",
+          "file_path": "src/payments/service.ts",
+          "method_count": 5,
+          "outgoing_call_count": 0,
+          "kind": "class"
+        },
+        {
+          "name": "Logger",
+          "file_path": "src/utils/logger.ts",
+          "method_count": 2,
+          "outgoing_call_count": 0,
+          "kind": "class"
+        }
+      ]
+    ]
+  ],
+  "truncated": false,
+  "total": 4
+}

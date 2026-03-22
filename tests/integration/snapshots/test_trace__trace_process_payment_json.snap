@@ -1,0 +1,51 @@
+---
+source: tests/integration/test_trace.rs
+expression: normalized
+---
+{
+  "command": "trace",
+  "symbol": "processPayment",
+  "data": {
+    "target": "processPayment",
+    "paths": [
+      {
+        "steps": [
+          {
+            "symbol_name": "checkout",
+            "symbol_id": "src/controllers/order.ts::checkout::method::11",
+            "file_path": "src/controllers/order.ts",
+            "line": 11,
+            "kind": "method"
+          },
+          {
+            "symbol_name": "processPayment",
+            "symbol_id": "src/payments/service.ts::processPayment::method::11",
+            "file_path": "src/payments/service.ts",
+            "line": 11,
+            "kind": "method"
+          }
+        ]
+      },
+      {
+        "steps": [
+          {
+            "symbol_name": "retryPayment",
+            "symbol_id": "src/controllers/order.ts::retryPayment::method::16",
+            "file_path": "src/controllers/order.ts",
+            "line": 16,
+            "kind": "method"
+          },
+          {
+            "symbol_name": "processPayment",
+            "symbol_id": "src/payments/service.ts::processPayment::method::11",
+            "file_path": "src/payments/service.ts",
+            "line": 11,
+            "kind": "method"
+          }
+        ]
+      }
+    ]
+  },
+  "truncated": false,
+  "total": 2
+}

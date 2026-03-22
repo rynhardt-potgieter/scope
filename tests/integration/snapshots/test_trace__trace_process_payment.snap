@@ -1,0 +1,11 @@
+---
+source: tests/integration/test_trace.rs
+expression: normalized
+---
+processPayment — 2 entry paths
+──────────────────────────────────────────────────────────────────────────────
+Path 1: checkout
+  └─→ processPayment                          src/payments/service.ts:11
+
+Path 2: retryPayment
+  └─→ processPayment                          src/payments/service.ts:11

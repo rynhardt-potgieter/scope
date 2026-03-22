@@ -3,7 +3,12 @@
 /// Each test copies the TypeScript fixture to a temporary directory, runs
 /// `scope init` + `scope index --full`, and then drives `scope entrypoints`
 /// via assert_cmd.
+///
+/// Snapshot tests use `insta`. On first run they create files under
+/// `tests/integration/snapshots/`. Run `cargo insta review` to accept new
+/// snapshots.
 use assert_cmd::Command;
+use insta::assert_snapshot;
 use predicates::str::contains;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -55,6 +60,15 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
 
     let root = dir.path().to_path_buf();
     (dir, root)
+}
+
+/// Replace the absolute temp-dir root with a stable placeholder so snapshots
+/// do not embed machine-specific paths.
+fn normalize_paths(output: &str, root: &Path) -> String {
+    let root_str = root.to_string_lossy();
+    let root_forward = root_str.replace('\\', "/");
+    let output_forward = output.replace('\\', "/");
+    output_forward.replace(&*root_forward, "<PROJECT_ROOT>")
 }
 
 // ---------------------------------------------------------------------------
@@ -130,4 +144,52 @@ fn test_entrypoints_no_index_fails() {
         .assert()
         .failure()
         .stderr(contains("No .scope/"));
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot tests — lock the human-readable output format
+// ---------------------------------------------------------------------------
+
+/// Snapshot the full stdout of `scope entrypoints`.
+///
+/// Any change to the entrypoints human-readable format will appear as a
+/// snapshot diff.
+#[test]
+fn test_entrypoints_human_output_snapshot() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let raw = Command::cargo_bin("scope")
+        .unwrap()
+        .arg("entrypoints")
+        .current_dir(&root)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(raw.stdout).unwrap();
+
+    // Redact the absolute temp-dir path so snapshots are stable across machines.
+    let normalized = normalize_paths(&stdout, &root);
+
+    assert_snapshot!("entrypoints_typescript_simple", normalized);
+}
+
+/// Snapshot the full stdout of `scope entrypoints --json`.
+///
+/// Any change to the entrypoints JSON envelope shape will appear as a snapshot
+/// diff.
+#[test]
+fn test_entrypoints_json_output_snapshot() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let raw = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["entrypoints", "--json"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(raw.stdout).unwrap();
+    let normalized = normalize_paths(&stdout, &root);
+
+    assert_snapshot!("entrypoints_typescript_simple_json", normalized);
 }

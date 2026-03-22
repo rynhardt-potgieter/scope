@@ -1,0 +1,13 @@
+---
+source: tests/integration/test_entrypoints.rs
+expression: normalized
+---
+Entrypoints — 4 across 4 files
+──────────────────────────────────────────────────────────────────────────────
+API Controllers:
+  OrderController       src/controllers/order.ts   → 4 methods
+  RefundController      src/controllers/refund.ts   → 3 methods
+
+Other:
+  PaymentService        src/payments/service.ts   → 5 methods
+  Logger                src/utils/logger.ts   → 2 methods

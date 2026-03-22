@@ -4,8 +4,11 @@
 /// `scope init` + `scope index --full`, and then drives `scope trace` via
 /// assert_cmd.
 ///
-/// Snapshot tests use `insta`. Run `cargo insta review` to accept new snapshots.
+/// Snapshot tests use `insta`. On first run they create files under
+/// `tests/integration/snapshots/`. Run `cargo insta review` to accept new
+/// snapshots.
 use assert_cmd::Command;
+use insta::assert_snapshot;
 use predicates::str::contains;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -147,4 +150,50 @@ fn test_trace_no_callers() {
         .assert()
         .success()
         .stdout(contains("0 entry paths"));
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot tests — lock the human-readable output format
+// ---------------------------------------------------------------------------
+
+/// Snapshot the full stdout of `scope trace processPayment`.
+///
+/// Any change to the trace human-readable format will appear as a snapshot diff.
+#[test]
+fn test_trace_human_output_snapshot() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let raw = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["trace", "processPayment"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(raw.stdout).unwrap();
+
+    // Redact the absolute temp-dir path so snapshots are stable across machines.
+    let normalized = normalize_paths(&stdout, &root);
+
+    assert_snapshot!("trace_process_payment", normalized);
+}
+
+/// Snapshot the full stdout of `scope trace processPayment --json`.
+///
+/// Any change to the trace JSON envelope shape will appear as a snapshot diff.
+#[test]
+fn test_trace_json_output_snapshot() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let raw = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["trace", "processPayment", "--json"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(raw.stdout).unwrap();
+    let normalized = normalize_paths(&stdout, &root);
+
+    assert_snapshot!("trace_process_payment_json", normalized);
 }
