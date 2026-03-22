@@ -54,12 +54,10 @@ pub fn verify_task(corpus_path: &Path, task: &TaskDef) -> Result<VerificationRes
 /// Build a Command that works on both Unix and Windows.
 ///
 /// On Windows, npm-installed tools (npx, npm) are .cmd scripts that
-/// `Command::new("npx")` won't find. Wrap them in `cmd /C` to resolve.
+/// `Command::new("npx")` won't find. Use the .cmd extension directly.
 fn shell_command(program: &str) -> Command {
     if cfg!(windows) {
-        let mut cmd = Command::new("cmd");
-        cmd.args(["/C", program]);
-        cmd
+        Command::new(format!("{program}.cmd"))
     } else {
         Command::new(program)
     }

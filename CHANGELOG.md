@@ -1,5 +1,12 @@
 # Changelog
 
+## scope-benchmark v0.6.4 (2026-03-22)
+
+### Fix
+- **Fix Windows CLI invocation breaking NDJSON stream** — `cmd /C claude` mangled arguments, causing claude CLI to run in text mode instead of stream-json. Changed to `claude.cmd` direct invocation. Same fix for `npx.cmd` and `npm.cmd` in verifier.
+
+---
+
 ## scope-benchmark v0.6.3 (2026-03-22)
 
 ### Windows Compatibility
