@@ -203,7 +203,7 @@
     font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; font-weight: 500;
   }
   .bar-fill.bad  { width: 100%; background: rgba(255,68,85,0.16); border-right: 2px solid var(--red); color: var(--red); }
-  .bar-fill.good { width: 55%;  background: rgba(0,196,154,0.16); border-right: 2px solid var(--teal); color: var(--teal); }
+  .bar-fill.good { width: 68%;  background: rgba(0,196,154,0.16); border-right: 2px solid var(--teal); color: var(--teal); }
   .bar-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: var(--teal); margin-top: 0.4rem; }
 
   /* ── DEMO ── */
@@ -469,10 +469,10 @@
       </div>
 
       <div class="hero-metrics">
-        <div><div class="m-val"><span class="hi">45</span>%</div><div class="m-lbl">// file read reduction</div></div>
-        <div><div class="m-val"><span class="hi">100</span>%</div><div class="m-lbl">// compilation pass</div></div>
-        <div><div class="m-val">&lt;<span class="hi">100</span>ms</div><div class="m-lbl">// query latency</div></div>
-        <div><div class="m-val"><span class="hi">2</span></div><div class="m-lbl">// languages</div></div>
+        <div><div class="m-val">–<span class="hi">32</span>%</div><div class="m-lbl">// cost per task</div></div>
+        <div><div class="m-val">–<span class="hi">35</span>%</div><div class="m-lbl">// output tokens</div></div>
+        <div><div class="m-val">+<span class="hi">67</span>%</div><div class="m-lbl">// code edits</div></div>
+        <div><div class="m-val"><span class="hi">2</span>×</div><div class="m-lbl">// nav efficiency</div></div>
       </div>
 
     </div>
@@ -499,13 +499,13 @@
       <div class="reveal" style="transition-delay:0.15s">
         <div class="bars">
           <div>
-            <div class="bar-lbl">// without scope</div>
-            <div class="bar-track"><div class="bar-fill bad">6.9 file reads per task</div></div>
+            <div class="bar-lbl">// without scope — 25:1 navigation-to-edit ratio</div>
+            <div class="bar-track"><div class="bar-fill bad">$0.58 per task · 2.4 edits</div></div>
           </div>
           <div>
-            <div class="bar-lbl">// with scope — same task</div>
-            <div class="bar-track"><div class="bar-fill good">3.8 file reads per task</div></div>
-            <div class="bar-note">↑ 45% reduction in file reads · consistent across every task category</div>
+            <div class="bar-lbl">// with scope — 12:1 navigation-to-edit ratio</div>
+            <div class="bar-track"><div class="bar-fill good">$0.39 per task · 4.0 edits</div></div>
+            <div class="bar-note">↑ 32% cheaper · 67% more edits · every read counts</div>
           </div>
         </div>
       </div>
