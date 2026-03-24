@@ -592,12 +592,14 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting
 - [x] `WorkspaceGraph` federated query facade with symbol ID namespacing
 - [x] `LanguagePlugin` trait for pluggable language support (parser refactor)
+- [x] Python language support -- decorator metadata, docstring extraction, access inference
+- [x] Rust language support -- structs, enums, traits, visibility modifiers, dogfooding
 - [x] Enriched output with method modifiers, CamelCase/snake_case-aware FTS5
 - [x] `--json` output on all commands
 - [x] Benchmark harness with 12 tasks, 3-arm experiment, correctness verification
 
 **Next**
-- [ ] Python, Go, Java, Rust language support
+- [ ] Go and Java language support
 - [ ] `scope similar`, `scope source` commands (currently stubs)
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
 - [ ] Cross-project edge detection via `scope link`
