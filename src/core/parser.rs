@@ -2,14 +2,17 @@
 ///
 /// Uses tree-sitter queries stored in `src/queries/<language>/` to extract
 /// symbol definitions and relationships from source code.
+///
+/// Language-specific logic is provided by `LanguagePlugin` implementations
+/// in `src/languages/`. Adding a new language requires only implementing
+/// the trait and registering it in `CodeParser::new()`.
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::Path;
-use tree_sitter::{Language, Parser, Query, QueryCursor};
+use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::core::graph::{Edge, Symbol};
-use crate::languages::csharp;
-use crate::languages::typescript;
+use crate::languages::LanguagePlugin;
 
 /// Supported programming languages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,59 +59,57 @@ impl std::fmt::Display for SupportedLanguage {
     }
 }
 
-/// Configuration for a single language: grammar, queries, and file extensions.
-struct LanguageConfig {
-    /// tree-sitter language grammar.
-    language: Language,
-    /// Query for extracting symbol definitions.
+/// A registered language plugin with its compiled queries.
+struct PluginEntry {
+    /// The language plugin implementation.
+    plugin: Box<dyn LanguagePlugin>,
+    /// Compiled query for extracting symbol definitions.
     symbol_query: Query,
-    /// Query for extracting edges (calls, imports, etc.).
+    /// Compiled query for extracting edges (calls, imports, etc.).
     edge_query: Query,
-    /// File extensions this language handles (without the dot).
-    extensions: Vec<&'static str>,
 }
 
 /// The code parser that uses tree-sitter to extract symbols and edges.
 pub struct CodeParser {
     parser: Parser,
-    languages: HashMap<SupportedLanguage, LanguageConfig>,
+    plugins: Vec<PluginEntry>,
 }
 
 impl CodeParser {
-    /// Create a new parser with TypeScript support initialised.
+    /// Create a new parser with all supported language plugins registered.
     pub fn new() -> Result<Self> {
         let parser = Parser::new();
-        let mut languages = HashMap::new();
+        let mut plugins = Vec::new();
 
-        // TypeScript
-        let ts_lang = tree_sitter_typescript::language_typescript();
-        let symbol_query = Query::new(&ts_lang, include_str!("../queries/typescript/symbols.scm"))
-            .context("Failed to compile TypeScript symbol query")?;
-        let edge_query = Query::new(&ts_lang, include_str!("../queries/typescript/edges.scm"))
-            .context("Failed to compile TypeScript edge query")?;
-        let ts_config = LanguageConfig {
-            language: ts_lang,
-            symbol_query,
-            edge_query,
-            extensions: vec!["ts", "tsx"],
-        };
-        languages.insert(SupportedLanguage::TypeScript, ts_config);
+        // Register all language plugins.
+        // To add a new language, create a LanguagePlugin impl and add it here.
+        let all_plugins: Vec<Box<dyn LanguagePlugin>> = vec![
+            Box::new(crate::languages::typescript::TypeScriptPlugin),
+            Box::new(crate::languages::csharp::CSharpPlugin),
+        ];
 
-        // C#
-        let cs_lang = tree_sitter_c_sharp::language();
-        let cs_symbol_query = Query::new(&cs_lang, include_str!("../queries/csharp/symbols.scm"))
-            .context("Failed to compile C# symbol query")?;
-        let cs_edge_query = Query::new(&cs_lang, include_str!("../queries/csharp/edges.scm"))
-            .context("Failed to compile C# edge query")?;
-        let cs_config = LanguageConfig {
-            language: cs_lang,
-            symbol_query: cs_symbol_query,
-            edge_query: cs_edge_query,
-            extensions: vec!["cs"],
-        };
-        languages.insert(SupportedLanguage::CSharp, cs_config);
+        for plugin in all_plugins {
+            let ts_lang = plugin.ts_language();
+            let lang_name = plugin.language().to_string();
 
-        Ok(Self { parser, languages })
+            let symbol_query = Query::new(&ts_lang, plugin.symbol_query_source())
+                .with_context(|| format!("Failed to compile {lang_name} symbol query"))?;
+            let edge_query = Query::new(&ts_lang, plugin.edge_query_source())
+                .with_context(|| format!("Failed to compile {lang_name} edge query"))?;
+
+            plugins.push(PluginEntry {
+                plugin,
+                symbol_query,
+                edge_query,
+            });
+        }
+
+        Ok(Self { parser, plugins })
+    }
+
+    /// Find the plugin entry for a given language.
+    fn find_plugin(&self, lang: SupportedLanguage) -> Option<&PluginEntry> {
+        self.plugins.iter().find(|e| e.plugin.language() == lang)
     }
 
     /// Detect the language of a file based on its extension.
@@ -135,16 +136,15 @@ impl CodeParser {
             Some(e) => e,
             None => return false,
         };
-        self.languages
-            .values()
-            .any(|config| config.extensions.contains(&ext))
+        self.plugins
+            .iter()
+            .any(|entry| entry.plugin.extensions().contains(&ext))
     }
 
     /// Get the file extensions supported by a language.
-    pub fn extensions_for(&self, lang: SupportedLanguage) -> &[&'static str] {
-        self.languages
-            .get(&lang)
-            .map(|c| c.extensions.as_slice())
+    pub fn extensions_for(&self, lang: SupportedLanguage) -> &[&str] {
+        self.find_plugin(lang)
+            .map(|e| e.plugin.extensions())
             .unwrap_or(&[])
     }
 
@@ -155,13 +155,14 @@ impl CodeParser {
         source: &str,
         lang: SupportedLanguage,
     ) -> Result<Vec<Symbol>> {
-        let config = self
-            .languages
-            .get(&lang)
+        let entry = self
+            .find_plugin(lang)
             .ok_or_else(|| anyhow::anyhow!("Language {:?} not loaded", lang))?;
 
+        let ts_lang = entry.plugin.ts_language();
+
         self.parser
-            .set_language(&config.language)
+            .set_language(&ts_lang)
             .context("Failed to set parser language")?;
 
         let tree = self
@@ -170,10 +171,17 @@ impl CodeParser {
             .ok_or_else(|| anyhow::anyhow!("Parse failed for {file_path}"))?;
 
         let mut cursor = QueryCursor::new();
-        let matches = cursor.matches(&config.symbol_query, tree.root_node(), source.as_bytes());
+
+        // We need to borrow entry immutably while iterating, but self.parser
+        // was already used above. Re-find the plugin for the iteration.
+        let entry = self
+            .find_plugin(lang)
+            .ok_or_else(|| anyhow::anyhow!("Language {:?} not loaded", lang))?;
+
+        let matches = cursor.matches(&entry.symbol_query, tree.root_node(), source.as_bytes());
 
         let mut symbols = Vec::new();
-        let capture_names = config.symbol_query.capture_names();
+        let capture_names = entry.symbol_query.capture_names();
 
         for m in matches {
             let mut name_text: Option<String> = None;
@@ -200,16 +208,12 @@ impl CodeParser {
             let Some(name) = name_text else { continue };
             let Some(def) = def_node else { continue };
 
-            let kind = infer_symbol_kind(def.kind());
+            let kind = entry.plugin.infer_symbol_kind(def.kind()).to_string();
             let line = def.start_position().row as u32 + 1;
             let id = format!("{file_path}::{name}::{kind}::{line}");
 
             // Extract metadata using language-specific logic
-            let metadata = match lang {
-                SupportedLanguage::TypeScript => typescript::extract_metadata(&def, source, &kind)?,
-                SupportedLanguage::CSharp => csharp::extract_metadata(&def, source, &kind)?,
-                _ => "{}".to_string(),
-            };
+            let metadata = entry.plugin.extract_metadata(&def, source, &kind)?;
 
             // Extract signature — the first line of the definition up to `{` or end of line
             let signature = extract_signature(&def, source);
@@ -219,7 +223,7 @@ impl CodeParser {
 
             // Determine parent_id for methods inside classes
             let parent_id = if kind == "method" || kind == "property" {
-                find_parent_class(&def, source, file_path)
+                find_parent_class(&def, source, file_path, entry.plugin.as_ref())
             } else {
                 None
             };
@@ -249,13 +253,14 @@ impl CodeParser {
         source: &str,
         lang: SupportedLanguage,
     ) -> Result<Vec<Edge>> {
-        let config = self
-            .languages
-            .get(&lang)
+        let entry = self
+            .find_plugin(lang)
             .ok_or_else(|| anyhow::anyhow!("Language {:?} not loaded", lang))?;
 
+        let ts_lang = entry.plugin.ts_language();
+
         self.parser
-            .set_language(&config.language)
+            .set_language(&ts_lang)
             .context("Failed to set parser language")?;
 
         let tree = self
@@ -264,10 +269,16 @@ impl CodeParser {
             .ok_or_else(|| anyhow::anyhow!("Parse failed for {file_path}"))?;
 
         let mut cursor = QueryCursor::new();
-        let matches = cursor.matches(&config.edge_query, tree.root_node(), source.as_bytes());
+
+        // Re-find plugin after mutable borrow of self.parser
+        let entry = self
+            .find_plugin(lang)
+            .ok_or_else(|| anyhow::anyhow!("Language {:?} not loaded", lang))?;
+
+        let matches = cursor.matches(&entry.edge_query, tree.root_node(), source.as_bytes());
 
         let mut edges = Vec::new();
-        let capture_names = config.edge_query.capture_names();
+        let capture_names = entry.edge_query.capture_names();
 
         for m in matches {
             let pattern = m.pattern_index;
@@ -292,10 +303,9 @@ impl CodeParser {
             // Resolve the enclosing scope for this match
             let enclosing_scope_id = representative_node
                 .as_ref()
-                .and_then(|n| find_enclosing_scope(n, source, file_path));
+                .and_then(|n| find_enclosing_scope(n, source, file_path, entry.plugin.as_ref()));
 
-            let extracted = extract_edge_from_pattern(
-                lang,
+            let extracted = entry.plugin.extract_edge(
                 pattern,
                 &captures_map,
                 file_path,
@@ -305,29 +315,6 @@ impl CodeParser {
         }
 
         Ok(edges)
-    }
-}
-
-/// Infer the symbol kind from the tree-sitter node type.
-fn infer_symbol_kind(node_kind: &str) -> String {
-    match node_kind {
-        // TypeScript / JavaScript
-        "function_declaration" => "function".to_string(),
-        "class_declaration" => "class".to_string(),
-        "method_definition" => "method".to_string(),
-        "interface_declaration" => "interface".to_string(),
-        "enum_declaration" => "enum".to_string(),
-        "type_alias_declaration" => "type".to_string(),
-        "public_field_definition" => "property".to_string(),
-        "lexical_declaration" | "arrow_function" | "function_expression" => "function".to_string(),
-        // C#
-        "method_declaration" => "method".to_string(),
-        "constructor_declaration" => "method".to_string(),
-        "property_declaration" => "property".to_string(),
-        "struct_declaration" => "struct".to_string(),
-        "record_declaration" => "class".to_string(),
-        "delegate_declaration" => "type".to_string(),
-        _ => "function".to_string(),
     }
 }
 
@@ -366,25 +353,15 @@ fn extract_docstring(node: &tree_sitter::Node, source: &str) -> Option<String> {
 
 /// Walk up the AST from `node` to find the nearest enclosing scope (function, method, class).
 /// Returns the symbol ID of that scope, or `None` if at module level.
-fn find_enclosing_scope(node: &tree_sitter::Node, source: &str, file_path: &str) -> Option<String> {
+fn find_enclosing_scope(
+    node: &tree_sitter::Node,
+    source: &str,
+    file_path: &str,
+    plugin: &dyn LanguagePlugin,
+) -> Option<String> {
     let mut current = node.parent();
 
-    // Node types that define a scope
-    let scope_types = [
-        // TypeScript
-        "function_declaration",
-        "method_definition",
-        "arrow_function",
-        "function_expression",
-        // C#
-        "method_declaration",
-        "constructor_declaration",
-        // Both
-        "class_declaration",
-        "struct_declaration",
-        "interface_declaration",
-        "record_declaration",
-    ];
+    let scope_types = plugin.scope_node_types();
 
     while let Some(parent) = current {
         if scope_types.contains(&parent.kind()) {
@@ -409,7 +386,7 @@ fn find_enclosing_scope(node: &tree_sitter::Node, source: &str, file_path: &str)
             // Named scope — get its name and build the ID
             if let Some(name_node) = parent.child_by_field_name("name") {
                 if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
-                    let kind = infer_symbol_kind(parent.kind());
+                    let kind = plugin.infer_symbol_kind(parent.kind());
                     let line = parent.start_position().row as u32 + 1;
                     return Some(format!("{file_path}::{name}::{kind}::{line}"));
                 }
@@ -421,27 +398,24 @@ fn find_enclosing_scope(node: &tree_sitter::Node, source: &str, file_path: &str)
     None // Module level — no enclosing scope
 }
 
-/// Parent container node types that hold methods/properties.
-const CLASS_BODY_NODES: &[&str] = &["class_body", "declaration_list"];
-
-/// Parent declaration node types that define classes/structs/interfaces.
-const CLASS_DECL_NODES: &[&str] = &[
-    "class_declaration",
-    "struct_declaration",
-    "interface_declaration",
-    "record_declaration",
-];
-
 /// Find the parent class for a method or property node.
-fn find_parent_class(node: &tree_sitter::Node, source: &str, file_path: &str) -> Option<String> {
+fn find_parent_class(
+    node: &tree_sitter::Node,
+    source: &str,
+    file_path: &str,
+    plugin: &dyn LanguagePlugin,
+) -> Option<String> {
+    let class_body_nodes = plugin.class_body_node_types();
+    let class_decl_nodes = plugin.class_decl_node_types();
+
     let mut current = node.parent();
     while let Some(parent) = current {
-        if CLASS_BODY_NODES.contains(&parent.kind()) {
+        if class_body_nodes.contains(&parent.kind()) {
             if let Some(class_node) = parent.parent() {
-                if CLASS_DECL_NODES.contains(&class_node.kind()) {
+                if class_decl_nodes.contains(&class_node.kind()) {
                     if let Some(name_node) = class_node.child_by_field_name("name") {
                         let class_name = name_node.utf8_text(source.as_bytes()).ok()?;
-                        let kind = infer_symbol_kind(class_node.kind());
+                        let kind = plugin.infer_symbol_kind(class_node.kind());
                         let class_line = class_node.start_position().row as u32 + 1;
                         return Some(format!("{file_path}::{class_name}::{kind}::{class_line}"));
                     }
@@ -451,258 +425,4 @@ fn find_parent_class(node: &tree_sitter::Node, source: &str, file_path: &str) ->
         current = parent.parent();
     }
     None
-}
-
-/// Extract edges from a query match pattern.
-///
-/// Pattern indices correspond to the order of patterns in the `.scm` query file,
-/// so they differ per language.
-fn extract_edge_from_pattern(
-    lang: SupportedLanguage,
-    pattern: usize,
-    captures: &HashMap<String, (String, u32)>,
-    file_path: &str,
-    enclosing_scope_id: Option<&str>,
-) -> Vec<Edge> {
-    match lang {
-        SupportedLanguage::TypeScript => {
-            extract_ts_edge(pattern, captures, file_path, enclosing_scope_id)
-        }
-        SupportedLanguage::CSharp => {
-            extract_cs_edge(pattern, captures, file_path, enclosing_scope_id)
-        }
-        _ => Vec::new(),
-    }
-}
-
-/// TypeScript edge extraction by pattern index.
-///
-/// Pattern indices map to the order of patterns in `queries/typescript/edges.scm`:
-/// 0 = import, 1 = direct call, 2 = member call, 3 = chained member call,
-/// 4 = new expression, 5 = extends, 6 = implements, 7 = type reference
-fn extract_ts_edge(
-    pattern: usize,
-    captures: &HashMap<String, (String, u32)>,
-    file_path: &str,
-    enclosing_scope_id: Option<&str>,
-) -> Vec<Edge> {
-    let mut edges = Vec::new();
-
-    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
-
-    match pattern {
-        // Import statement — always module-level, use __module__ synthetic ID
-        0 => {
-            if let (Some((imported_name, line)), Some((source, _))) =
-                (captures.get("imported_name"), captures.get("source"))
-            {
-                let source_clean = source.trim_matches(|c| c == '\'' || c == '"');
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: format!("{source_clean}::{imported_name}"),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Direct call expression
-        1 => {
-            if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Member call expression / chained member access call (patterns 2 and 3)
-        2 | 3 => {
-            if let (Some((object, line)), Some((method, _))) =
-                (captures.get("object"), captures.get("method"))
-            {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{object}.{method}"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // New expression (instantiation)
-        4 => {
-            if let Some((class_name, line)) = captures.get("class_name") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: class_name.clone(),
-                    kind: "instantiates".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Extends clause
-        5 => {
-            if let Some((base_class, line)) = captures.get("base_class") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_class.clone(),
-                    kind: "extends".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Implements clause
-        6 => {
-            if let Some((iface_name, line)) = captures.get("interface_name") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: iface_name.clone(),
-                    kind: "implements".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Type reference
-        7 => {
-            if let Some((type_ref, line)) = captures.get("type_ref") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: type_ref.clone(),
-                    kind: "references_type".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        _ => {}
-    }
-
-    edges
-}
-
-/// C# edge extraction by pattern index.
-///
-/// Pattern indices map to the order of patterns in `queries/csharp/edges.scm`:
-/// 0 = using (identifier), 1 = using (qualified), 2 = member call,
-/// 3 = direct call, 4 = new expression, 5 = base list (identifier),
-/// 6 = base list (qualified)
-fn extract_cs_edge(
-    pattern: usize,
-    captures: &HashMap<String, (String, u32)>,
-    file_path: &str,
-    enclosing_scope_id: Option<&str>,
-) -> Vec<Edge> {
-    let mut edges = Vec::new();
-
-    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
-
-    match pattern {
-        // Using directive with identifier — always module-level, use __module__ synthetic ID
-        0 => {
-            if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Using directive with qualified name — always module-level, use __module__ synthetic ID
-        1 => {
-            if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Member access call (e.g. _logger.Info(...))
-        2 => {
-            if let (Some((object, line)), Some((method, _))) =
-                (captures.get("object"), captures.get("method"))
-            {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{object}.{method}"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Direct call (e.g. DoSomething(...))
-        3 => {
-            if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Object creation (new ...)
-        4 => {
-            if let Some((class_name, line)) = captures.get("class_name") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: class_name.clone(),
-                    kind: "instantiates".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Base list with identifier (implements/extends)
-        5 => {
-            if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_type.clone(),
-                    kind: "implements".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Base list with qualified name
-        6 => {
-            if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_type.clone(),
-                    kind: "implements".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        _ => {}
-    }
-
-    edges
 }

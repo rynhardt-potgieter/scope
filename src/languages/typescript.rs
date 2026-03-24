@@ -1,9 +1,92 @@
-/// TypeScript-specific metadata extraction.
+/// TypeScript-specific metadata extraction and language plugin.
 ///
 /// Extracts access modifiers, async, static, return type, and parameters
 /// from TypeScript AST nodes. TypeScript defaults to public access.
 use anyhow::Result;
 use serde::Serialize;
+use std::collections::HashMap;
+use tree_sitter::Language;
+
+use crate::core::graph::Edge;
+use crate::core::parser::SupportedLanguage;
+use crate::languages::LanguagePlugin;
+
+/// TypeScript language plugin.
+pub struct TypeScriptPlugin;
+
+impl LanguagePlugin for TypeScriptPlugin {
+    fn language(&self) -> SupportedLanguage {
+        SupportedLanguage::TypeScript
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["ts", "tsx"]
+    }
+
+    fn ts_language(&self) -> Language {
+        tree_sitter_typescript::language_typescript()
+    }
+
+    fn symbol_query_source(&self) -> &str {
+        include_str!("../queries/typescript/symbols.scm")
+    }
+
+    fn edge_query_source(&self) -> &str {
+        include_str!("../queries/typescript/edges.scm")
+    }
+
+    fn infer_symbol_kind(&self, node_kind: &str) -> &str {
+        match node_kind {
+            "function_declaration" => "function",
+            "class_declaration" => "class",
+            "method_definition" => "method",
+            "interface_declaration" => "interface",
+            "enum_declaration" => "enum",
+            "type_alias_declaration" => "type",
+            "public_field_definition" => "property",
+            "lexical_declaration" | "arrow_function" | "function_expression" => "function",
+            _ => "function",
+        }
+    }
+
+    fn scope_node_types(&self) -> &[&str] {
+        &[
+            "function_declaration",
+            "method_definition",
+            "arrow_function",
+            "function_expression",
+            "class_declaration",
+            "interface_declaration",
+        ]
+    }
+
+    fn class_body_node_types(&self) -> &[&str] {
+        &["class_body"]
+    }
+
+    fn class_decl_node_types(&self) -> &[&str] {
+        &["class_declaration"]
+    }
+
+    fn extract_metadata(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        kind: &str,
+    ) -> Result<String> {
+        extract_metadata(node, source, kind)
+    }
+
+    fn extract_edge(
+        &self,
+        pattern_index: usize,
+        captures: &HashMap<String, (String, u32)>,
+        file_path: &str,
+        enclosing_scope_id: Option<&str>,
+    ) -> Vec<Edge> {
+        extract_ts_edge(pattern_index, captures, file_path, enclosing_scope_id)
+    }
+}
 
 /// Structured metadata for a TypeScript symbol.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -113,4 +196,121 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<Para
     }
 
     params
+}
+
+/// TypeScript edge extraction by pattern index.
+///
+/// Pattern indices map to the order of patterns in `queries/typescript/edges.scm`:
+/// 0 = import, 1 = direct call, 2 = member call, 3 = chained member call,
+/// 4 = new expression, 5 = extends, 6 = implements, 7 = type reference
+fn extract_ts_edge(
+    pattern: usize,
+    captures: &HashMap<String, (String, u32)>,
+    file_path: &str,
+    enclosing_scope_id: Option<&str>,
+) -> Vec<Edge> {
+    let mut edges = Vec::new();
+
+    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
+    let from_function = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
+    let from_class = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+
+    match pattern {
+        // Import statement — always module-level, use __module__ synthetic ID
+        0 => {
+            if let (Some((imported_name, line)), Some((source, _))) =
+                (captures.get("imported_name"), captures.get("source"))
+            {
+                let source_clean = source.trim_matches(|c| c == '\'' || c == '"');
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: format!("{source_clean}::{imported_name}"),
+                    kind: "imports".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Direct call expression
+        1 => {
+            if let Some((callee, line)) = captures.get("callee") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: callee.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Member call expression / chained member access call (patterns 2 and 3)
+        2 | 3 => {
+            if let (Some((object, line)), Some((method, _))) =
+                (captures.get("object"), captures.get("method"))
+            {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: format!("{object}.{method}"),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // New expression (instantiation)
+        4 => {
+            if let Some((class_name, line)) = captures.get("class_name") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: class_name.clone(),
+                    kind: "instantiates".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Extends clause
+        5 => {
+            if let Some((base_class, line)) = captures.get("base_class") {
+                edges.push(Edge {
+                    from_id: from_class.clone(),
+                    to_id: base_class.clone(),
+                    kind: "extends".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Implements clause
+        6 => {
+            if let Some((iface_name, line)) = captures.get("interface_name") {
+                edges.push(Edge {
+                    from_id: from_class.clone(),
+                    to_id: iface_name.clone(),
+                    kind: "implements".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Type reference
+        7 => {
+            if let Some((type_ref, line)) = captures.get("type_ref") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: type_ref.clone(),
+                    kind: "references_type".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    edges
 }

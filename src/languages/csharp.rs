@@ -1,12 +1,99 @@
-/// C#-specific metadata extraction.
+/// C#-specific metadata extraction and language plugin.
 ///
 /// Extracts access modifiers (public, private, protected, internal),
 /// C#-specific modifiers (async, static, abstract, virtual, override, sealed, readonly),
 /// return type, and parameters from C# AST nodes.
 use anyhow::Result;
 use serde::Serialize;
+use std::collections::HashMap;
+use tree_sitter::Language;
 
-use crate::core::graph::Symbol;
+use crate::core::graph::{Edge, Symbol};
+use crate::core::parser::SupportedLanguage;
+use crate::languages::LanguagePlugin;
+
+/// C# language plugin.
+pub struct CSharpPlugin;
+
+impl LanguagePlugin for CSharpPlugin {
+    fn language(&self) -> SupportedLanguage {
+        SupportedLanguage::CSharp
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["cs"]
+    }
+
+    fn ts_language(&self) -> Language {
+        tree_sitter_c_sharp::language()
+    }
+
+    fn symbol_query_source(&self) -> &str {
+        include_str!("../queries/csharp/symbols.scm")
+    }
+
+    fn edge_query_source(&self) -> &str {
+        include_str!("../queries/csharp/edges.scm")
+    }
+
+    fn infer_symbol_kind(&self, node_kind: &str) -> &str {
+        match node_kind {
+            "class_declaration" => "class",
+            "method_declaration" => "method",
+            "constructor_declaration" => "method",
+            "property_declaration" => "property",
+            "interface_declaration" => "interface",
+            "enum_declaration" => "enum",
+            "struct_declaration" => "struct",
+            "record_declaration" => "class",
+            "delegate_declaration" => "type",
+            _ => "function",
+        }
+    }
+
+    fn scope_node_types(&self) -> &[&str] {
+        &[
+            "method_declaration",
+            "constructor_declaration",
+            "class_declaration",
+            "struct_declaration",
+            "interface_declaration",
+            "record_declaration",
+        ]
+    }
+
+    fn class_body_node_types(&self) -> &[&str] {
+        &["declaration_list"]
+    }
+
+    fn class_decl_node_types(&self) -> &[&str] {
+        &[
+            "class_declaration",
+            "struct_declaration",
+            "interface_declaration",
+            "record_declaration",
+        ]
+    }
+
+    fn extract_metadata(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        kind: &str,
+    ) -> Result<String> {
+        extract_metadata(node, source, kind)
+    }
+
+    fn extract_edge(
+        &self,
+        pattern_index: usize,
+        captures: &HashMap<String, (String, u32)>,
+        file_path: &str,
+        enclosing_scope_id: Option<&str>,
+    ) -> Vec<Edge> {
+        extract_cs_edge(pattern_index, captures, file_path, enclosing_scope_id)
+    }
+}
 
 /// Structured metadata for a C# symbol.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -211,4 +298,119 @@ pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
     }
 
     removals
+}
+
+/// C# edge extraction by pattern index.
+///
+/// Pattern indices map to the order of patterns in `queries/csharp/edges.scm`:
+/// 0 = using (identifier), 1 = using (qualified), 2 = member call,
+/// 3 = direct call, 4 = new expression, 5 = base list (identifier),
+/// 6 = base list (qualified)
+fn extract_cs_edge(
+    pattern: usize,
+    captures: &HashMap<String, (String, u32)>,
+    file_path: &str,
+    enclosing_scope_id: Option<&str>,
+) -> Vec<Edge> {
+    let mut edges = Vec::new();
+
+    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
+    let from_function = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
+    let from_class = enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+
+    match pattern {
+        // Using directive with identifier — always module-level, use __module__ synthetic ID
+        0 => {
+            if let Some((imported_name, line)) = captures.get("imported_name") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: imported_name.clone(),
+                    kind: "imports".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Using directive with qualified name — always module-level, use __module__ synthetic ID
+        1 => {
+            if let Some((imported_name, line)) = captures.get("imported_name") {
+                edges.push(Edge {
+                    from_id: format!("{file_path}::__module__::function"),
+                    to_id: imported_name.clone(),
+                    kind: "imports".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Member access call (e.g. _logger.Info(...))
+        2 => {
+            if let (Some((object, line)), Some((method, _))) =
+                (captures.get("object"), captures.get("method"))
+            {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: format!("{object}.{method}"),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Direct call (e.g. DoSomething(...))
+        3 => {
+            if let Some((callee, line)) = captures.get("callee") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: callee.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Object creation (new ...)
+        4 => {
+            if let Some((class_name, line)) = captures.get("class_name") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: class_name.clone(),
+                    kind: "instantiates".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Base list with identifier (implements/extends)
+        5 => {
+            if let Some((base_type, line)) = captures.get("base_type") {
+                edges.push(Edge {
+                    from_id: from_class.clone(),
+                    to_id: base_type.clone(),
+                    kind: "implements".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Base list with qualified name
+        6 => {
+            if let Some((base_type, line)) = captures.get("base_type") {
+                edges.push(Edge {
+                    from_id: from_class.clone(),
+                    to_id: base_type.clone(),
+                    kind: "implements".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    edges
 }
