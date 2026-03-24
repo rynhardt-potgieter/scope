@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.1 (2026-03-24)
+
+### Fix
+- **Python docstrings now extracted correctly** — moved `extract_docstring` into the `LanguagePlugin` trait with a default comment-based implementation. Python overrides with string-literal-based extraction. Previously all Python symbols had `docstring: None`.
+- **Silent failure audit fixes** — 13 issues addressed: workspace query errors now logged instead of swallowed, watch loop survives transient failures, lock file handling hardened, read_dir errors logged in discovery and nested scan.
+
+---
+
 ## v0.7.0 (2026-03-24)
 
 ### New Features

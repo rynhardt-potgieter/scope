@@ -87,6 +87,10 @@ impl LanguagePlugin for PythonPlugin {
     ) -> Vec<Edge> {
         extract_py_edge(pattern_index, captures, file_path, enclosing_scope_id)
     }
+
+    fn extract_docstring(&self, node: &tree_sitter::Node, source: &str) -> Option<String> {
+        extract_docstring(node, source)
+    }
 }
 
 /// Structured metadata for a Python symbol.

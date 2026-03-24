@@ -80,4 +80,19 @@ pub trait LanguagePlugin: Send + Sync {
         file_path: &str,
         enclosing_scope_id: Option<&str>,
     ) -> Vec<Edge>;
+
+    /// Extract a docstring from the definition node.
+    ///
+    /// Default implementation looks for a comment node as the previous sibling
+    /// (works for TypeScript, C#, Rust). Override for languages where docstrings
+    /// are string literals inside the body (e.g., Python).
+    fn extract_docstring(&self, node: &tree_sitter::Node, source: &str) -> Option<String> {
+        let prev = node.prev_sibling()?;
+        if prev.kind() == "comment" {
+            let text = prev.utf8_text(source.as_bytes()).ok()?;
+            Some(text.trim().to_string())
+        } else {
+            None
+        }
+    }
 }

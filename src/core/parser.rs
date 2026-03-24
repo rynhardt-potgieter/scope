@@ -220,8 +220,8 @@ impl CodeParser {
             // Extract signature — the first line of the definition up to `{` or end of line
             let signature = extract_signature(&def, source);
 
-            // Extract docstring — look for comment nodes immediately before the definition
-            let docstring = extract_docstring(&def, source);
+            // Extract docstring — delegates to language plugin (Python overrides for string-based docstrings)
+            let docstring = entry.plugin.extract_docstring(&def, source);
 
             // Determine parent_id for methods inside classes
             let parent_id = if kind == "method" || kind == "property" {
@@ -339,17 +339,6 @@ fn extract_signature(node: &tree_sitter::Node, source: &str) -> Option<String> {
         None
     } else {
         Some(sig.to_string())
-    }
-}
-
-/// Extract a docstring from a comment node immediately preceding the definition.
-fn extract_docstring(node: &tree_sitter::Node, source: &str) -> Option<String> {
-    let prev = node.prev_sibling()?;
-    if prev.kind() == "comment" {
-        let text = prev.utf8_text(source.as_bytes()).ok()?;
-        Some(text.trim().to_string())
-    } else {
-        None
     }
 }
 
