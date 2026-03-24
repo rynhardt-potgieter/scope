@@ -59,6 +59,11 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         languages.push("python".to_string());
     }
 
+    // Rust detection
+    if project_root.join("Cargo.toml").exists() {
+        languages.push("rust".to_string());
+    }
+
     // Derive project name from directory name
     let project_name = project_root
         .file_name()

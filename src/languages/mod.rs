@@ -7,6 +7,7 @@
 /// modifying `parser.rs` — implement the trait and register the plugin.
 pub mod csharp;
 pub mod python;
+pub mod rust_lang;
 pub mod typescript;
 
 use anyhow::Result;
