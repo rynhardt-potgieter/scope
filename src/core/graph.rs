@@ -220,6 +220,9 @@ impl Graph {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open graph database at {}", path.display()))?;
 
+        // Busy timeout for concurrent read/write safety (watch mode)
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+
         // Performance pragmas — safe for single-writer use
         conn.execute_batch(
             "

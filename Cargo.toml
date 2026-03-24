@@ -38,6 +38,12 @@ tracing-subscriber = "0.3"
 console = "0.15"
 tree-sitter-c-sharp = "0.21"
 
+# File watching
+notify = "6"
+notify-debouncer-mini = "0.4"
+ctrlc = "3"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 [profile.release]
 strip = true
 lto = "thin"
@@ -95,3 +101,7 @@ path = "tests/integration/test_entrypoints.rs"
 [[test]]
 name = "test_map"
 path = "tests/integration/test_map.rs"
+
+[[test]]
+name = "test_watch"
+path = "tests/integration/test_watch.rs"
