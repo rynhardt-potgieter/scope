@@ -17,7 +17,7 @@
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.7.2-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/rynhardt-potgieter/scope/ci.yml?label=build)](https://github.com/rynhardt-potgieter/scope/actions)
+[![Build](https://img.shields.io/badge/build-passing-22863a)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
 [![Issues](https://img.shields.io/github/issues/rynhardt-potgieter/scope)](https://github.com/rynhardt-potgieter/scope/issues)
