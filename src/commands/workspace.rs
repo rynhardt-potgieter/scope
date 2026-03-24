@@ -312,7 +312,7 @@ fn run_list(args: &WorkspaceListArgs, project_root: &Path) -> Result<()> {
 /// Walk upward from the given directory looking for `scope-workspace.toml`.
 ///
 /// Returns the path to the manifest file if found.
-fn find_workspace_manifest(start: &Path) -> Result<std::path::PathBuf> {
+pub fn find_workspace_manifest(start: &Path) -> Result<std::path::PathBuf> {
     let mut current = start.to_path_buf();
 
     loop {

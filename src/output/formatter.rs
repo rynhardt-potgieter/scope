@@ -1194,3 +1194,98 @@ fn humanize_edge_kind(kind: &str) -> &str {
         _ => kind,
     }
 }
+
+/// Print workspace status showing per-member status and aggregate totals.
+pub fn print_workspace_status(
+    workspace_name: &str,
+    members: &[crate::commands::status::MemberStatusData],
+    total_symbols: usize,
+    total_files: usize,
+    total_edges: usize,
+) {
+    println!("Workspace: {workspace_name}");
+    println!("{SEPARATOR}");
+
+    for m in members {
+        let status_label = if m.status.index_exists {
+            if m.status.symbol_count == 0 {
+                "empty"
+            } else {
+                "indexed"
+            }
+        } else {
+            "not indexed"
+        };
+        let last = m.status.last_indexed_relative.as_deref().unwrap_or("never");
+        println!(
+            "  {:<16}{:<14}{:>6} files  {:>7} symbols  {:>7} edges  {}",
+            m.name,
+            status_label,
+            format_number(m.status.file_count),
+            format_number(m.status.symbol_count),
+            format_number(m.status.edge_count),
+            last,
+        );
+    }
+
+    println!("{SEPARATOR}");
+    println!(
+        "  {:<16}{:<14}{:>6} files  {:>7} symbols  {:>7} edges",
+        "Total",
+        "",
+        format_number(total_files),
+        format_number(total_symbols),
+        format_number(total_edges),
+    );
+}
+
+/// Print workspace refs: references tagged with project names.
+pub fn print_workspace_refs(
+    symbol_name: &str,
+    refs: &[crate::core::workspace_graph::WorkspaceRef],
+    total: usize,
+) {
+    println!(
+        "{} \u{2014} {} reference{} (workspace)",
+        symbol_name,
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+    println!("{SEPARATOR}");
+
+    for wr in refs {
+        let r = &wr.reference;
+        let path = normalize_path(&r.file_path);
+        let location = if let Some(line) = r.line {
+            format!("{path}:{line}")
+        } else {
+            path
+        };
+        let display_text = r.snippet_line.as_deref().unwrap_or(&r.context);
+        let truncated_text = truncate_str(display_text.trim(), 70);
+        println!("[{:<12}] {:<36}{}", wr.project, location, truncated_text);
+    }
+}
+
+/// Print workspace find results with project labels.
+pub fn print_workspace_find_results(
+    query: &str,
+    results: &[crate::commands::find::WorkspaceSearchResult],
+) {
+    println!(
+        "find \"{}\" \u{2014} {} result{}",
+        query,
+        results.len(),
+        if results.len() == 1 { "" } else { "s" }
+    );
+    println!("{SEPARATOR}");
+
+    for r in results {
+        let path = normalize_path(&r.result.file_path);
+        let line_range = format_line_range(r.result.line_start, r.result.line_end);
+        println!(
+            "[{:<12}] {:<32}{:<8}  {path}:{line_range}  ({:.2})",
+            r.project, r.result.name, r.result.kind, r.result.score
+        );
+    }
+}

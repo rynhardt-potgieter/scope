@@ -134,6 +134,27 @@ impl WorkspaceGraph {
         self.members.iter().map(|m| m.name.as_str()).collect()
     }
 
+    /// Get a reference to the internal members for direct iteration.
+    pub fn members(&self) -> &[WorkspaceMember] {
+        &self.members
+    }
+
+    /// Get deduplicated union of languages across all members.
+    pub fn get_languages(&self) -> Vec<String> {
+        let mut langs: Vec<String> = Vec::new();
+        for member in &self.members {
+            if let Ok(member_langs) = member.graph.get_languages() {
+                for lang in member_langs {
+                    if !langs.contains(&lang) {
+                        langs.push(lang);
+                    }
+                }
+            }
+        }
+        langs.sort();
+        langs
+    }
+
     /// Find a symbol by name across all workspace members.
     ///
     /// Returns all matches tagged with their project name. The caller

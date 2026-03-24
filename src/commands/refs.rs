@@ -6,20 +6,27 @@
 /// For class symbols, references are grouped by kind (instantiated, extended,
 /// imported, used as type). For functions/methods, a flat list is shown.
 ///
+/// In workspace mode (`--workspace`), fans out to all members and tags
+/// results with the source project name.
+///
 /// Examples:
 ///   scope refs processPayment              — all references to a function
 ///   scope refs PaymentService              — grouped references to a class
 ///   scope refs PaymentService --kind calls — only call sites
 ///   scope refs src/payments/service.ts     — all refs to symbols in a file
+///   scope refs processPayment --workspace  — search across workspace
 use anyhow::{bail, Result};
 use clap::Args;
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::config::workspace::WorkspaceConfig;
 use crate::core::graph::Graph;
 use crate::core::graph::Reference;
+use crate::core::workspace_graph::WorkspaceGraph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
+use crate::Context;
 
 /// Arguments for the `scope refs` command.
 #[derive(Args, Debug)]
@@ -89,7 +96,10 @@ pub fn run_callers(args: &CallersArgs, project_root: &Path) -> Result<()> {
         context: args.context,
         json: args.json,
     };
-    run(&refs_args, project_root)
+    let ctx = Context::SingleProject {
+        root: project_root.to_path_buf(),
+    };
+    run(&refs_args, &ctx)
 }
 
 /// Run transitive caller analysis (depth > 1) using the impact graph query.
@@ -185,7 +195,19 @@ fn enrich_refs_with_snippets(refs: &mut [Reference], project_root: &Path, contex
 use super::looks_like_file_path;
 
 /// Run the `scope refs` command.
-pub fn run(args: &RefsArgs, project_root: &Path) -> Result<()> {
+pub fn run(args: &RefsArgs, ctx: &Context) -> Result<()> {
+    match ctx {
+        Context::SingleProject { root } => run_single(args, root),
+        Context::Workspace {
+            workspace_root,
+            config,
+            ..
+        } => run_workspace(args, workspace_root, config),
+    }
+}
+
+/// Run refs for a single project.
+fn run_single(args: &RefsArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
@@ -289,6 +311,60 @@ fn run_file_refs(args: &RefsArgs, graph: &Graph, project_root: &Path) -> Result<
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         formatter::print_file_refs(&file_path, &refs, total);
+    }
+
+    Ok(())
+}
+
+/// Run refs across all workspace members.
+fn run_workspace(args: &RefsArgs, workspace_root: &Path, config: &WorkspaceConfig) -> Result<()> {
+    let members: Vec<(String, std::path::PathBuf)> = config
+        .workspace
+        .members
+        .iter()
+        .map(|entry| {
+            let name = WorkspaceConfig::resolve_member_name(entry);
+            let path = workspace_root.join(&entry.path);
+            (name, path)
+        })
+        .collect();
+
+    let wg = WorkspaceGraph::open(members)?;
+
+    let kinds: Option<Vec<&str>> = args.kind.as_deref().map(|k| vec![k]);
+    let kinds_slice = kinds.as_deref();
+
+    let ws_refs = wg.find_refs(&args.symbol, kinds_slice, args.limit);
+
+    if ws_refs.is_empty() {
+        if args.json {
+            let output = JsonOutput {
+                command: "refs",
+                symbol: Some(args.symbol.clone()),
+                data: &Vec::<serde_json::Value>::new(),
+                truncated: false,
+                total: 0,
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            println!("No references to '{}' found across workspace.", args.symbol);
+        }
+        return Ok(());
+    }
+
+    let total = ws_refs.len();
+
+    if args.json {
+        let output = JsonOutput {
+            command: "refs",
+            symbol: Some(args.symbol.clone()),
+            data: &ws_refs,
+            truncated: false,
+            total,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_workspace_refs(&args.symbol, &ws_refs, total);
     }
 
     Ok(())

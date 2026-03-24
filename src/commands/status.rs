@@ -4,17 +4,22 @@
 /// When was the last index run? Use this to check if the index is stale
 /// before running queries.
 ///
+/// In workspace mode (`--workspace`), shows per-member status and aggregate totals.
+///
 /// Examples:
 ///   scope status          — show index health
 ///   scope status --json   — machine-readable output
+///   scope status --workspace — show all workspace members
 use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
 use std::path::Path;
 
+use crate::config::workspace::WorkspaceConfig;
 use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
+use crate::Context;
 
 /// Arguments for the `scope status` command.
 #[derive(Args, Debug)]
@@ -41,8 +46,41 @@ pub struct StatusData {
     pub edge_count: usize,
 }
 
+/// Data payload for workspace status JSON output.
+#[derive(Debug, Serialize)]
+pub struct WorkspaceStatusData {
+    /// Workspace name from the manifest.
+    pub workspace_name: String,
+    /// Per-member status.
+    pub members: Vec<MemberStatusData>,
+    /// Aggregate totals.
+    pub totals: StatusData,
+}
+
+/// Per-member status in workspace mode.
+#[derive(Debug, Serialize)]
+pub struct MemberStatusData {
+    /// Member display name.
+    pub name: String,
+    /// Status information.
+    #[serde(flatten)]
+    pub status: StatusData,
+}
+
 /// Run the `scope status` command.
-pub fn run(args: &StatusArgs, project_root: &Path) -> Result<()> {
+pub fn run(args: &StatusArgs, ctx: &Context) -> Result<()> {
+    match ctx {
+        Context::SingleProject { root } => run_single(args, root),
+        Context::Workspace {
+            workspace_root,
+            config,
+            ..
+        } => run_workspace(args, workspace_root, config),
+    }
+}
+
+/// Run status for a single project.
+fn run_single(args: &StatusArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
@@ -144,10 +182,109 @@ pub fn run(args: &StatusArgs, project_root: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Run status across all workspace members.
+fn run_workspace(args: &StatusArgs, workspace_root: &Path, config: &WorkspaceConfig) -> Result<()> {
+    let mut member_statuses: Vec<MemberStatusData> = Vec::new();
+    let mut total_symbols = 0usize;
+    let mut total_files = 0usize;
+    let mut total_edges = 0usize;
+    let mut latest_indexed: Option<i64> = None;
+    let mut all_indexed = true;
+
+    for entry in &config.workspace.members {
+        let name = WorkspaceConfig::resolve_member_name(entry);
+        let member_path = workspace_root.join(&entry.path);
+        let db_path = member_path.join(".scope").join("graph.db");
+
+        let status = if !db_path.exists() {
+            all_indexed = false;
+            StatusData {
+                index_exists: false,
+                symbol_count: 0,
+                file_count: 0,
+                last_indexed_at: None,
+                last_indexed_relative: None,
+                edge_count: 0,
+            }
+        } else {
+            match Graph::open(&db_path) {
+                Ok(graph) => {
+                    let sc = graph.symbol_count().unwrap_or(0);
+                    let fc = graph.file_count().unwrap_or(0);
+                    let ec = graph.edge_count().unwrap_or(0);
+                    let lia = graph.last_indexed_at().unwrap_or(None);
+
+                    total_symbols += sc;
+                    total_files += fc;
+                    total_edges += ec;
+                    if let Some(ts) = lia {
+                        latest_indexed = Some(latest_indexed.map_or(ts, |prev: i64| prev.max(ts)));
+                    }
+
+                    StatusData {
+                        index_exists: true,
+                        symbol_count: sc,
+                        file_count: fc,
+                        last_indexed_at: lia,
+                        last_indexed_relative: lia.map(format_relative_time),
+                        edge_count: ec,
+                    }
+                }
+                Err(_) => {
+                    all_indexed = false;
+                    StatusData {
+                        index_exists: false,
+                        symbol_count: 0,
+                        file_count: 0,
+                        last_indexed_at: None,
+                        last_indexed_relative: None,
+                        edge_count: 0,
+                    }
+                }
+            }
+        };
+
+        member_statuses.push(MemberStatusData { name, status });
+    }
+
+    if args.json {
+        let data = WorkspaceStatusData {
+            workspace_name: config.workspace.name.clone(),
+            members: member_statuses,
+            totals: StatusData {
+                index_exists: all_indexed,
+                symbol_count: total_symbols,
+                file_count: total_files,
+                last_indexed_at: latest_indexed,
+                last_indexed_relative: latest_indexed.map(format_relative_time),
+                edge_count: total_edges,
+            },
+        };
+        let output = JsonOutput {
+            command: "status",
+            symbol: None,
+            data,
+            truncated: false,
+            total: total_symbols,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_workspace_status(
+            &config.workspace.name,
+            &member_statuses,
+            total_symbols,
+            total_files,
+            total_edges,
+        );
+    }
+
+    Ok(())
+}
+
 /// Format a Unix timestamp as a human-readable relative time string.
 ///
 /// Examples: "just now", "2 minutes ago", "3 hours ago", "yesterday", "5 days ago".
-fn format_relative_time(unix_ts: i64) -> String {
+pub(crate) fn format_relative_time(unix_ts: i64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)

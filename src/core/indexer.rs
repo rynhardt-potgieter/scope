@@ -314,6 +314,10 @@ impl Indexer {
         let overrides = overrides.build()?;
         builder.overrides(overrides);
 
+        // Pre-scan for nested projects (subdirectories with their own .scope/config.toml).
+        // Files within these directories should not be indexed by the parent project.
+        let nested_roots: Vec<std::path::PathBuf> = self.find_nested_projects(project_root);
+
         for entry in builder.build() {
             let entry = entry?;
             let path = entry.path();
@@ -328,6 +332,11 @@ impl Indexer {
                 .map(|p| p.starts_with(".scope"))
                 .unwrap_or(false)
             {
+                continue;
+            }
+
+            // Skip files inside nested projects (subdirs with their own .scope/config.toml)
+            if nested_roots.iter().any(|nested| path.starts_with(nested)) {
                 continue;
             }
 
@@ -362,6 +371,65 @@ impl Indexer {
         }
 
         Ok(files)
+    }
+
+    /// Find subdirectories that contain their own `.scope/config.toml`.
+    ///
+    /// These are nested projects that should not be indexed by the parent.
+    /// Only searches 3 levels deep to keep it fast.
+    fn find_nested_projects(&self, project_root: &Path) -> Vec<std::path::PathBuf> {
+        let mut nested = Vec::new();
+        scan_for_nested(project_root, project_root, 0, 3, &mut nested);
+        nested
+    }
+}
+
+/// Recursively scan for nested `.scope/config.toml` directories.
+fn scan_for_nested(
+    project_root: &Path,
+    current: &Path,
+    depth: usize,
+    max_depth: usize,
+    results: &mut Vec<std::path::PathBuf>,
+) {
+    if depth > max_depth {
+        return;
+    }
+
+    let entries = match std::fs::read_dir(current) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let dir_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        // Skip hidden dirs and common non-project dirs
+        if dir_name.starts_with('.')
+            || dir_name == "node_modules"
+            || dir_name == "target"
+            || dir_name == "dist"
+            || dir_name == "build"
+        {
+            continue;
+        }
+
+        // Check if this subdir is a nested project
+        if path != project_root && path.join(".scope").join("config.toml").exists() {
+            results.push(path);
+            // Don't recurse into nested projects
+            continue;
+        }
+
+        scan_for_nested(project_root, &path, depth + 1, max_depth, results);
     }
 }
 

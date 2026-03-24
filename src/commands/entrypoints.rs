@@ -4,17 +4,24 @@
 /// API controllers, background workers, event handlers, and other.
 /// These are the starting points for request flows.
 ///
+/// In workspace mode (`--workspace`), shows entry points from all members,
+/// grouped first by project, then by type.
+///
 /// Examples:
 ///   scope entrypoints            — list all entry points
 ///   scope entrypoints --json     — JSON output
+///   scope entrypoints --workspace — across all workspace members
 use anyhow::{bail, Result};
 use clap::Args;
 use serde::Serialize;
 use std::path::Path;
 
+use crate::config::workspace::WorkspaceConfig;
 use crate::core::graph::Graph;
+use crate::core::workspace_graph::WorkspaceGraph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
+use crate::Context;
 
 /// List entry points — API controllers, workers, and event handlers.
 ///
@@ -25,6 +32,7 @@ use crate::output::json::JsonOutput;
 /// Examples:
 ///   scope entrypoints
 ///   scope entrypoints --json
+///   scope entrypoints --workspace
 #[derive(Args, Debug)]
 pub struct EntrypointsArgs {
     /// Output as JSON instead of human-readable format
@@ -131,7 +139,19 @@ pub(crate) fn collapse_and_group(
 }
 
 /// Run the `scope entrypoints` command.
-pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
+pub fn run(args: &EntrypointsArgs, ctx: &Context) -> Result<()> {
+    match ctx {
+        Context::SingleProject { root } => run_single(args, root),
+        Context::Workspace {
+            workspace_root,
+            config,
+            ..
+        } => run_workspace(args, workspace_root, config),
+    }
+}
+
+/// Run entrypoints for a single project.
+fn run_single(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
     if !scope_dir.exists() {
@@ -158,6 +178,95 @@ pub fn run(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         formatter::print_entrypoints(&groups, total, file_count);
+    }
+
+    Ok(())
+}
+
+/// Entrypoint info tagged with project name for workspace mode.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceEntrypointInfo {
+    /// Project name.
+    pub project: String,
+    /// Entrypoint info.
+    #[serde(flatten)]
+    pub info: EntrypointInfo,
+}
+
+/// Run entrypoints across all workspace members.
+fn run_workspace(
+    args: &EntrypointsArgs,
+    workspace_root: &Path,
+    config: &WorkspaceConfig,
+) -> Result<()> {
+    let members: Vec<(String, std::path::PathBuf)> = config
+        .workspace
+        .members
+        .iter()
+        .map(|entry| {
+            let name = WorkspaceConfig::resolve_member_name(entry);
+            let path = workspace_root.join(&entry.path);
+            (name, path)
+        })
+        .collect();
+
+    let wg = WorkspaceGraph::open(members)?;
+    let ws_entrypoints = wg.get_entrypoints();
+
+    // Build workspace-aware grouped output: group by project, then by type.
+    let mut all_groups: Vec<(String, Vec<EntrypointInfo>)> = Vec::new();
+    let mut total = 0usize;
+    let mut file_count = 0usize;
+
+    for (project_name, entries) in &ws_entrypoints {
+        // Tag entrypoint names with project prefix
+        let infos: Vec<EntrypointInfo> = entries
+            .iter()
+            .map(|(sym, outgoing)| EntrypointInfo {
+                name: format!("{project_name}::{}", sym.name),
+                file_path: sym.file_path.clone(),
+                method_count: 0,
+                outgoing_call_count: *outgoing,
+                kind: sym.kind.clone(),
+            })
+            .collect();
+
+        let unique_files: std::collections::HashSet<&str> =
+            infos.iter().map(|e| e.file_path.as_str()).collect();
+        file_count += unique_files.len();
+        total += infos.len();
+
+        // Group by type within this project
+        let group_order = [
+            "API Controllers",
+            "Background Workers",
+            "Event Handlers",
+            "Other",
+        ];
+        for &group_name in &group_order {
+            let group_label = format!("{project_name} \u{2014} {group_name}");
+            let group_members: Vec<EntrypointInfo> = infos
+                .iter()
+                .filter(|e| classify_group(&e.file_path) == group_name)
+                .cloned()
+                .collect();
+            if !group_members.is_empty() {
+                all_groups.push((group_label, group_members));
+            }
+        }
+    }
+
+    if args.json {
+        let output = JsonOutput {
+            command: "entrypoints",
+            symbol: None,
+            data: &all_groups,
+            truncated: false,
+            total,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_entrypoints(&all_groups, total, file_count);
     }
 
     Ok(())

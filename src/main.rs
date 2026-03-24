@@ -5,9 +5,9 @@
 //! dependencies, and blast radius.
 #![allow(dead_code)]
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod commands;
 mod config;
@@ -38,6 +38,22 @@ pub struct Cli {
     /// Enable verbose logging
     #[arg(long, global = true)]
     pub verbose: bool,
+
+    /// Query across all workspace members (requires scope-workspace.toml).
+    ///
+    /// When set, commands like map, refs, find, entrypoints, and status
+    /// fan out to all projects in the workspace and merge results.
+    /// Requires a scope-workspace.toml manifest in the current directory
+    /// or a parent directory.
+    #[arg(long, global = true)]
+    pub workspace: bool,
+
+    /// Target a specific workspace member by name.
+    ///
+    /// In workspace context, restricts queries to the named project.
+    /// Use `scope workspace list` to see available member names.
+    #[arg(long, global = true)]
+    pub project: Option<String>,
 }
 
 /// All available subcommands.
@@ -204,6 +220,24 @@ pub enum Commands {
     Workspace(commands::workspace::WorkspaceArgs),
 }
 
+/// The resolved execution context: single project or workspace.
+pub enum Context {
+    /// Standard single-project mode. CWD has a .scope/ directory (or will create one).
+    SingleProject {
+        /// Absolute path to the project root.
+        root: PathBuf,
+    },
+    /// Workspace mode. A scope-workspace.toml was found.
+    Workspace {
+        /// Path to the scope-workspace.toml file.
+        manifest_path: PathBuf,
+        /// Workspace root directory (parent of the manifest).
+        workspace_root: PathBuf,
+        /// Parsed workspace configuration.
+        config: config::workspace::WorkspaceConfig,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -219,33 +253,131 @@ fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    // Resolve project root (current directory)
-    let project_root = resolve_project_root()?;
+    // Resolve context based on flags
+    let ctx = resolve_context(cli.workspace, cli.project.as_deref())?;
 
     match &cli.command {
-        Commands::Init(args) => commands::init::run(args, &project_root),
-        Commands::Index(args) => commands::index::run(args, &project_root),
-        Commands::Sketch(args) => commands::sketch::run(args, &project_root),
-        Commands::Refs(args) => commands::refs::run(args, &project_root),
-        Commands::Callers(args) => commands::refs::run_callers(args, &project_root),
-        Commands::Deps(args) => commands::deps::run(args, &project_root),
+        // --- Commands that SUPPORT workspace mode ---
+        Commands::Status(args) => commands::status::run(args, &ctx),
+        Commands::Map(args) => commands::map::run(args, &ctx),
+        Commands::Refs(args) => commands::refs::run(args, &ctx),
+        Commands::Find(args) => commands::find::run(args, &ctx),
+        Commands::Entrypoints(args) => commands::entrypoints::run(args, &ctx),
+
+        // --- Commands that operate on a single project only ---
+        Commands::Init(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::init::run(args, root)
+        }
+        Commands::Index(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::index::run(args, root)
+        }
+        Commands::Sketch(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::sketch::run(args, root)
+        }
+        Commands::Callers(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::refs::run_callers(args, root)
+        }
+        Commands::Deps(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::deps::run(args, root)
+        }
         Commands::Rdeps(args) => commands::rdeps::run(args),
-        Commands::Impact(args) => commands::impact::run(args, &project_root),
-        Commands::Find(args) => commands::find::run(args, &project_root),
+        Commands::Impact(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::impact::run(args, root)
+        }
         Commands::Similar(args) => commands::similar::run(args),
         Commands::Source(args) => commands::source::run(args),
-        Commands::Trace(args) => commands::trace::run(args, &project_root),
-        Commands::Entrypoints(args) => commands::entrypoints::run(args, &project_root),
-        Commands::Map(args) => commands::map::run(args, &project_root),
-        Commands::Status(args) => commands::status::run(args, &project_root),
-        Commands::Workspace(args) => commands::workspace::run(args, &project_root),
+        Commands::Trace(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::trace::run(args, root)
+        }
+
+        // --- Workspace management subcommands ---
+        Commands::Workspace(args) => {
+            let root = cwd()?;
+            commands::workspace::run(args, &root)
+        }
     }
 }
 
-/// Resolve the project root directory.
+/// Resolve the execution context based on CLI flags.
 ///
-/// Uses the current working directory. In the future, this could walk up
-/// to find a `.scope/` directory.
-fn resolve_project_root() -> Result<PathBuf> {
+/// - No flags: returns `SingleProject` with CWD as root.
+/// - `--workspace`: finds scope-workspace.toml upward from CWD.
+/// - `--project <name>`: finds workspace manifest, then targets that member.
+fn resolve_context(workspace_flag: bool, project_flag: Option<&str>) -> Result<Context> {
+    let cwd = cwd()?;
+
+    if let Some(project_name) = project_flag {
+        // --project implies workspace context; find the manifest and resolve member
+        let manifest_path = commands::workspace::find_workspace_manifest(&cwd)?;
+        let workspace_root = manifest_path.parent().unwrap_or(&cwd).to_path_buf();
+        let config = config::workspace::WorkspaceConfig::load(&manifest_path)?;
+        config.validate(&workspace_root)?;
+
+        // Find the named member
+        let member = config
+            .workspace
+            .members
+            .iter()
+            .find(|m| config::workspace::WorkspaceConfig::resolve_member_name(m) == project_name)
+            .ok_or_else(|| {
+                let available: Vec<String> = config
+                    .workspace
+                    .members
+                    .iter()
+                    .map(config::workspace::WorkspaceConfig::resolve_member_name)
+                    .collect();
+                anyhow::anyhow!(
+                    "Project '{}' not found in workspace. Available: {}",
+                    project_name,
+                    available.join(", ")
+                )
+            })?;
+
+        let member_root = workspace_root.join(&member.path);
+        return Ok(Context::SingleProject { root: member_root });
+    }
+
+    if workspace_flag {
+        let manifest_path = commands::workspace::find_workspace_manifest(&cwd)?;
+        let workspace_root = manifest_path.parent().unwrap_or(&cwd).to_path_buf();
+        let config = config::workspace::WorkspaceConfig::load(&manifest_path)?;
+        config.validate(&workspace_root)?;
+
+        return Ok(Context::Workspace {
+            manifest_path,
+            workspace_root,
+            config,
+        });
+    }
+
+    // Default: single project with CWD
+    Ok(Context::SingleProject { root: cwd })
+}
+
+/// Get the current working directory.
+fn cwd() -> Result<PathBuf> {
     std::env::current_dir().map_err(|e| anyhow::anyhow!("Failed to get current directory: {e}"))
+}
+
+/// Extract a project root from the context.
+///
+/// For single-project mode, returns the root directly.
+/// For workspace mode, errors with guidance to use `--project`.
+fn project_root_from_context(ctx: &Context) -> Result<&Path> {
+    match ctx {
+        Context::SingleProject { root } => Ok(root),
+        Context::Workspace { .. } => {
+            bail!(
+                "This command operates on a single project. \
+                 Use --project <name> to target a workspace member."
+            )
+        }
+    }
 }

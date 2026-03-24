@@ -247,3 +247,322 @@ fn workspace_list_fails_without_manifest() {
         .failure()
         .stderr(contains("No scope-workspace.toml found"));
 }
+
+// ---------------------------------------------------------------------------
+// Helpers for workspace-wide command tests
+// ---------------------------------------------------------------------------
+
+/// Set up a workspace with two indexed projects and a manifest.
+fn setup_workspace_with_two_members() -> TempDir {
+    let dir = TempDir::new().unwrap();
+
+    let api_dir = dir.path().join("api");
+    std::fs::create_dir_all(&api_dir).unwrap();
+    init_and_index_project(&api_dir, "Api");
+
+    let worker_dir = dir.path().join("worker");
+    std::fs::create_dir_all(&worker_dir).unwrap();
+    init_and_index_project(&worker_dir, "Worker");
+
+    std::fs::write(
+        dir.path().join("scope-workspace.toml"),
+        r#"[workspace]
+name = "test-ws"
+version = 1
+
+[[workspace.members]]
+path = "api"
+name = "api"
+
+[[workspace.members]]
+path = "worker"
+name = "worker"
+"#,
+    )
+    .unwrap();
+
+    dir
+}
+
+// ---------------------------------------------------------------------------
+// scope status --workspace tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn status_workspace_shows_all_members() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["status", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(contains("test-ws"))
+        .stdout(contains("api"))
+        .stdout(contains("worker"))
+        .stdout(contains("Total"));
+}
+
+#[test]
+fn status_workspace_json_output() {
+    let dir = setup_workspace_with_two_members();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["status", "--workspace", "--json"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
+
+    assert_eq!(json["command"], "status");
+    assert_eq!(json["data"]["workspace_name"], "test-ws");
+    assert!(json["data"]["members"].is_array());
+    assert_eq!(json["data"]["members"].as_array().unwrap().len(), 2);
+    // Totals should be present
+    assert!(json["data"]["totals"]["symbol_count"].as_u64().unwrap() > 0);
+}
+
+// ---------------------------------------------------------------------------
+// scope map --workspace tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn map_workspace_shows_unified_stats() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["map", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(contains("test-ws"));
+}
+
+#[test]
+fn map_workspace_json_output() {
+    let dir = setup_workspace_with_two_members();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["map", "--workspace", "--json"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
+
+    assert_eq!(json["command"], "map");
+    assert!(json["data"]["stats"]["symbol_count"].as_u64().unwrap() > 0);
+}
+
+// ---------------------------------------------------------------------------
+// scope refs --workspace tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn refs_workspace_searches_all_members() {
+    let dir = setup_workspace_with_two_members();
+
+    // The ApiService class exists in the api member
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["refs", "ApiService", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
+}
+
+// ---------------------------------------------------------------------------
+// scope find --workspace tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn find_workspace_searches_all_members() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["find", "Service", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
+}
+
+#[test]
+fn find_workspace_json_output() {
+    let dir = setup_workspace_with_two_members();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["find", "Service", "--workspace", "--json"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
+
+    assert_eq!(json["command"], "find");
+}
+
+// ---------------------------------------------------------------------------
+// scope entrypoints --workspace tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn entrypoints_workspace_shows_all_members() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["entrypoints", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
+}
+
+// ---------------------------------------------------------------------------
+// --project flag tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn project_flag_targets_single_member() {
+    let dir = setup_workspace_with_two_members();
+
+    // --project api should show only api's status
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["status", "--project", "api"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
+}
+
+#[test]
+fn project_flag_unknown_member_fails() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["status", "--project", "nonexistent"])
+        .current_dir(dir.path())
+        .assert()
+        .failure()
+        .stderr(contains("not found in workspace"));
+}
+
+// ---------------------------------------------------------------------------
+// --workspace on single-project-only commands gives clear error
+// ---------------------------------------------------------------------------
+
+#[test]
+fn workspace_flag_on_single_project_command_errors() {
+    let dir = setup_workspace_with_two_members();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "something", "--workspace"])
+        .current_dir(dir.path())
+        .assert()
+        .failure()
+        .stderr(contains("single project"));
+}
+
+// ---------------------------------------------------------------------------
+// Nested project detection tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn nested_project_is_skipped_during_indexing() {
+    let dir = TempDir::new().unwrap();
+
+    // Create the main project
+    let main_dir = dir.path().join("main");
+    std::fs::create_dir_all(main_dir.join("src")).unwrap();
+    std::fs::write(
+        main_dir.join("src").join("app.ts"),
+        "export function mainApp() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        main_dir.join("tsconfig.json"),
+        r#"{"compilerOptions": {"target": "es2020"}}"#,
+    )
+    .unwrap();
+
+    // Create a nested project inside the main project
+    let nested_dir = main_dir.join("plugins").join("legacy");
+    std::fs::create_dir_all(nested_dir.join("src")).unwrap();
+    std::fs::write(
+        nested_dir.join("src").join("legacy.ts"),
+        "export function legacyPlugin() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        nested_dir.join("tsconfig.json"),
+        r#"{"compilerOptions": {"target": "es2020"}}"#,
+    )
+    .unwrap();
+
+    // Init the nested project first
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["init"])
+        .current_dir(&nested_dir)
+        .assert()
+        .success();
+
+    // Init and index the main project
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["init"])
+        .current_dir(&main_dir)
+        .assert()
+        .success();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["index", "--full"])
+        .current_dir(&main_dir)
+        .assert()
+        .success();
+
+    // The main project should have mainApp but NOT legacyPlugin
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["find", "mainApp"])
+        .current_dir(&main_dir)
+        .assert()
+        .success()
+        .stdout(contains("mainApp"));
+
+    // legacyPlugin should not be found in the main project.
+    // Use --json to get structured output we can reliably parse.
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["find", "legacyPlugin", "--json"])
+        .current_dir(&main_dir)
+        .output()
+        .unwrap();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
+    assert_eq!(
+        json["total"].as_u64().unwrap(),
+        0,
+        "Nested project's symbol should not be indexed by parent. Got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
