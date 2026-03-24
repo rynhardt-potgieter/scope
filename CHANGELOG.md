@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0 (2026-03-24)
+
+### New Features
+- **Python language support** — third language plugin. Extracts functions, classes, methods with decorator metadata (@staticmethod, @property, @abstractmethod), access inference from naming conventions (_private, __mangled), Python-specific docstring extraction from string nodes, async support, type annotations. 14 integration tests.
+- **Rust language support** — fourth language plugin (dogfooding!). Extracts functions, structs, enums, traits, type aliases, consts, statics. Edge detection for use declarations, call expressions, method calls, macro invocations, type references. Visibility modifiers (pub, pub(crate), pub(super)). 16 integration tests.
+
+---
+
 ## v0.6.0 (2026-03-24)
 
 ### New Features
