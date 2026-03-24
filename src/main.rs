@@ -190,6 +190,18 @@ pub enum Commands {
     /// Quick health check: is the index built? How many symbols and files?
     /// Are there stale or unindexed files?
     Status(commands::status::StatusArgs),
+
+    /// Manage multi-project workspaces.
+    ///
+    /// A workspace groups multiple Scope projects and enables federated
+    /// queries across all members. Use `scope workspace init` to discover
+    /// projects and create a scope-workspace.toml manifest.
+    ///
+    /// Examples:
+    ///   scope workspace init              — discover and create manifest
+    ///   scope workspace list              — show all members and status
+    ///   scope workspace list --json       — machine-readable output
+    Workspace(commands::workspace::WorkspaceArgs),
 }
 
 fn main() -> Result<()> {
@@ -226,6 +238,7 @@ fn main() -> Result<()> {
         Commands::Entrypoints(args) => commands::entrypoints::run(args, &project_root),
         Commands::Map(args) => commands::map::run(args, &project_root),
         Commands::Status(args) => commands::status::run(args, &project_root),
+        Commands::Workspace(args) => commands::workspace::run(args, &project_root),
     }
 }
 

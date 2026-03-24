@@ -1118,6 +1118,69 @@ fn print_snippet_context(snippet: &[String], ref_line: Option<i64>) {
     }
 }
 
+/// Print workspace member list in human-readable format.
+///
+/// Shows each member's name, path, index status, file count, and symbol count.
+pub fn print_workspace_list(
+    workspace_name: &str,
+    members: &[crate::commands::workspace::MemberStatus],
+) {
+    println!("Workspace: {workspace_name}");
+    println!("{SEPARATOR}");
+
+    if members.is_empty() {
+        println!("  (no members)");
+        return;
+    }
+
+    // Find column widths
+    let max_name = members
+        .iter()
+        .map(|m| m.name.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    let max_path = members
+        .iter()
+        .map(|m| m.path.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+
+    // Header
+    println!(
+        "  {:<name_w$}  {:<path_w$}  {:<15}  {:>5}  {:>7}",
+        "Name",
+        "Path",
+        "Status",
+        "Files",
+        "Symbols",
+        name_w = max_name,
+        path_w = max_path,
+    );
+
+    for member in members {
+        println!(
+            "  {:<name_w$}  {:<path_w$}  {:<15}  {:>5}  {:>7}",
+            member.name,
+            normalize_path(&member.path),
+            member.status,
+            if member.file_count > 0 {
+                format_number(member.file_count)
+            } else {
+                "─".to_string()
+            },
+            if member.symbol_count > 0 {
+                format_number(member.symbol_count)
+            } else {
+                "─".to_string()
+            },
+            name_w = max_name,
+            path_w = max_path,
+        );
+    }
+}
+
 /// Convert an edge kind string to a human-readable label for grouped output.
 fn humanize_edge_kind(kind: &str) -> &str {
     match kind {

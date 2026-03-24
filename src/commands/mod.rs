@@ -15,6 +15,7 @@ pub mod sketch;
 pub mod source;
 pub mod status;
 pub mod trace;
+pub mod workspace;
 
 /// Check if an input string looks like a file path rather than a symbol name.
 pub fn looks_like_file_path(input: &str) -> bool {

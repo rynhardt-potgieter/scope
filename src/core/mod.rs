@@ -1,6 +1,7 @@
 /// Core modules for Scope's indexing and querying engine.
 ///
 /// - `graph` — SQLite-backed dependency graph storage
+/// - `workspace_graph` — workspace-level query facade over multiple graphs
 /// - `indexer` — orchestrates full and incremental indexing
 /// - `parser` — tree-sitter parsing and symbol extraction
 /// - `embedder` — embedding generation (stub)
@@ -12,3 +13,4 @@ pub mod indexer;
 pub mod parser;
 pub mod searcher;
 pub mod watcher;
+pub mod workspace_graph;
