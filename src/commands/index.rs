@@ -297,8 +297,15 @@ fn run_watch(
                 let files_changed = changed_paths.len();
 
                 // Re-open graph for each batch to avoid stale connections
-                // (the graph is opened fresh because the watch loop is long-lived)
-                *graph = Graph::open(db_path)?;
+                *graph = match Graph::open(db_path) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: failed to open graph for re-index: {e}. Skipping batch."
+                        );
+                        continue;
+                    }
+                };
 
                 // Re-open searcher for each batch
                 let batch_searcher = match Searcher::open(db_path) {
@@ -313,13 +320,19 @@ fn run_watch(
                 let symbols_before = graph.symbol_count().unwrap_or(0);
                 let edges_before = graph.edge_count().unwrap_or(0);
 
-                // Run incremental index (this re-hashes all files, which is fine)
-                let stats = indexer.index_incremental(
+                // Run incremental index — skip batch on transient failure
+                let stats = match indexer.index_incremental(
                     project_root,
                     config,
                     graph,
                     batch_searcher.as_ref(),
-                )?;
+                ) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Warning: re-index failed: {e}. Skipping batch.");
+                        continue;
+                    }
+                };
 
                 let duration_ms = batch_start.elapsed().as_millis() as u64;
 

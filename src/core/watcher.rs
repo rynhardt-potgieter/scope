@@ -161,15 +161,29 @@ impl WatchLock {
     /// Acquire the watch lock. Fails if another watcher is running.
     pub fn acquire(&self) -> Result<()> {
         if self.lock_path.exists() {
-            let content = std::fs::read_to_string(&self.lock_path).unwrap_or_default();
+            let content = match std::fs::read_to_string(&self.lock_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Cannot read lock file: {e}. Treating as stale.");
+                    String::new()
+                }
+            };
             let pid_str = content.trim();
 
             if !pid_str.is_empty() {
-                if let Ok(pid) = pid_str.parse::<u32>() {
-                    if is_process_alive(pid) {
-                        bail!(
-                            "Another watcher is running (PID {pid}). \
-                             Stop it first or remove .scope/.watch.lock"
+                match pid_str.parse::<u32>() {
+                    Ok(pid) => {
+                        if is_process_alive(pid) {
+                            bail!(
+                                "Another watcher is running (PID {pid}). \
+                                 Stop it first or remove .scope/.watch.lock"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Lock file contains invalid PID '{}': {e}. Treating as stale.",
+                            pid_str
                         );
                     }
                 }
@@ -189,7 +203,7 @@ impl WatchLock {
     pub fn release(&self) {
         if self.lock_path.exists() {
             if let Err(e) = std::fs::remove_file(&self.lock_path) {
-                tracing::warn!("Failed to remove watch lock file: {e}");
+                eprintln!("Warning: failed to remove watch lock file: {e}. You may need to delete .scope/.watch.lock manually.");
             }
         }
     }

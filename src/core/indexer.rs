@@ -398,7 +398,13 @@ fn scan_for_nested(
 
     let entries = match std::fs::read_dir(current) {
         Ok(e) => e,
-        Err(_) => return,
+        Err(e) => {
+            tracing::warn!(
+                "Cannot read directory {}: {e}. Skipping nested scan.",
+                current.display()
+            );
+            return;
+        }
     };
 
     for entry in entries.flatten() {

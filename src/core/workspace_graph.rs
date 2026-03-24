@@ -143,11 +143,16 @@ impl WorkspaceGraph {
     pub fn get_languages(&self) -> Vec<String> {
         let mut langs: Vec<String> = Vec::new();
         for member in &self.members {
-            if let Ok(member_langs) = member.graph.get_languages() {
-                for lang in member_langs {
-                    if !langs.contains(&lang) {
-                        langs.push(lang);
+            match member.graph.get_languages() {
+                Ok(member_langs) => {
+                    for lang in member_langs {
+                        if !langs.contains(&lang) {
+                            langs.push(lang);
+                        }
                     }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get languages for member '{}': {e}", member.name);
                 }
             }
         }
@@ -214,8 +219,11 @@ impl WorkspaceGraph {
                         });
                     }
                 }
-                Err(_) => {
-                    // Symbol not found in this member — skip silently
+                Err(e) => {
+                    tracing::warn!(
+                        "Error querying refs in member '{}': {e}. Results may be incomplete.",
+                        member.name
+                    );
                 }
             }
         }

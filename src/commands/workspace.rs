@@ -239,7 +239,13 @@ fn discover_projects(
 
     let entries = match std::fs::read_dir(current) {
         Ok(entries) => entries,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            tracing::warn!(
+                "Cannot read directory {}: {e}. Skipping.",
+                current.display()
+            );
+            return Ok(());
+        }
     };
 
     for entry in entries {
@@ -340,14 +346,17 @@ fn run_list(args: &WorkspaceListArgs, project_root: &Path) -> Result<()> {
                         last_indexed_at,
                     }
                 }
-                Err(_) => MemberStatus {
-                    name,
-                    path: entry.path.clone(),
-                    status: "error".to_string(),
-                    file_count: 0,
-                    symbol_count: 0,
-                    last_indexed_at: None,
-                },
+                Err(e) => {
+                    tracing::warn!("Failed to open graph for member '{}': {e}", name);
+                    MemberStatus {
+                        name,
+                        path: entry.path.clone(),
+                        status: format!("error: {e}"),
+                        file_count: 0,
+                        symbol_count: 0,
+                        last_indexed_at: None,
+                    }
+                }
             }
         };
 
