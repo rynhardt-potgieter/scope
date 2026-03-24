@@ -3,19 +3,26 @@
 /// Subcommands:
 ///   init  — discover projects and create scope-workspace.toml
 ///   list  — show workspace members and their index status
+///   index — index all workspace members sequentially
 ///
 /// Examples:
 ///   scope workspace init                — discover and create manifest
 ///   scope workspace init --name my-ws   — set workspace name
 ///   scope workspace list                — show all members
 ///   scope workspace list --json         — machine-readable output
+///   scope workspace index               — incremental index all members
+///   scope workspace index --full        — full re-index all members
 use anyhow::{bail, Result};
 use clap::{Args, Subcommand};
 use serde::Serialize;
 use std::path::Path;
+use std::time::Instant;
 
 use crate::config::workspace::WorkspaceConfig;
+use crate::config::ProjectConfig;
 use crate::core::graph::Graph;
+use crate::core::indexer::Indexer;
+use crate::core::searcher::Searcher;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
 
@@ -61,6 +68,17 @@ pub enum WorkspaceCommands {
     ///   scope workspace list
     ///   scope workspace list --json
     List(WorkspaceListArgs),
+
+    /// Index all workspace members.
+    ///
+    /// Reads scope-workspace.toml and indexes each member project sequentially.
+    /// Members without .scope/config.toml are skipped with a warning.
+    ///
+    /// Examples:
+    ///   scope workspace index              — incremental index all members
+    ///   scope workspace index --full       — full re-index all members
+    ///   scope workspace index --json       — machine-readable output
+    Index(WorkspaceIndexArgs),
 }
 
 /// Arguments for `scope workspace init`.
@@ -74,6 +92,18 @@ pub struct WorkspaceInitArgs {
 /// Arguments for `scope workspace list`.
 #[derive(Args, Debug)]
 pub struct WorkspaceListArgs {
+    /// Output as JSON instead of human-readable format.
+    #[arg(long, short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `scope workspace index`.
+#[derive(Args, Debug)]
+pub struct WorkspaceIndexArgs {
+    /// Rebuild the entire index from scratch for all members.
+    #[arg(long)]
+    pub full: bool,
+
     /// Output as JSON instead of human-readable format.
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -105,11 +135,46 @@ pub struct WorkspaceListData {
     pub members: Vec<MemberStatus>,
 }
 
+/// Result of indexing a single workspace member.
+#[derive(Debug, Serialize)]
+pub struct MemberIndexResult {
+    /// Member display name.
+    pub name: String,
+    /// Path relative to workspace root.
+    pub path: String,
+    /// Whether the member was indexed successfully.
+    pub status: String,
+    /// Indexing mode: "full", "incremental", or "skipped".
+    pub mode: String,
+    /// Number of symbols after indexing.
+    pub symbol_count: usize,
+    /// Number of edges after indexing.
+    pub edge_count: usize,
+    /// Duration in seconds.
+    pub duration_secs: f64,
+}
+
+/// JSON data payload for `scope workspace index`.
+#[derive(Debug, Serialize)]
+pub struct WorkspaceIndexData {
+    /// Workspace name from the manifest.
+    pub workspace_name: String,
+    /// Per-member indexing results.
+    pub members: Vec<MemberIndexResult>,
+    /// Total symbols across all indexed members.
+    pub total_symbols: usize,
+    /// Total edges across all indexed members.
+    pub total_edges: usize,
+    /// Total duration in seconds.
+    pub total_duration_secs: f64,
+}
+
 /// Run the `scope workspace` command.
 pub fn run(args: &WorkspaceArgs, project_root: &Path) -> Result<()> {
     match &args.command {
         WorkspaceCommands::Init(init_args) => run_init(init_args, project_root),
         WorkspaceCommands::List(list_args) => run_list(list_args, project_root),
+        WorkspaceCommands::Index(index_args) => run_index(index_args, project_root),
     }
 }
 
@@ -304,6 +369,204 @@ fn run_list(args: &WorkspaceListArgs, project_root: &Path) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         formatter::print_workspace_list(&config.workspace.name, &member_statuses);
+    }
+
+    Ok(())
+}
+
+/// Run `scope workspace index` — index all workspace members sequentially.
+fn run_index(args: &WorkspaceIndexArgs, project_root: &Path) -> Result<()> {
+    let manifest_path = find_workspace_manifest(project_root)?;
+    let workspace_root = manifest_path.parent().unwrap_or(project_root);
+
+    let config = WorkspaceConfig::load(&manifest_path)?;
+    let total_members = config.workspace.members.len();
+    let overall_start = Instant::now();
+
+    let mut results: Vec<MemberIndexResult> = Vec::new();
+    let mut indexed_count: usize = 0;
+    let mut total_symbols: usize = 0;
+    let mut total_edges: usize = 0;
+
+    for entry in &config.workspace.members {
+        let name = WorkspaceConfig::resolve_member_name(entry);
+        let member_path = workspace_root.join(&entry.path);
+        let scope_dir = member_path.join(".scope");
+        let config_path = scope_dir.join("config.toml");
+
+        // Skip members without .scope/config.toml
+        if !config_path.exists() {
+            eprintln!("[{}] Skipped: no .scope/config.toml found", name);
+            results.push(MemberIndexResult {
+                name,
+                path: entry.path.clone(),
+                status: "skipped".to_string(),
+                mode: "skipped".to_string(),
+                symbol_count: 0,
+                edge_count: 0,
+                duration_secs: 0.0,
+            });
+            continue;
+        }
+
+        let member_start = Instant::now();
+
+        // Load project config
+        let project_config = match ProjectConfig::load(&scope_dir) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[{}] Error loading config: {}", name, e);
+                results.push(MemberIndexResult {
+                    name,
+                    path: entry.path.clone(),
+                    status: "error".to_string(),
+                    mode: if args.full { "full" } else { "incremental" }.to_string(),
+                    symbol_count: 0,
+                    edge_count: 0,
+                    duration_secs: member_start.elapsed().as_secs_f64(),
+                });
+                continue;
+            }
+        };
+
+        // Open graph database
+        let db_path = scope_dir.join("graph.db");
+        let mut graph = match Graph::open(&db_path) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("[{}] Error opening graph: {}", name, e);
+                results.push(MemberIndexResult {
+                    name,
+                    path: entry.path.clone(),
+                    status: "error".to_string(),
+                    mode: if args.full { "full" } else { "incremental" }.to_string(),
+                    symbol_count: 0,
+                    edge_count: 0,
+                    duration_secs: member_start.elapsed().as_secs_f64(),
+                });
+                continue;
+            }
+        };
+
+        // Create indexer
+        let mut indexer = match Indexer::new() {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("[{}] Error creating indexer: {}", name, e);
+                results.push(MemberIndexResult {
+                    name,
+                    path: entry.path.clone(),
+                    status: "error".to_string(),
+                    mode: if args.full { "full" } else { "incremental" }.to_string(),
+                    symbol_count: 0,
+                    edge_count: 0,
+                    duration_secs: member_start.elapsed().as_secs_f64(),
+                });
+                continue;
+            }
+        };
+
+        // Open search index (optional)
+        let searcher = match Searcher::open(&db_path) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                tracing::warn!("[{}] Search index unavailable: {e}", name);
+                None
+            }
+        };
+
+        // Run indexing
+        let mode = if args.full { "full" } else { "incremental" };
+        let (symbol_count, edge_count) = if args.full {
+            match indexer.index_full(&member_path, &project_config, &mut graph, searcher.as_ref()) {
+                Ok(stats) => (stats.symbol_count, stats.edge_count),
+                Err(e) => {
+                    eprintln!("[{}] Error during indexing: {}", name, e);
+                    results.push(MemberIndexResult {
+                        name,
+                        path: entry.path.clone(),
+                        status: "error".to_string(),
+                        mode: mode.to_string(),
+                        symbol_count: 0,
+                        edge_count: 0,
+                        duration_secs: member_start.elapsed().as_secs_f64(),
+                    });
+                    continue;
+                }
+            }
+        } else {
+            match indexer.index_incremental(
+                &member_path,
+                &project_config,
+                &mut graph,
+                searcher.as_ref(),
+            ) {
+                Ok(stats) => (stats.symbol_count, stats.edge_count),
+                Err(e) => {
+                    eprintln!("[{}] Error during indexing: {}", name, e);
+                    results.push(MemberIndexResult {
+                        name,
+                        path: entry.path.clone(),
+                        status: "error".to_string(),
+                        mode: mode.to_string(),
+                        symbol_count: 0,
+                        edge_count: 0,
+                        duration_secs: member_start.elapsed().as_secs_f64(),
+                    });
+                    continue;
+                }
+            }
+        };
+
+        let duration = member_start.elapsed();
+        total_symbols += symbol_count;
+        total_edges += edge_count;
+        indexed_count += 1;
+
+        if !args.json {
+            eprintln!(
+                "[{}] Indexed: {} symbols, {} edges ({:.1}s)",
+                name,
+                symbol_count,
+                edge_count,
+                duration.as_secs_f64()
+            );
+        }
+
+        results.push(MemberIndexResult {
+            name,
+            path: entry.path.clone(),
+            status: "indexed".to_string(),
+            mode: mode.to_string(),
+            symbol_count,
+            edge_count,
+            duration_secs: duration.as_secs_f64(),
+        });
+    }
+
+    let total_duration = overall_start.elapsed();
+
+    if args.json {
+        let data = WorkspaceIndexData {
+            workspace_name: config.workspace.name.clone(),
+            members: results,
+            total_symbols,
+            total_edges,
+            total_duration_secs: total_duration.as_secs_f64(),
+        };
+        let output = JsonOutput {
+            command: "workspace index",
+            symbol: None,
+            data,
+            truncated: false,
+            total: total_members,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        eprintln!(
+            "Workspace indexed: {}/{} members, {} total symbols",
+            indexed_count, total_members, total_symbols
+        );
     }
 
     Ok(())
