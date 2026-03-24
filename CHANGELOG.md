@@ -7,6 +7,11 @@
 - **`scope workspace init`** — discover projects with `.scope/config.toml` in subdirectories and generate `scope-workspace.toml` manifest.
 - **`scope workspace list`** — show all workspace members with index status, symbol counts, and freshness. Supports `--json`.
 - **WorkspaceGraph facade** — federated query layer that opens N project databases and fans out `find_symbol`, `find_refs`, `get_entrypoints`, and aggregate stats across all members. Partial workspace support (warns and skips missing `graph.db`).
+- **`--workspace` flag on 5 commands** — `scope status`, `scope map`, `scope refs`, `scope find`, and `scope entrypoints` now support `--workspace` to query across all workspace members. Results are tagged with project names and merged.
+- **`--project <name>` flag** — target a specific workspace member by name from any directory.
+- **Context resolution** — `resolve_project_root()` replaced with `resolve_context()` that detects single-project vs workspace context. Walks upward to find `scope-workspace.toml`.
+- **Nested project detection** — file walker now skips subdirectories with `.scope/config.toml` to prevent double-indexing in workspace scenarios.
+- **Scope HUD plugin** — Claude Code plugin (`.claude/plugins/scope-hud/`) with session-start hook (auto-detects index, shows onboarding), post-tool-use hook (warns if index stale), status line agent, and scope-status skill.
 
 ### Refactoring
 - **LanguagePlugin trait** — extracted language-specific logic from `parser.rs` into a trait-based plugin system. TypeScript and C# each implement `LanguagePlugin` in their own modules. Adding a new language now requires only a new module + one registration line in `CodeParser::new()`. `parser.rs` shrank by 385 lines.
