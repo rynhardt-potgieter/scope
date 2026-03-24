@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.5.2-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.5.3-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/rynhardt-potgieter/scope/ci.yml?label=build)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -115,7 +115,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.5.2
+# scope 0.5.3
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -289,34 +289,34 @@ max_depth   = 3
 Add the following to your project's `CLAUDE.md`. Claude Code reads this at the start of every session.
 
 ```markdown
-## Code navigation
+## Code Navigation
 
-This project uses Scope for structural code navigation. Use it before editing.
+This project uses [Scope](https://github.com/rynhardt-potgieter/scope) for structural code intelligence.
+Start with `scope map` for a repo overview, then `scope sketch` for specific symbols.
 
-**Orientation (start here in a new session):**
-- `scope map` -- full repository overview: entry points, core symbols, architecture summary
-- `scope entrypoints` -- list all API controllers, workers, and event handlers
+**Orientation:**
+- `scope map` -- full repo overview: entry points, core symbols, architecture (~500-1000 tokens)
+- `scope entrypoints` -- list API controllers, workers, event handlers
+- `scope status` -- check index health and freshness
 
 **Before editing a class or function:**
-- `scope sketch <ClassName>` -- structural overview without reading full source
-- `scope refs <symbol>` -- find all callers before changing a signature
-- `scope callers <symbol> --depth 2` -- transitive callers for blast radius analysis
-- `scope trace <symbol>` -- call paths from entry points to the target
+- `scope sketch <symbol>` -- structural overview: methods, deps, modifiers (~200 tokens)
+- `scope refs <symbol> [--kind calls|imports|extends|implements|...]` -- all references with file + line
+- `scope callers <symbol> [--depth N]` -- direct and transitive callers for blast radius
 
 **Finding code:**
-- `scope find "<description>"` -- find relevant code by intent
+- `scope find "<query>" [--kind function|class|method|interface]` -- full-text search by intent
 
-**Understanding dependencies:**
-- `scope deps <symbol>` -- what does this depend on?
-- `scope rdeps <symbol>` -- what depends on this?
+**Understanding dependencies and flow:**
+- `scope deps <symbol> [--depth 1-3]` -- what does this depend on?
+- `scope rdeps <symbol> [--depth 1-3]` -- what depends on this?
+- `scope trace <symbol>` -- call paths from entry points to target
 
 **Keeping the index fresh:**
-- Run `scope status` to check if the index is stale
-- Run `scope index` after making edits -- incremental, takes < 1s for a few files
-- Line numbers in output reflect the last index run. If they look wrong, re-index first.
+- `scope index` -- incremental re-index after edits (< 1s for a few files)
+- Line numbers reflect the last index run. Re-index if they look wrong.
 
-Always run `scope sketch` before reading full source. Only read implementation when
-you know exactly which file and line range you need.
+Always `scope sketch` before reading full source. Only read source when ready to edit.
 ```
 
 The same snippet works for Cursor, Aider, and any other agent that reads project instructions from a markdown file. Also available at [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet).
@@ -388,7 +388,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.5.2 (current)**
+**v0.1.0 -- v0.5.3 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting

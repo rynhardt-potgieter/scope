@@ -28,6 +28,9 @@ CLAUDE.md
 
 # Overview docs — local reference only, never commit
 /overview/
+
+# Sprint planning — local only
+project.md
 .env
 *.ndjson
 ndjson/

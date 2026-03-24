@@ -1,30 +1,28 @@
 ## Code Navigation
 
-This project uses `Scope` for structural code navigation. Use it before reading or
-editing any non-trivial code.
+This project uses [Scope](https://github.com/rynhardt-potgieter/scope) for structural code intelligence.
+Start with `scope map` for a repo overview, then `scope sketch` for specific symbols.
+
+**Orientation:**
+- `scope map` -- full repo overview: entry points, core symbols, architecture (~500-1000 tokens)
+- `scope entrypoints` -- list API controllers, workers, event handlers
+- `scope status` -- check index health and freshness
 
 **Before editing a class or function:**
-- `scope sketch <ClassName>` -- get structural overview without reading full source
-- `scope refs <symbol>` -- find all callers before changing a signature
-- `scope impact <symbol>` -- check blast radius before any refactor
+- `scope sketch <symbol>` -- structural overview: methods, deps, modifiers (~200 tokens)
+- `scope refs <symbol> [--kind calls|imports|extends|implements|...]` -- all references with file + line
+- `scope callers <symbol> [--depth N]` -- direct and transitive callers for blast radius
 
 **Finding code:**
-- `scope find "<description>"` -- find relevant code by intent
-- `scope similar <symbol>` -- find similar implementations
+- `scope find "<query>" [--kind function|class|method|interface]` -- full-text search by intent
 
-**Understanding dependencies:**
-- `scope deps <symbol>` -- what does this depend on?
-- `scope rdeps <symbol>` -- what depends on this?
-
-**Reading source:**
-- `scope source <symbol>` -- fetch full source of a specific symbol
-
-Always run `scope sketch` before `scope source`. Only call `scope source` when you're
-ready to read or edit the implementation.
+**Understanding dependencies and flow:**
+- `scope deps <symbol> [--depth 1-3]` -- what does this depend on?
+- `scope rdeps <symbol> [--depth 1-3]` -- what depends on this?
+- `scope trace <symbol>` -- call paths from entry points to target
 
 **Keeping the index fresh:**
-- Run `scope status` to check if the index is stale
-- Run `scope index` after making edits -- incremental, takes < 1s for a few files
-- Line numbers in Scope output reflect the last index run. If they look wrong, re-index first.
+- `scope index` -- incremental re-index after edits (< 1s for a few files)
+- Line numbers reflect the last index run. Re-index if they look wrong.
 
-Run `scope --help` for full usage.
+Always `scope sketch` before reading full source. Only read source when ready to edit.

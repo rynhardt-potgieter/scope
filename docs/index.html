@@ -436,7 +436,7 @@
         <span>·</span>
         <span>git:main</span>
         <span>·</span>
-        <span>open source · MIT · v0.5.2</span>
+        <span>open source · MIT · v0.5.3</span>
       </div>
 
       <h1 class="hero-title">
@@ -636,9 +636,9 @@
     </div>
     <div class="cmd-grid reveal" style="transition-delay:0.1s">
       <div class="cmd-card"><div class="cmd-name">scope sketch</div><div class="cmd-sig">&lt;symbol&gt; [--json]</div><div class="cmd-desc">Compressed structural overview. Methods with caller counts, deps, type signatures. ~200 tokens instead of ~4,000.</div><div class="cmd-when"><strong>use before:</strong> reading source or editing a class.</div></div>
-      <div class="cmd-card"><div class="cmd-name">scope refs</div><div class="cmd-sig">&lt;symbol&gt; [--kind calls|imports|extends]</div><div class="cmd-desc">Every reference grouped by kind — instantiations, imports, type annotations, call sites — with file and line.</div><div class="cmd-when"><strong>use before:</strong> changing a function signature.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope refs</div><div class="cmd-sig">&lt;symbol&gt; [--kind calls|imports|extends|...]</div><div class="cmd-desc">Every reference grouped by kind — instantiations, imports, type annotations, call sites — with file and line.</div><div class="cmd-when"><strong>use before:</strong> changing a function signature.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope callers</div><div class="cmd-sig">&lt;symbol&gt; [--depth 1-5]</div><div class="cmd-desc">Direct and transitive callers. At depth 1, shows who calls this. At depth 2+, shows the blast radius — which entry points are ultimately affected.</div><div class="cmd-when"><strong>use before:</strong> any refactor that changes a public API.</div></div>
-      <div class="cmd-card"><div class="cmd-name">scope find</div><div class="cmd-sig">"&lt;intent&gt;" [--kind function|class]</div><div class="cmd-desc">Semantic search by what code does, not what it's named. Local embeddings — no API key, works offline.</div><div class="cmd-when"><strong>use when:</strong> navigating unfamiliar code by intent.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope find</div><div class="cmd-sig">"&lt;intent&gt;" [--kind function|class|method|...]</div><div class="cmd-desc">Semantic search by what code does, not what it's named. Local embeddings — no API key, works offline.</div><div class="cmd-when"><strong>use when:</strong> navigating unfamiliar code by intent.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope deps</div><div class="cmd-sig">&lt;symbol&gt; [--depth 1-3]</div><div class="cmd-desc">What does this symbol depend on? Direct imports, called functions, extended classes. Transitive with --depth.</div><div class="cmd-when"><strong>use when:</strong> understanding what must exist first.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope trace</div><div class="cmd-sig">&lt;symbol&gt; [--depth 1-3]</div><div class="cmd-desc">Show how requests reach a symbol. Traces the call graph backward from target to entry points. Use for debugging — see how a bug is triggered.</div><div class="cmd-when"><strong>use when:</strong> checking if an internal change is safe.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope map</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">Full repository overview in ~500-1000 tokens. Entry points, core symbols ranked by caller count, architecture layers. Start here for complex tasks.</div><div class="cmd-when"><strong>use when:</strong> starting work on an unfamiliar codebase.</div></div>
@@ -698,23 +698,23 @@
           </div>
           <div class="claude-body">
             <span class="mh2">## Code Navigation</span><br><br>
-            <span style="color:var(--text-2)">This project uses `scope` for structural code</span><br>
-            <span style="color:var(--text-2)">navigation. Always use it before editing.</span><br><br>
-            <span class="mh3">**Before editing a class or function:**</span>
-            <span class="mli"><span class="mco">`scope sketch &lt;ClassName&gt;`</span> — structural overview</span>
-            <span class="mli"><span class="mco">`scope refs &lt;symbol&gt;`</span> — find all callers first</span>
-            <span class="mli"><span class="mco">`scope callers &lt;symbol&gt;`</span> — check blast radius</span>
+            <span style="color:var(--text-2)">This project uses Scope for code intelligence.</span><br>
+            <span style="color:var(--text-2)">Start with `scope map`, then drill down.</span><br><br>
+            <span class="mh3">**Orientation:**</span>
+            <span class="mli"><span class="mco">`scope map`</span> — full repo overview (~500-1000 tokens)</span>
+            <span class="mli"><span class="mco">`scope entrypoints`</span> — API controllers, workers</span>
             <br>
-            <span class="mh3">**Finding code:**</span>
-            <span class="mli"><span class="mco">`scope find "&lt;description&gt;"`</span> — search by intent</span>
-            <span class="mli"><span class="mco">`scope map`</span> — full repo overview</span>
+            <span class="mh3">**Before editing:**</span>
+            <span class="mli"><span class="mco">`scope sketch &lt;symbol&gt;`</span> — structural overview</span>
+            <span class="mli"><span class="mco">`scope refs &lt;symbol&gt;`</span> — all references with file + line</span>
+            <span class="mli"><span class="mco">`scope callers &lt;symbol&gt;`</span> — blast radius</span>
             <br>
-            <span class="mh3">**Understanding flow:**</span>
-            <span class="mli"><span class="mco">`scope trace &lt;symbol&gt;`</span> — how requests reach it</span>
-            <span class="mli"><span class="mco">`scope entrypoints`</span> — list all entry points</span>
+            <span class="mh3">**Finding code and flow:**</span>
+            <span class="mli"><span class="mco">`scope find "&lt;query&gt;"`</span> — search by intent</span>
+            <span class="mli"><span class="mco">`scope trace &lt;symbol&gt;`</span> — entry-point-to-target paths</span>
             <br>
             <span class="mcmt">// always scope sketch before reading source.</span>
-            <span class="mcmt">// load source only when ready to edit.</span>
+            <span class="mcmt">// re-index after edits: scope index</span>
           </div>
         </div>
       </div>
