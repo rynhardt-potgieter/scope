@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.0-dev (2026-03-24)
+## v0.6.0 (2026-03-24)
 
 ### New Features
 - **`scope index --watch`** — auto re-index on file changes using `notify` crate. Debounces events (300ms), emits NDJSON with `--json` (`start`/`reindex`/`stop` events), lock file prevents concurrent watchers, graceful Ctrl+C shutdown with summary stats.
@@ -12,6 +12,7 @@
 - **Context resolution** — `resolve_project_root()` replaced with `resolve_context()` that detects single-project vs workspace context. Walks upward to find `scope-workspace.toml`.
 - **Nested project detection** — file walker now skips subdirectories with `.scope/config.toml` to prevent double-indexing in workspace scenarios.
 - **Scope HUD plugin** — Claude Code plugin (`.claude/plugins/scope-hud/`) with session-start hook (auto-detects index, shows onboarding), post-tool-use hook (warns if index stale), status line agent, and scope-status skill.
+- **`scope workspace index`** — batch index all workspace members sequentially with per-member progress and summary stats. Supports `--full` and `--json`.
 
 ### Refactoring
 - **LanguagePlugin trait** — extracted language-specific logic from `parser.rs` into a trait-based plugin system. TypeScript and C# each implement `LanguagePlugin` in their own modules. Adding a new language now requires only a new module + one registration line in `CodeParser::new()`. `parser.rs` shrank by 385 lines.

@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.5.3-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.6.0-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/rynhardt-potgieter/scope/ci.yml?label=build)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -32,6 +32,8 @@
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [Watch mode](#watch-mode)
+- [Workspaces](#workspaces)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
 - [CLAUDE.md integration](#claudemd-integration)
@@ -115,7 +117,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.5.3
+# scope 0.6.0
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -176,9 +178,10 @@ Line numbers in Scope output reflect the last `scope index` run. If you've edite
 ```bash
 scope status                             # check freshness
 scope index                              # incremental -- < 1s for a few files
+scope index --watch                      # auto re-index on file changes
 ```
 
-Run `scope index` whenever you switch tasks or after a batch of edits. It's cheap.
+`scope index --watch` monitors your project for file changes and re-indexes automatically with a 300ms debounce. Run it in a terminal tab during development -- agents never see stale line numbers.
 
 ### 5. Add to CLAUDE.md
 
@@ -191,7 +194,7 @@ Paste the [CLAUDE.md snippet](#claudemd-integration) into your project so agents
 | Command | Signature | Description | When to use |
 |---|---|---|---|
 | `scope init` | `[--json]` | Initialise Scope for a project. Creates `.scope/` with default config, auto-detects languages. | Once per project, before first `scope index`. |
-| `scope index` | `[--full] [--json]` | Build or refresh the code index. Incremental by default, `--full` forces complete rebuild. | Once on setup, then after edits during development. |
+| `scope index` | `[--full] [--watch] [--json]` | Build or refresh the code index. Incremental by default, `--full` forces rebuild, `--watch` auto re-indexes on file changes. | Once on setup, then `--watch` during development or manual `scope index` after edits. |
 | `scope map` | `[--limit N] [--json]` | Full repository overview: entry points, core symbols ranked by caller count, architecture summary. ~500-1000 tokens. | First thing in a new codebase. Replaces 5-17 sketch calls for orientation. |
 | `scope entrypoints` | `[--json]` | Lists API controllers, workers, and event handlers grouped by type. Symbols with zero incoming call edges. | Understanding the request flow starting points. |
 | `scope sketch` | `<symbol> [--json]` | Compressed structural overview: methods with caller counts, dependencies, type signatures, modifiers. ~200 tokens vs ~4,000 for full source. | Before reading source or editing any non-trivial symbol. |
@@ -205,8 +208,199 @@ Paste the [CLAUDE.md snippet](#claudemd-integration) into your project so agents
 | `scope similar` | `<symbol> [--kind function\|class] [--json]` | *Stub* -- find structurally similar symbols. Not yet implemented. | Future: discovering existing implementations. |
 | `scope source` | `<symbol> [--json]` | *Stub* -- fetch full source of a symbol. Not yet implemented. | Future: reading implementation after `scope sketch`. |
 | `scope status` | `[--json]` | Index health: symbol count, file count, last indexed time, stale files. | Checking whether the index is stale before making range-based edits. |
+| `scope workspace init` | `[--name NAME]` | Discover projects with `.scope/` in subdirectories and create `scope-workspace.toml`. | Once per workspace, after running `scope init` in each project. |
+| `scope workspace list` | `[--json]` | Show all workspace members with index status, symbol counts, and freshness. | Checking workspace health before cross-project queries. |
+| `scope workspace index` | `[--full] [--json]` | Index all workspace members sequentially. | Initial setup or batch refresh of all workspace projects. |
+
+### Global flags
+
+| Flag | Description |
+|---|---|
+| `--workspace` | Query across all workspace members. Requires `scope-workspace.toml`. Works with: `status`, `map`, `refs`, `find`, `entrypoints`. |
+| `--project <name>` | Target a specific workspace member by name. Overrides CWD-based project detection. |
+| `--verbose` | Enable debug output to stderr. |
+| `--json` | Output structured JSON instead of human-readable text. Supported on all commands. |
 
 All commands support `--json` for structured output. Line numbers reflect the state of the index at last run -- use `scope status` to check freshness before range-based edits.
+
+---
+
+## Watch mode
+
+`scope index --watch` monitors your project for file changes and automatically re-indexes when source files are modified. It's designed to run in a background terminal tab during development so the index is always fresh.
+
+```bash
+scope index --watch
+```
+
+```
+Initial index: 0.8s. 4,821 symbols, 12,456 edges.
+Watching for changes... (Ctrl+C to stop)
+Re-indexed 2 files (34ms) — 2 symbols updated
+Re-indexed 1 file (12ms) — 0 symbols updated
+```
+
+### How it works
+
+- Uses the `notify` crate for cross-platform file system events (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows)
+- Debounces rapid changes with a 300ms window -- saving 5 files in quick succession triggers one re-index, not five
+- Respects `.gitignore` and `config.index.ignore` patterns -- `node_modules/`, `dist/`, etc. are never watched
+- Only reacts to files with supported extensions (`.ts`, `.tsx`, `.cs`, etc.)
+- A lock file (`.scope/.watch.lock`) prevents multiple watchers on the same project
+
+### NDJSON output
+
+For programmatic consumers, `--watch --json` emits newline-delimited JSON to stdout:
+
+```bash
+scope index --watch --json
+```
+
+```json
+{"event":"start","project":"api","languages":["typescript"],"timestamp":"2026-03-24T10:30:00Z"}
+{"event":"reindex","files_changed":2,"symbols_added":3,"duration_ms":34,"timestamp":"2026-03-24T10:30:05Z"}
+{"event":"stop","total_reindexes":42,"uptime_seconds":3600,"timestamp":"2026-03-24T11:30:00Z"}
+```
+
+### Concurrent access
+
+Watch mode writes to `graph.db` on each re-index. Other `scope` commands (sketch, refs, map, etc.) can read concurrently thanks to SQLite WAL mode and a 5-second busy timeout. You don't need to stop the watcher to query.
+
+---
+
+## Workspaces
+
+Workspaces let you query across multiple Scope projects as a single unit. This is useful for monorepos, multi-repo setups, and polyglot projects where different parts of the codebase live in separate directories.
+
+### The model
+
+Each project keeps its own independent `.scope/` index. A `scope-workspace.toml` manifest at the workspace root ties them together. When you pass `--workspace` to a command, Scope opens all member databases and fans out the query, merging results with project labels.
+
+```
+~/repos/
+  scope-workspace.toml              ← workspace manifest
+  api-gateway/
+    .scope/                         ← Go index
+    src/
+  user-service/
+    .scope/                         ← Rust index
+    src/
+  web-app/
+    .scope/                         ← TypeScript index
+    src/
+```
+
+**Key properties:**
+- Workspace is **opt-in** -- single-project behavior is unchanged without `--workspace`
+- Each project index is **independent** -- you can build, refresh, and query them separately
+- Cross-project queries **merge results** from all members with project-name labels
+- No cross-project edge detection -- Scope doesn't know that your TypeScript frontend calls your Go backend. Each project's call graph is self-contained.
+
+### Setup
+
+```bash
+# 1. Initialise and index each project individually
+cd ~/repos/api-gateway && scope init && scope index
+cd ~/repos/user-service && scope init && scope index
+cd ~/repos/web-app && scope init && scope index
+
+# 2. Create the workspace manifest from the parent directory
+cd ~/repos
+scope workspace init
+```
+
+```
+Found 3 projects:
+  api-gateway     (go)
+  user-service    (rust)
+  web-app         (typescript)
+Wrote scope-workspace.toml
+```
+
+Alternatively, index all members at once after creating the manifest:
+
+```bash
+scope workspace init
+scope workspace index
+```
+
+### Manifest format
+
+`scope-workspace.toml` is a simple TOML file:
+
+```toml
+[workspace]
+name = "my-platform"
+
+[[workspace.members]]
+path = "api-gateway"
+
+[[workspace.members]]
+path = "user-service"
+
+[[workspace.members]]
+path = "web-app"
+name = "frontend"          # optional -- defaults to directory name
+```
+
+You can edit this file manually to add or remove members, rename projects, or reorder entries.
+
+### Querying across projects
+
+Add `--workspace` to any supported command:
+
+```bash
+# Overview of the entire workspace
+scope map --workspace
+
+# Find who calls PaymentService across all projects
+scope refs PaymentService --workspace
+
+# Search for authentication code everywhere
+scope find "authentication" --workspace
+
+# List all entry points across all projects
+scope entrypoints --workspace
+
+# Check health of all member indexes
+scope status --workspace
+```
+
+Results are tagged with project names so you can tell which project each symbol belongs to:
+
+```
+PaymentService (api-gateway)    class  src/payments/service.go:12-89
+PaymentService (web-app)        class  src/types/payment.ts:5-22
+```
+
+### Targeting a specific member
+
+Use `--project <name>` to query a specific workspace member without `cd`-ing into it:
+
+```bash
+scope sketch PaymentService --project api-gateway
+scope refs processPayment --project web-app
+```
+
+### Watch mode with workspaces
+
+Run `scope index --watch` separately in each project directory. Each watcher is independent:
+
+```bash
+# Terminal 1
+cd ~/repos/api-gateway && scope index --watch
+
+# Terminal 2
+cd ~/repos/web-app && scope index --watch
+```
+
+There is no single workspace-level watcher -- each project watches its own files. This keeps the architecture simple and avoids cross-project re-indexing.
+
+### Limitations
+
+- **No cross-project edges.** Scope doesn't detect that `web-app` calls `api-gateway` via HTTP. Each project's dependency graph is self-contained. Cross-project references are a planned future feature.
+- **Commands that need source access** (`sketch`, `deps`, `trace`, `callers`) work on one project at a time. Use `--project <name>` to target a member, or `cd` into the project directory.
+- **Nested projects are detected.** If project A contains project B's directory, the file walker skips B's files to avoid double-indexing. Each project only indexes its own source tree.
 
 ---
 
@@ -314,6 +508,7 @@ Start with `scope map` for a repo overview, then `scope sketch` for specific sym
 
 **Keeping the index fresh:**
 - `scope index` -- incremental re-index after edits (< 1s for a few files)
+- `scope index --watch` -- auto re-index on file changes (runs in background)
 - Line numbers reflect the last index run. Re-index if they look wrong.
 
 Always `scope sketch` before reading full source. Only read source when ready to edit.
@@ -388,29 +583,29 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.5.3 (current)**
+**v0.1.0 -- v0.6.0 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
-- [x] `scope init`, `scope index`, `scope sketch`, `scope refs`, `scope callers`, `scope deps`, `scope rdeps`, `scope impact`, `scope find`, `scope status`
-- [x] `scope trace` -- entry-point-to-symbol call paths
-- [x] `scope entrypoints` -- API controllers, workers, event handlers
-- [x] `scope map` -- full repository overview in ~500-1000 tokens
-- [x] Enriched sketch output with method modifiers (async, private, static, abstract, virtual, override)
-- [x] Enriched FTS5 search with caller/callee indexing and snake_case splitting
-- [x] Incremental indexing with SHA-256 hash tracking
+- [x] 15 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `entrypoints`, `map`, `status`, `similar` (stub), `source` (stub)
+- [x] `scope index --watch` -- auto re-index on file changes with notify crate
+- [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting
+- [x] `WorkspaceGraph` federated query facade with symbol ID namespacing
+- [x] `LanguagePlugin` trait for pluggable language support (parser refactor)
+- [x] Enriched output with method modifiers, CamelCase/snake_case-aware FTS5
 - [x] `--json` output on all commands
 - [x] Benchmark harness with 12 tasks, 3-arm experiment, correctness verification
 
 **Next**
 - [ ] Python, Go, Java, Rust language support
-- [ ] `scope index --watch` mode
 - [ ] `scope similar`, `scope source` commands (currently stubs)
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
+- [ ] Cross-project edge detection via `scope link`
 - [ ] MCP adapter (thin wrapper over the same binary)
 
 **Later**
 - [ ] Kotlin and Ruby language support
+- [ ] Workspace-level `--watch` (single command watching all members)
 - [ ] Hosted team index sync
 - [ ] CI/CD integration for impact analysis on PRs
 
