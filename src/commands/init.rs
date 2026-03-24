@@ -50,6 +50,15 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         languages.push("csharp".to_string());
     }
 
+    // Check for Python project files
+    if project_root.join("pyproject.toml").exists()
+        || project_root.join("setup.py").exists()
+        || project_root.join("requirements.txt").exists()
+        || project_root.join("Pipfile").exists()
+    {
+        languages.push("python".to_string());
+    }
+
     // Derive project name from directory name
     let project_name = project_root
         .file_name()

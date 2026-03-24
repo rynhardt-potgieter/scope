@@ -86,6 +86,7 @@ impl CodeParser {
         let all_plugins: Vec<Box<dyn LanguagePlugin>> = vec![
             Box::new(crate::languages::typescript::TypeScriptPlugin),
             Box::new(crate::languages::csharp::CSharpPlugin),
+            Box::new(crate::languages::python::PythonPlugin),
         ];
 
         for plugin in all_plugins {

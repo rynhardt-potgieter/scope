@@ -6,6 +6,7 @@
 /// The `LanguagePlugin` trait allows adding new language support without
 /// modifying `parser.rs` — implement the trait and register the plugin.
 pub mod csharp;
+pub mod python;
 pub mod typescript;
 
 use anyhow::Result;
