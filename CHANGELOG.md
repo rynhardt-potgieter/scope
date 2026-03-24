@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.0-dev (2026-03-24)
+
+### New Features
+- **`scope index --watch`** — auto re-index on file changes using `notify` crate. Debounces events (300ms), emits NDJSON with `--json` (`start`/`reindex`/`stop` events), lock file prevents concurrent watchers, graceful Ctrl+C shutdown with summary stats.
+- **`scope workspace init`** — discover projects with `.scope/config.toml` in subdirectories and generate `scope-workspace.toml` manifest.
+- **`scope workspace list`** — show all workspace members with index status, symbol counts, and freshness. Supports `--json`.
+- **WorkspaceGraph facade** — federated query layer that opens N project databases and fans out `find_symbol`, `find_refs`, `get_entrypoints`, and aggregate stats across all members. Partial workspace support (warns and skips missing `graph.db`).
+
+### Refactoring
+- **LanguagePlugin trait** — extracted language-specific logic from `parser.rs` into a trait-based plugin system. TypeScript and C# each implement `LanguagePlugin` in their own modules. Adding a new language now requires only a new module + one registration line in `CodeParser::new()`. `parser.rs` shrank by 385 lines.
+
+### Improvements
+- **SQLite busy timeout** — `Graph::open()` now sets a 5-second busy timeout for concurrent read/write safety during `--watch` mode.
+- **Documentation sync** — all docs (README, landing page, CLAUDE.md snippet) updated to v0.5.3. Snippet rewritten with `scope map` first, deprecated/stub commands removed.
+
+---
+
 ## v0.5.3 (2026-03-23)
 
 ### Fix
