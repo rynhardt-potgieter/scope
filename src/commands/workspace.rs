@@ -74,9 +74,14 @@ pub enum WorkspaceCommands {
     /// Reads scope-workspace.toml and indexes each member project sequentially.
     /// Members without .scope/config.toml are skipped with a warning.
     ///
+    /// With --watch, starts a file watcher for each member that auto re-indexes
+    /// on file changes. Each member gets its own watcher process. Press Ctrl+C
+    /// to stop all watchers.
+    ///
     /// Examples:
     ///   scope workspace index              — incremental index all members
     ///   scope workspace index --full       — full re-index all members
+    ///   scope workspace index --watch      — watch all members for changes
     ///   scope workspace index --json       — machine-readable output
     Index(WorkspaceIndexArgs),
 }
@@ -103,6 +108,11 @@ pub struct WorkspaceIndexArgs {
     /// Rebuild the entire index from scratch for all members.
     #[arg(long)]
     pub full: bool,
+
+    /// Watch all members for file changes and auto re-index.
+    /// Spawns one watcher per member. Runs until Ctrl+C.
+    #[arg(long)]
+    pub watch: bool,
 
     /// Output as JSON instead of human-readable format.
     #[arg(long, short = 'j')]
@@ -383,8 +393,11 @@ fn run_list(args: &WorkspaceListArgs, project_root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Run `scope workspace index` — index all workspace members sequentially.
+/// Run `scope workspace index` — index all workspace members, or watch all.
 fn run_index(args: &WorkspaceIndexArgs, project_root: &Path) -> Result<()> {
+    if args.watch {
+        return run_workspace_watch(project_root);
+    }
     let manifest_path = find_workspace_manifest(project_root)?;
     let workspace_root = manifest_path.parent().unwrap_or(project_root);
 
@@ -602,4 +615,109 @@ pub fn find_workspace_manifest(start: &Path) -> Result<std::path::PathBuf> {
         "No scope-workspace.toml found.\n\
          Run 'scope workspace init' to create one."
     );
+}
+
+/// Run `scope workspace index --watch` — spawn a watcher per member.
+///
+/// Each member gets its own `scope index --watch` child process.
+/// The parent monitors all children and shuts down on Ctrl+C.
+fn run_workspace_watch(project_root: &Path) -> Result<()> {
+    let manifest_path = find_workspace_manifest(project_root)?;
+    let workspace_root = manifest_path.parent().unwrap_or(project_root);
+    let config = WorkspaceConfig::load(&manifest_path)?;
+
+    if config.workspace.members.is_empty() {
+        bail!("Workspace has no members. Add projects to scope-workspace.toml.");
+    }
+
+    // Find the scope binary path (same binary that's running now)
+    let scope_bin = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("scope"));
+
+    let mut children: Vec<(String, std::process::Child)> = Vec::new();
+
+    for entry in &config.workspace.members {
+        let name = WorkspaceConfig::resolve_member_name(entry);
+        let member_path = workspace_root.join(&entry.path);
+        let scope_dir = member_path.join(".scope");
+
+        if !scope_dir.join("config.toml").exists() {
+            eprintln!("[{name}] Skipped: no .scope/config.toml");
+            continue;
+        }
+
+        match std::process::Command::new(&scope_bin)
+            .args(["index", "--watch"])
+            .current_dir(&member_path)
+            .stderr(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => {
+                eprintln!("[{name}] Watcher started (PID {})", child.id());
+                children.push((name, child));
+            }
+            Err(e) => {
+                eprintln!("[{name}] Failed to start watcher: {e}");
+            }
+        }
+    }
+
+    if children.is_empty() {
+        bail!("No watchers started. Ensure workspace members are initialised.");
+    }
+
+    eprintln!(
+        "\nWatching {} member{} (Ctrl+C to stop all)...",
+        children.len(),
+        if children.len() == 1 { "" } else { "s" }
+    );
+
+    // Set up Ctrl+C handler
+    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let running_ctrlc = running.clone();
+    ctrlc::set_handler(move || {
+        running_ctrlc.store(false, std::sync::atomic::Ordering::SeqCst);
+    })
+    .map_err(|e| anyhow::anyhow!("Failed to set Ctrl+C handler: {e}"))?;
+
+    // Wait for Ctrl+C, periodically checking if children are alive
+    while running.load(std::sync::atomic::Ordering::SeqCst) {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Check if any child exited unexpectedly
+        for (name, child) in &mut children {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    if !status.success() {
+                        eprintln!("[{name}] Watcher exited with {status}");
+                    }
+                }
+                Ok(None) => {} // still running
+                Err(e) => {
+                    eprintln!("[{name}] Failed to check watcher status: {e}");
+                }
+            }
+        }
+    }
+
+    // Ctrl+C received — kill all children
+    eprintln!("\nShutting down watchers...");
+    for (name, mut child) in children {
+        match child.kill() {
+            Ok(()) => {
+                let _ = child.wait();
+                eprintln!("[{name}] Stopped");
+            }
+            Err(e) => {
+                // Already exited
+                if e.kind() != std::io::ErrorKind::InvalidInput {
+                    eprintln!("[{name}] Failed to stop: {e}");
+                }
+                let _ = child.wait();
+            }
+        }
+    }
+
+    eprintln!("All watchers stopped.");
+    Ok(())
 }

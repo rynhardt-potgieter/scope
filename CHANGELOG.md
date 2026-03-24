@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.2 (2026-03-24)
+
+### New Features
+- **`scope workspace index --watch`** — watch all workspace members with a single command. Spawns one `scope index --watch` process per member, monitors child processes, and shuts down all watchers on Ctrl+C.
+
+---
+
 ## v0.7.1 (2026-03-24)
 
 ### Fix

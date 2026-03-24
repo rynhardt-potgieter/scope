@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.7.1-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.2-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/rynhardt-potgieter/scope/ci.yml?label=build)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -117,7 +117,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.7.1
+# scope 0.7.2
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -210,7 +210,7 @@ Paste the [CLAUDE.md snippet](#claudemd-integration) into your project so agents
 | `scope status` | `[--json]` | Index health: symbol count, file count, last indexed time, stale files. | Checking whether the index is stale before making range-based edits. |
 | `scope workspace init` | `[--name NAME]` | Discover projects with `.scope/` in subdirectories and create `scope-workspace.toml`. | Once per workspace, after running `scope init` in each project. |
 | `scope workspace list` | `[--json]` | Show all workspace members with index status, symbol counts, and freshness. | Checking workspace health before cross-project queries. |
-| `scope workspace index` | `[--full] [--json]` | Index all workspace members sequentially. | Initial setup or batch refresh of all workspace projects. |
+| `scope workspace index` | `[--full] [--watch] [--json]` | Index all workspace members. With `--watch`, starts a file watcher per member. | Initial setup, batch refresh, or continuous watching of all projects. |
 
 ### Global flags
 
@@ -384,17 +384,27 @@ scope refs processPayment --project web-app
 
 ### Watch mode with workspaces
 
-Run `scope index --watch` separately in each project directory. Each watcher is independent:
+Watch all workspace members with a single command:
 
 ```bash
-# Terminal 1
-cd ~/repos/api-gateway && scope index --watch
-
-# Terminal 2
-cd ~/repos/web-app && scope index --watch
+scope workspace index --watch
 ```
 
-There is no single workspace-level watcher -- each project watches its own files. This keeps the architecture simple and avoids cross-project re-indexing.
+```
+[api-gateway] Watcher started (PID 12345)
+[user-service] Watcher started (PID 12346)
+[web-app] Watcher started (PID 12347)
+
+Watching 3 members (Ctrl+C to stop all)...
+```
+
+This spawns one `scope index --watch` process per member. Each watcher is independent — a file change in `web-app/` only re-indexes that project. Press Ctrl+C to stop all watchers.
+
+You can also watch individual projects manually:
+
+```bash
+cd ~/repos/web-app && scope index --watch
+```
 
 ### Limitations
 
@@ -583,13 +593,13 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.7.1 (current)**
+**v0.1.0 -- v0.7.2 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
 - [x] 15 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `entrypoints`, `map`, `status`, `similar` (stub), `source` (stub)
 - [x] `scope index --watch` -- auto re-index on file changes with notify crate
-- [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting
+- [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting, workspace-level `--watch`
 - [x] `WorkspaceGraph` federated query facade with symbol ID namespacing
 - [x] `LanguagePlugin` trait for pluggable language support (parser refactor)
 - [x] Python language support -- decorator metadata, docstring extraction, access inference
@@ -607,7 +617,6 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 **Later**
 - [ ] Kotlin and Ruby language support
-- [ ] Workspace-level `--watch` (single command watching all members)
 - [ ] Hosted team index sync
 - [ ] CI/CD integration for impact analysis on PRs
 
