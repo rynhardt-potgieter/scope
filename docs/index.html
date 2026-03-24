@@ -405,180 +405,128 @@
     .hero-metrics { gap: 1.5rem; }
   }
 
-  /* ─── workspace visual ─── */
-  .ws-visual {
-    position: relative;
-    margin: 3rem auto 2.5rem;
-    max-width: 720px;
-    min-height: 320px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-  }
-
-  /* central hub */
-  .ws-hub {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2;
-  }
-  .ws-hub-ring {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 1.5px solid var(--amber);
-    box-shadow: 0 0 24px var(--amber-glow), inset 0 0 24px var(--amber-glow);
-    animation: ws-pulse 3s ease-in-out infinite;
-  }
-  @keyframes ws-pulse {
-    0%, 100% { box-shadow: 0 0 24px var(--amber-glow), inset 0 0 24px var(--amber-glow); transform: scale(1); }
-    50% { box-shadow: 0 0 40px var(--amber-glow), inset 0 0 32px var(--amber-glow); transform: scale(1.03); }
-  }
-  .ws-hub-label {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--amber);
-    text-align: center;
-    line-height: 1.3;
-    letter-spacing: 0.04em;
-  }
-  .ws-hub-label span {
-    font-size: 0.6rem;
-    color: var(--text-2);
-    font-weight: 400;
-  }
-
-  /* nodes */
-  .ws-nodes {
-    display: flex;
-    justify-content: center;
-    gap: 1.2rem;
-    flex-wrap: wrap;
-    width: 100%;
-  }
-  .ws-node {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: var(--bg-card);
+  /* ─── workspace visual: directory tree ─── */
+  .ws-tree {
+    margin: 2.5rem auto 2rem;
+    max-width: 540px;
+    background: var(--bg-terminal);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    min-width: 180px;
-    transition: border-color 0.3s, box-shadow 0.3s;
+    border-radius: 10px;
+    overflow: hidden;
   }
-  .ws-node:hover {
-    border-color: var(--amber-dim);
-    box-shadow: 0 0 16px var(--amber-glow);
-  }
-  .ws-node-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 6px;
+  .ws-tree-bar {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1rem;
+    border-bottom: 1px solid var(--border);
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--bg);
-    background: var(--cyan);
-    flex-shrink: 0;
-  }
-  .ws-icon-go { background: var(--teal); }
-  .ws-icon-rs { background: var(--amber); }
-  .ws-node-name {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: var(--white);
-  }
-  .ws-node-meta {
     font-size: 0.7rem;
     color: var(--text-2);
+  }
+  .ws-tree-bar svg { opacity: 0.4; }
+  .ws-bar-name { color: var(--amber); font-weight: 500; }
+  .ws-tree-body {
+    padding: 1rem 1.2rem 0.8rem;
     font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 2.1;
   }
-  .ws-count {
-    color: var(--amber);
-    font-weight: 500;
+  .ws-row {
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: ws-in 0.45s ease-out forwards;
   }
-  .ws-node-status {
+  .ws-row:nth-child(1) { animation-delay: 0.15s; }
+  .ws-row:nth-child(2) { animation-delay: 0.4s; }
+  .ws-row:nth-child(3) { animation-delay: 0.65s; }
+  @keyframes ws-in {
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .ws-branch { color: var(--text-3); white-space: pre; user-select: none; }
+  .ws-ico {
+    margin-right: 0.35rem;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+  .ws-folder-name { color: var(--white); font-weight: 500; }
+  .ws-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     font-size: 0.65rem;
-    font-family: 'IBM Plex Mono', monospace;
-    color: var(--text-2);
-    display: flex;
+  }
+  .ws-lang {
+    padding: 0.08rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--bg);
+  }
+  .ws-lang-ts { background: var(--cyan); }
+  .ws-lang-go { background: var(--teal); }
+  .ws-lang-rs { background: var(--amber); }
+  .ws-syms { color: var(--text-2); }
+  .ws-syms em { color: var(--amber); font-weight: 500; font-style: normal; }
+  .ws-watch {
+    display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    margin-top: 0.15rem;
+    gap: 0.3rem;
+    color: var(--green);
   }
   .ws-dot {
-    width: 5px;
-    height: 5px;
+    width: 5px; height: 5px;
     border-radius: 50%;
     background: var(--green);
     animation: ws-blink 2s ease-in-out infinite;
+    flex-shrink: 0;
   }
   @keyframes ws-blink {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    50% { opacity: 0.15; }
   }
-  .ws-fresh { color: var(--green); }
-
-  /* spokes connecting hub to nodes */
-  .ws-spokes {
+  .ws-sep {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 0.4rem 0;
+  }
+  .ws-cmd {
     display: flex;
-    justify-content: center;
-    gap: 6rem;
-    width: 100%;
-    height: 24px;
+    align-items: baseline;
+    opacity: 0;
+    animation: ws-in 0.45s ease-out forwards;
+    animation-delay: 1.1s;
   }
-  .ws-spoke { position: relative; width: 2px; }
-  .ws-line {
-    width: 1px;
-    height: 100%;
-    background: linear-gradient(to bottom, var(--amber-dim), var(--border));
-    margin: 0 auto;
-  }
-
-  /* query bar */
-  .ws-query {
-    width: 100%;
-    max-width: 600px;
-    background: var(--bg-terminal);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.85rem 1.2rem;
-    margin-top: 0.5rem;
-  }
-  .ws-query-cmd {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.78rem;
-    color: var(--text);
-    margin-bottom: 0.4rem;
-  }
-  .ws-prompt {
-    color: var(--amber);
-    margin-right: 0.4rem;
-  }
-  .ws-query-result {
-    font-family: 'IBM Plex Mono', monospace;
+  .ws-prompt { color: var(--amber); margin-right: 0.45rem; font-weight: 500; }
+  .ws-cmd-text { color: var(--text); }
+  .ws-result {
     font-size: 0.7rem;
     color: var(--text-2);
+    padding-left: 1rem;
+    opacity: 0;
+    animation: ws-in 0.45s ease-out forwards;
+    animation-delay: 1.5s;
+    line-height: 1.8;
   }
-  .ws-result-count {
-    color: var(--amber);
-    font-weight: 500;
+  .ws-result em { color: var(--amber); font-weight: 500; font-style: normal; }
+  .ws-tree-foot {
+    padding: 0.45rem 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--green);
   }
 
-  @media (max-width: 600px) {
-    .ws-nodes { flex-direction: column; align-items: center; }
-    .ws-spokes { display: none; }
+  @media (max-width: 540px) {
+    .ws-badge { display: none; }
+    .ws-tree-body { font-size: 0.72rem; padding: 0.8rem; }
   }
 </style>
 </head>
@@ -595,8 +543,8 @@
     <li><a href="#demo">demo</a></li>
     <li><a href="#commands">commands</a></li>
     <li><a href="#setup">setup</a></li>
-    <li><a href="#languages">languages</a></li>
     <li><a href="#workspaces">workspaces</a></li>
+    <li><a href="#languages">languages</a></li>
     <li><a href="https://github.com/rynhardt-potgieter/scope" class="nav-cta">github ↗</a></li>
   </ul>
 </nav>
@@ -902,6 +850,77 @@
   </div>
 </section>
 
+<!-- WORKSPACES -->
+<section id="workspaces">
+  <div class="container">
+    <div class="reveal">
+      <div class="eyebrow">// scale up</div>
+      <h2 class="sec-h">workspaces. one command,<br>every project.</h2>
+      <p class="sec-p">monorepos, multi-repo setups, polyglot stacks — scope queries across all your projects as one unit. each project keeps its own index. one query searches them all.</p>
+    </div>
+
+    <div class="ws-tree reveal" style="transition-delay:0.1s">
+      <div class="ws-tree-bar">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span class="ws-bar-name">~/platform</span>
+        <span>scope-workspace.toml</span>
+      </div>
+      <div class="ws-tree-body">
+        <div class="ws-row">
+          <span class="ws-branch">├── </span>
+          <span class="ws-ico">&#128193;</span>
+          <span class="ws-folder-name">web-app/</span>
+          <span class="ws-badge">
+            <span class="ws-lang ws-lang-ts">TS</span>
+            <span class="ws-syms"><em>4,102</em> sym</span>
+            <span class="ws-watch"><span class="ws-dot"></span>live</span>
+          </span>
+        </div>
+        <div class="ws-row">
+          <span class="ws-branch">├── </span>
+          <span class="ws-ico">&#128193;</span>
+          <span class="ws-folder-name">api-gateway/</span>
+          <span class="ws-badge">
+            <span class="ws-lang ws-lang-go">Go</span>
+            <span class="ws-syms"><em>2,341</em> sym</span>
+            <span class="ws-watch"><span class="ws-dot"></span>live</span>
+          </span>
+        </div>
+        <div class="ws-row">
+          <span class="ws-branch">└── </span>
+          <span class="ws-ico">&#128193;</span>
+          <span class="ws-folder-name">user-service/</span>
+          <span class="ws-badge">
+            <span class="ws-lang ws-lang-rs">Rs</span>
+            <span class="ws-syms"><em>1,823</em> sym</span>
+            <span class="ws-watch"><span class="ws-dot"></span>live</span>
+          </span>
+        </div>
+
+        <hr class="ws-sep">
+
+        <div class="ws-cmd">
+          <span class="ws-prompt">$</span>
+          <span class="ws-cmd-text">scope refs PaymentService --workspace</span>
+        </div>
+        <div class="ws-result">
+          found <em>23</em> refs across <em>3</em> projects · <em>8,266</em> symbols · <em>3</em> languages
+        </div>
+      </div>
+      <div class="ws-tree-foot">
+        <span class="ws-dot"></span>
+        watching all members · scope workspace index --watch
+      </div>
+    </div>
+
+    <div class="cmd-grid reveal" style="transition-delay:0.2s">
+      <div class="cmd-card"><div class="cmd-name">scope workspace init</div><div class="cmd-sig">[--name]</div><div class="cmd-desc">Discover projects and create a workspace manifest. Each project keeps its own .scope/ index.</div><div class="cmd-when"><strong>use:</strong> once per workspace.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope map --workspace</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">Unified map across all members. Entry points, core symbols, architecture — tagged by project.</div><div class="cmd-when"><strong>use:</strong> orienting across repos.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope workspace index --watch</div><div class="cmd-sig"></div><div class="cmd-desc">Watch all members. One watcher per project, one command to rule them all. Ctrl+C stops everything.</div><div class="cmd-when"><strong>use:</strong> during development.</div></div>
+    </div>
+  </div>
+</section>
+
 <!-- LANGUAGES -->
 <section id="languages">
   <div class="container">
@@ -919,71 +938,6 @@
       <div class="lang-tile"><div class="lang-n">Java</div><div class="lang-t n">◆ planned</div></div>
       <div class="lang-tile soon"><div class="lang-n">Kotlin</div><div class="lang-t p">○ planned</div></div>
       <div class="lang-tile soon"><div class="lang-n">Ruby</div><div class="lang-t p">○ planned</div></div>
-    </div>
-  </div>
-</section>
-
-<!-- WORKSPACES -->
-<section id="workspaces">
-  <div class="container">
-    <div class="reveal">
-      <div class="eyebrow">// multi-project</div>
-      <h2 class="sec-h">workspaces. one command,<br>every project.</h2>
-      <p class="sec-p">monorepos, multi-repo setups, polyglot stacks — scope queries across all your projects as one unit.</p>
-    </div>
-
-    <!-- workspace visual -->
-    <div class="ws-visual reveal" style="transition-delay:0.15s">
-      <div class="ws-hub">
-        <div class="ws-hub-ring"></div>
-        <div class="ws-hub-label">scope<br><span>workspace</span></div>
-      </div>
-
-      <div class="ws-spokes">
-        <div class="ws-spoke ws-spoke-1"><div class="ws-line"></div></div>
-        <div class="ws-spoke ws-spoke-2"><div class="ws-line"></div></div>
-        <div class="ws-spoke ws-spoke-3"><div class="ws-line"></div></div>
-      </div>
-
-      <div class="ws-nodes">
-        <div class="ws-node ws-node-1 reveal" style="transition-delay:0.3s">
-          <div class="ws-node-icon">TS</div>
-          <div class="ws-node-info">
-            <div class="ws-node-name">web-app</div>
-            <div class="ws-node-meta"><span class="ws-count">4,102</span> symbols</div>
-            <div class="ws-node-status ws-fresh"><span class="ws-dot"></span>watching</div>
-          </div>
-        </div>
-        <div class="ws-node ws-node-2 reveal" style="transition-delay:0.45s">
-          <div class="ws-node-icon ws-icon-go">Go</div>
-          <div class="ws-node-info">
-            <div class="ws-node-name">api-gateway</div>
-            <div class="ws-node-meta"><span class="ws-count">2,341</span> symbols</div>
-            <div class="ws-node-status ws-fresh"><span class="ws-dot"></span>watching</div>
-          </div>
-        </div>
-        <div class="ws-node ws-node-3 reveal" style="transition-delay:0.6s">
-          <div class="ws-node-icon ws-icon-rs">Rs</div>
-          <div class="ws-node-info">
-            <div class="ws-node-name">user-service</div>
-            <div class="ws-node-meta"><span class="ws-count">1,823</span> symbols</div>
-            <div class="ws-node-status ws-fresh"><span class="ws-dot"></span>watching</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ws-query reveal" style="transition-delay:0.8s">
-        <div class="ws-query-cmd"><span class="ws-prompt">$</span> scope refs PaymentService --workspace</div>
-        <div class="ws-query-result">
-          <span class="ws-result-count">23 refs</span> across <span class="ws-result-count">3 projects</span> · <span class="ws-result-count">8,266</span> total symbols · <span class="ws-result-count">3</span> languages
-        </div>
-      </div>
-    </div>
-
-    <div class="cmd-grid reveal" style="transition-delay:0.2s">
-      <div class="cmd-card"><div class="cmd-name">scope workspace init</div><div class="cmd-sig">[--name]</div><div class="cmd-desc">Discover projects and create a workspace manifest. Each project keeps its own .scope/ index.</div><div class="cmd-when"><strong>use:</strong> once per workspace.</div></div>
-      <div class="cmd-card"><div class="cmd-name">scope map --workspace</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">Unified map across all members. Entry points, core symbols, architecture — tagged by project.</div><div class="cmd-when"><strong>use:</strong> orienting across repos.</div></div>
-      <div class="cmd-card"><div class="cmd-name">scope workspace index --watch</div><div class="cmd-sig"></div><div class="cmd-desc">Watch all members. One watcher per project, one command to rule them all. Ctrl+C stops everything.</div><div class="cmd-when"><strong>use:</strong> during development.</div></div>
     </div>
   </div>
 </section>
