@@ -40,6 +40,7 @@ tree-sitter-c-sharp = "0.21"
 tree-sitter-python = "0.21"
 tree-sitter-rust = "0.21"
 tree-sitter-go = "0.21"
+tree-sitter-java = "0.21"
 
 # File watching
 notify = "6"
@@ -124,3 +125,7 @@ path = "tests/integration/test_rust_lang.rs"
 [[test]]
 name = "test_go"
 path = "tests/integration/test_go.rs"
+
+[[test]]
+name = "test_java"
+path = "tests/integration/test_java.rs"

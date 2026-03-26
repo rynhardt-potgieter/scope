@@ -64,6 +64,15 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         languages.push("go".to_string());
     }
 
+    // Java detection
+    if project_root.join("pom.xml").exists()
+        || project_root.join("build.gradle").exists()
+        || project_root.join("build.gradle.kts").exists()
+        || project_root.join("src/main/java").exists()
+    {
+        languages.push("java".to_string());
+    }
+
     // Rust detection
     if project_root.join("Cargo.toml").exists() {
         languages.push("rust".to_string());

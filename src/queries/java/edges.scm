@@ -1,0 +1,41 @@
+; Import declarations
+(import_declaration
+  (scoped_identifier) @imported_name) @import
+
+; Method invocations via member access (e.g. service.processPayment(...))
+(method_invocation
+  object: (identifier) @object
+  name: (identifier) @method) @member_call
+
+; Direct method invocations (e.g. processPayment(...))
+(method_invocation
+  name: (identifier) @callee) @call
+
+; Object creation (e.g. new PaymentService(...))
+(object_creation_expression
+  type: (type_identifier) @class_name) @instantiation
+
+; Superclass in class declaration (extends)
+(class_declaration
+  (superclass
+    (type_identifier) @base_type)) @extends
+
+; Super interfaces in class declaration (implements)
+(class_declaration
+  (super_interfaces
+    (type_list
+      (type_identifier) @base_type))) @class_implements
+
+; Super interfaces in interface declaration (extends)
+(interface_declaration
+  (extends_interfaces
+    (type_list
+      (type_identifier) @base_type))) @interface_extends
+
+; Type references in field declarations
+(field_declaration
+  type: (type_identifier) @type_ref) @field_type_ref
+
+; Type references in method parameters
+(formal_parameter
+  type: (type_identifier) @type_ref) @param_type_ref
