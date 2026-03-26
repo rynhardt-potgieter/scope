@@ -808,8 +808,8 @@
           <div class="step reveal" style="transition-delay:0.3s">
             <div class="step-n">3</div>
             <div class="step-b">
-              <h4>add to CLAUDE.md</h4>
-              <p>paste the snippet. scope works for every agent session from that point.</p>
+              <h4>install the skill + snippet</h4>
+              <p>copy the skill to <code style="color:var(--cyan)">.claude/skills/</code> and add the snippet to CLAUDE.md. agents discover scope automatically.</p>
             </div>
           </div>
         </div>
@@ -825,23 +825,12 @@
           </div>
           <div class="claude-body">
             <span class="mh2">## Code Navigation</span><br><br>
-            <span style="color:var(--text-2)">This project uses Scope for code intelligence.</span><br>
-            <span style="color:var(--text-2)">Start with `scope map`, then drill down.</span><br><br>
-            <span class="mh3">**Orientation:**</span>
-            <span class="mli"><span class="mco">`scope map`</span> — full repo overview (~500-1000 tokens)</span>
-            <span class="mli"><span class="mco">`scope entrypoints`</span> — API controllers, workers</span>
-            <br>
-            <span class="mh3">**Before editing:**</span>
-            <span class="mli"><span class="mco">`scope sketch &lt;symbol&gt;`</span> — structural overview</span>
-            <span class="mli"><span class="mco">`scope refs &lt;symbol&gt;`</span> — all references with file + line</span>
-            <span class="mli"><span class="mco">`scope callers &lt;symbol&gt;`</span> — blast radius</span>
-            <br>
-            <span class="mh3">**Finding code and flow:**</span>
-            <span class="mli"><span class="mco">`scope find "&lt;query&gt;"`</span> — search by intent</span>
-            <span class="mli"><span class="mco">`scope trace &lt;symbol&gt;`</span> — entry-point-to-target paths</span>
-            <br>
-            <span class="mcmt">// always scope sketch before reading source.</span>
-            <span class="mcmt">// auto re-index: scope index --watch</span>
+            <span style="color:var(--text-2)">This project has Scope CLI installed.</span><br>
+            <span style="color:var(--text-2)">Run <span class="mco">`scope status`</span> to check. <span class="mco">`scope map`</span> for overview.</span><br><br>
+            <span style="color:var(--text-2)">Subagents needing code navigation:</span><br>
+            <span style="color:var(--text-2)">read <span class="mco">.claude/skills/code-navigation/SKILL.md</span></span><br><br>
+            <span class="mcmt">// all the detail lives in the skill file.</span>
+            <span class="mcmt">// CLAUDE.md just points to it.</span>
           </div>
         </div>
       </div>

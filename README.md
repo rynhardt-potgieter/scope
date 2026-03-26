@@ -490,21 +490,15 @@ max_depth   = 3
 
 ## Agent integration
 
-### Quick setup (CLAUDE.md snippet)
-
-Paste [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet) into your project's `CLAUDE.md`. Claude Code reads this at the start of every session and will use scope for navigation.
-
-### Full setup (skill + permissions)
-
-For best results — including subagent support — install the distributable skill:
+### Setup
 
 ```bash
-# 1. Copy the skill
+# 1. Copy the skill (teaches agents HOW to use scope)
 mkdir -p .claude/skills/code-navigation
 curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/skills/code-navigation/SKILL.md \
   > .claude/skills/code-navigation/SKILL.md
 
-# 2. Add the CLAUDE.md snippet
+# 2. Add the CLAUDE.md snippet (tells agents scope EXISTS)
 curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/docs/CLAUDE.md.snippet \
   >> CLAUDE.md
 
@@ -514,11 +508,12 @@ curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/docs/
 #   { "permissions": { "allow": ["Bash(scope:*)"] } }
 ```
 
-The skill teaches agents optimal workflows (from 54 benchmark runs), anti-patterns, and the 3-command rule. The CLAUDE.md snippet provides a quick reference and tells the main session to point subagents at the skill file.
+**How it works:**
+- **CLAUDE.md** tells the main session that scope is available and that subagents needing code navigation must be given the `code-navigation` skill
+- **The skill file** contains all the detail — decision trees, command reference, optimal workflows from 54 benchmark runs, anti-patterns, and the 3-command rule
+- **`Bash(scope:*)`** permission ensures scope commands work without prompts in both main sessions and subagents
 
-See [`skills/README.md`](skills/README.md) for full details.
-
-The snippet also works with Cursor, Aider, and any other agent that reads project instructions from a markdown file.
+See [`skills/README.md`](skills/README.md) for full details. The snippet also works with Cursor, Aider, and any other agent that reads project instructions.
 
 ---
 
