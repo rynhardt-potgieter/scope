@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.7.3-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.8.0-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/badge/build-passing-22863a)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -85,13 +85,13 @@ fields:
 ![C#](https://img.shields.io/badge/C%23-ready-22863a?style=flat-square&logo=csharp&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-ready-22863a?style=flat-square&logo=python&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-ready-22863a?style=flat-square&logo=rust&logoColor=white)
+![Go](https://img.shields.io/badge/Go-ready-22863a?style=flat-square&logo=go&logoColor=white)
+![Java](https://img.shields.io/badge/Java-ready-22863a?style=flat-square&logo=openjdk&logoColor=white)
 
-All four languages have full support: tree-sitter grammar integration, symbol extraction, edge detection (calls, imports, extends, implements), and enriched metadata (async, static, private, abstract, decorators, visibility). C# includes partial class merging; Python includes decorator and docstring extraction; Rust includes impl block method association and visibility modifiers.
+All six languages have full support: tree-sitter grammar integration, symbol extraction, edge detection (calls, imports, extends, implements), and enriched metadata. C# includes partial class merging; Python includes decorator and docstring extraction; Rust includes visibility modifiers; Go includes receiver metadata; Java includes annotations and access modifiers.
 
 ### Planned
 
-![Go](https://img.shields.io/badge/Go-planned-e6a817?style=flat-square&logo=go&logoColor=white)
-![Java](https://img.shields.io/badge/Java-planned-e6a817?style=flat-square&logo=openjdk&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-planned-6e7681?style=flat-square&logo=kotlin&logoColor=white)
 ![Ruby](https://img.shields.io/badge/Ruby-planned-6e7681?style=flat-square&logo=ruby&logoColor=white)
 
@@ -117,7 +117,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.7.3
+# scope 0.8.0
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -613,7 +613,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.7.3 (current)**
+**v0.1.0 -- v0.8.0 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
@@ -629,7 +629,8 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Benchmark harness with 12 tasks, 3-arm experiment, correctness verification
 
 **Next**
-- [ ] Go and Java language support
+- [x] Go language support — receiver metadata, export inference, struct embedding
+- [x] Java language support — annotations, access modifiers, extends/implements, records
 - [ ] `scope similar`, `scope source` commands (currently stubs)
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
 - [ ] Cross-project edge detection via `scope link`

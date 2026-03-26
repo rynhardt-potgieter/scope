@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.0 (2026-03-26)
+
+### New Features
+- **Go language support** — fifth language plugin. Extracts functions, methods (with receiver metadata), structs, interfaces, constants, type aliases. Export inference from capitalization. Struct embedding produces extends edges. 15 integration tests.
+- **Java language support** — sixth language plugin. Extracts classes, interfaces, enums, records, methods, constructors, fields, annotation types. Access modifiers (public/protected/private/package-private), static, final, abstract, synchronized, annotations (@Override, @Deprecated), throws clauses. 22 integration tests.
+
+---
+
 ## v0.7.3 (2026-03-26)
 
 ### New Features
@@ -43,7 +51,6 @@
 - **`--project <name>` flag** — target a specific workspace member by name from any directory.
 - **Context resolution** — `resolve_project_root()` replaced with `resolve_context()` that detects single-project vs workspace context. Walks upward to find `scope-workspace.toml`.
 - **Nested project detection** — file walker now skips subdirectories with `.scope/config.toml` to prevent double-indexing in workspace scenarios.
-- **Scope HUD plugin** — Claude Code plugin (`.claude/plugins/scope-hud/`) with session-start hook (auto-detects index, shows onboarding), post-tool-use hook (warns if index stale), status line agent, and scope-status skill.
 - **`scope workspace index`** — batch index all workspace members sequentially with per-member progress and summary stats. Supports `--full` and `--json`.
 
 ### Refactoring
