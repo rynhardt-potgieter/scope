@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scope:*)",
+      "Bash(scope status:*)",
+      "Bash(scope index:*)",
+      "Bash(scope sketch:*)",
+      "Bash(scope refs:*)",
+      "Bash(scope callers:*)",
+      "Bash(scope find:*)",
+      "Bash(scope deps:*)",
+      "Bash(scope rdeps:*)",
+      "Bash(scope trace:*)",
+      "Bash(scope map:*)",
+      "Bash(scope entrypoints:*)",
+      "Bash(scope workspace:*)",
+      "Bash(scope init:*)"
+    ]
+  }
+}

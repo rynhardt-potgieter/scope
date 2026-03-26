@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.7.2-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.3-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/badge/build-passing-22863a)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -117,7 +117,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.7.2
+# scope 0.7.3
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -488,43 +488,37 @@ max_depth   = 3
 
 ---
 
-## CLAUDE.md integration
+## Agent integration
 
-Add the following to your project's `CLAUDE.md`. Claude Code reads this at the start of every session.
+### Quick setup (CLAUDE.md snippet)
 
-```markdown
-## Code Navigation
+Paste [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet) into your project's `CLAUDE.md`. Claude Code reads this at the start of every session and will use scope for navigation.
 
-This project uses [Scope](https://github.com/rynhardt-potgieter/scope) for structural code intelligence.
-Start with `scope map` for a repo overview, then `scope sketch` for specific symbols.
+### Full setup (skill + permissions)
 
-**Orientation:**
-- `scope map` -- full repo overview: entry points, core symbols, architecture (~500-1000 tokens)
-- `scope entrypoints` -- list API controllers, workers, event handlers
-- `scope status` -- check index health and freshness
+For best results — including subagent support — install the distributable skill:
 
-**Before editing a class or function:**
-- `scope sketch <symbol>` -- structural overview: methods, deps, modifiers (~200 tokens)
-- `scope refs <symbol> [--kind calls|imports|extends|implements|...]` -- all references with file + line
-- `scope callers <symbol> [--depth N]` -- direct and transitive callers for blast radius
+```bash
+# 1. Copy the skill
+mkdir -p .claude/skills/code-navigation
+curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/skills/code-navigation/SKILL.md \
+  > .claude/skills/code-navigation/SKILL.md
 
-**Finding code:**
-- `scope find "<query>" [--kind function|class|method|interface]` -- full-text search by intent
+# 2. Add the CLAUDE.md snippet
+curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/docs/CLAUDE.md.snippet \
+  >> CLAUDE.md
 
-**Understanding dependencies and flow:**
-- `scope deps <symbol> [--depth 1-3]` -- what does this depend on?
-- `scope rdeps <symbol> [--depth 1-3]` -- what depends on this?
-- `scope trace <symbol>` -- call paths from entry points to target
-
-**Keeping the index fresh:**
-- `scope index` -- incremental re-index after edits (< 1s for a few files)
-- `scope index --watch` -- auto re-index on file changes (runs in background)
-- Line numbers reflect the last index run. Re-index if they look wrong.
-
-Always `scope sketch` before reading full source. Only read source when ready to edit.
+# 3. Allow scope commands (so agents don't get blocked by permissions)
+# In Claude Code, run: /permissions
+# Or add to .claude/settings.local.json:
+#   { "permissions": { "allow": ["Bash(scope:*)"] } }
 ```
 
-The same snippet works for Cursor, Aider, and any other agent that reads project instructions from a markdown file. Also available at [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet).
+The skill teaches agents optimal workflows (from 54 benchmark runs), anti-patterns, and the 3-command rule. The CLAUDE.md snippet provides a quick reference and tells the main session to point subagents at the skill file.
+
+See [`skills/README.md`](skills/README.md) for full details.
+
+The snippet also works with Cursor, Aider, and any other agent that reads project instructions from a markdown file.
 
 ---
 
@@ -593,7 +587,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.7.2 (current)**
+**v0.1.0 -- v0.7.3 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting

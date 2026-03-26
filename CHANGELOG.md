@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.3 (2026-03-26)
+
+### New Features
+- **Distributable `code-navigation` skill** — drop-in skill at `skills/code-navigation/SKILL.md` that teaches agents (including subagents) to use Scope for code navigation. Includes decision trees, optimal workflows from 54 benchmarks, anti-patterns, and the 3-command rule. Named `code-navigation` so Claude Code's skill matching triggers on any navigation task.
+- **Subagent scope awareness** — CLAUDE.md snippet now instructs the main session to point subagents at the skill file, so they read it and get the full scope workflow guidance.
+- **Bash permission reference** — `skills/settings.json` with `Bash(scope:*)` permission for users to merge into their `.claude/settings.local.json`, enabling scope commands in subagents without permission prompts.
+
+---
+
 ## v0.7.2 (2026-03-24)
 
 ### New Features

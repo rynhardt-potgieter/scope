@@ -1,7 +1,9 @@
-## Code Navigation
+## Code Navigation — USE SCOPE FIRST
 
-This project uses [Scope](https://github.com/rynhardt-potgieter/scope) for structural code intelligence.
+This project has [Scope](https://github.com/rynhardt-potgieter/scope) installed for structural code intelligence.
+**Before grepping or reading files, check if scope can answer your question faster.**
 Start with `scope map` for a repo overview, then `scope sketch` for specific symbols.
+For detailed usage patterns, read `.claude/skills/code-navigation/SKILL.md`.
 
 **Orientation:**
 - `scope map` -- full repo overview: entry points, core symbols, architecture (~500-1000 tokens)
@@ -27,3 +29,6 @@ Start with `scope map` for a repo overview, then `scope sketch` for specific sym
 - Line numbers reflect the last index run. Re-index if they look wrong.
 
 Always `scope sketch` before reading full source. Only read source when ready to edit.
+
+**Subagents:** When dispatching agents, include in their prompt: "Before starting, read
+`.claude/skills/code-navigation/SKILL.md` for code navigation tooling available in this project."
