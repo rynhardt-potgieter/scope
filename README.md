@@ -490,30 +490,61 @@ max_depth   = 3
 
 ## Agent integration
 
+Scope ships two files that teach LLM agents how to use it:
+
+| File | Purpose | Where it goes |
+|------|---------|---------------|
+| [`skills/code-navigation/SKILL.md`](skills/code-navigation/SKILL.md) | **The skill** — decision trees, command reference, optimal workflows from 54 benchmarks, anti-patterns, the 3-command rule. This is where all the detail lives. | `.claude/skills/code-navigation/SKILL.md` |
+| [`docs/CLAUDE.md.snippet`](docs/CLAUDE.md.snippet) | **The pointer** — 7 lines that tell agents scope exists and that subagents must be given the skill. Keeps CLAUDE.md clean. | Append to your project's `CLAUDE.md` |
+
 ### Setup
 
 ```bash
-# 1. Copy the skill (teaches agents HOW to use scope)
+# 1. Copy the skill file
 mkdir -p .claude/skills/code-navigation
 curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/skills/code-navigation/SKILL.md \
   > .claude/skills/code-navigation/SKILL.md
 
-# 2. Add the CLAUDE.md snippet (tells agents scope EXISTS)
+# 2. Append the snippet to CLAUDE.md
 curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/docs/CLAUDE.md.snippet \
   >> CLAUDE.md
 
-# 3. Allow scope commands (so agents don't get blocked by permissions)
-# In Claude Code, run: /permissions
-# Or add to .claude/settings.local.json:
+# 3. Allow scope commands (prevents permission prompts in subagents)
+# Add to .claude/settings.local.json:
 #   { "permissions": { "allow": ["Bash(scope:*)"] } }
 ```
 
-**How it works:**
-- **CLAUDE.md** tells the main session that scope is available and that subagents needing code navigation must be given the `code-navigation` skill
-- **The skill file** contains all the detail — decision trees, command reference, optimal workflows from 54 benchmark runs, anti-patterns, and the 3-command rule
-- **`Bash(scope:*)`** permission ensures scope commands work without prompts in both main sessions and subagents
+### How it works
 
-See [`skills/README.md`](skills/README.md) for full details. The snippet also works with Cursor, Aider, and any other agent that reads project instructions.
+1. **Main session** reads `CLAUDE.md` at startup, sees scope is available, and auto-discovers the skill via `.claude/skills/`. The skill's description triggers on any code navigation task.
+2. **Subagents** don't auto-discover skills. The CLAUDE.md snippet instructs the main session: *"when dispatching subagents that need code navigation, tell them to read `.claude/skills/code-navigation/SKILL.md`."* The subagent reads the file and follows the scope workflows.
+3. **`Bash(scope:*)`** permission ensures scope commands execute without prompts — critical for subagents which can't approve permissions interactively.
+
+### What the CLAUDE.md snippet contains
+
+```markdown
+## Code Navigation
+
+This project has Scope CLI installed (.scope/ index).
+Run `scope status` to check availability. Run `scope map` for a repo overview.
+
+When dispatching subagents that need to navigate, search, or understand code,
+include the `code-navigation` skill or instruct them to read
+`.claude/skills/code-navigation/SKILL.md` before starting.
+```
+
+That's it. No command lists, no workflows — all of that lives in the skill file.
+
+### What the skill file teaches agents
+
+- Check `scope status` before navigating
+- Use `scope sketch` instead of reading full files (~200 tokens vs ~4,000)
+- Use `scope callers` / `scope refs` instead of grep for finding references
+- Use `scope map` for repo orientation instead of reading 10+ files
+- Follow task-specific workflows (discovery, bug fix, refactor, new feature)
+- The 3-command rule: if you've run 3 scope commands without editing, start editing
+
+See [`skills/README.md`](skills/README.md) for more details. The snippet also works with Cursor, Aider, and any agent that reads project instructions.
 
 ---
 
