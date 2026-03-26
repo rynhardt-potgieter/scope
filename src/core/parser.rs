@@ -88,6 +88,7 @@ impl CodeParser {
             Box::new(crate::languages::csharp::CSharpPlugin),
             Box::new(crate::languages::python::PythonPlugin),
             Box::new(crate::languages::rust_lang::RustPlugin),
+            Box::new(crate::languages::go_lang::GoPlugin),
         ];
 
         for plugin in all_plugins {

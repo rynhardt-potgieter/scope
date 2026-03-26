@@ -59,6 +59,11 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         languages.push("python".to_string());
     }
 
+    // Go detection
+    if project_root.join("go.mod").exists() {
+        languages.push("go".to_string());
+    }
+
     // Rust detection
     if project_root.join("Cargo.toml").exists() {
         languages.push("rust".to_string());

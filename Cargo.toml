@@ -39,6 +39,7 @@ console = "0.15"
 tree-sitter-c-sharp = "0.21"
 tree-sitter-python = "0.21"
 tree-sitter-rust = "0.21"
+tree-sitter-go = "0.21"
 
 # File watching
 notify = "6"
@@ -119,3 +120,7 @@ path = "tests/integration/test_python.rs"
 [[test]]
 name = "test_rust_lang"
 path = "tests/integration/test_rust_lang.rs"
+
+[[test]]
+name = "test_go"
+path = "tests/integration/test_go.rs"

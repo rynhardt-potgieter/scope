@@ -6,6 +6,7 @@
 /// The `LanguagePlugin` trait allows adding new language support without
 /// modifying `parser.rs` — implement the trait and register the plugin.
 pub mod csharp;
+pub mod go_lang;
 pub mod python;
 pub mod rust_lang;
 pub mod typescript;
