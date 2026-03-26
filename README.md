@@ -36,7 +36,7 @@
 - [Workspaces](#workspaces)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
-- [CLAUDE.md integration](#claudemd-integration)
+- [Agent integration](#agent-integration)
 - [Building from source](#building-from-source)
 - [Benchmark methodology](#benchmark-methodology)
 - [Roadmap](#roadmap)
@@ -50,7 +50,7 @@ Scope builds a local code intelligence index for any codebase and exposes it thr
 
 The index is built from tree-sitter AST parsing (fast, error-tolerant, no compiler required), stored in a SQLite dependency graph with FTS5 full-text search, and queried through commands that return structured, agent-readable output. Everything lives in a `.scope/` directory in your project root. No server process, no Docker, no API key required.
 
-Scope integrates with Claude Code, Cursor, Aider, and any other agent that can run a shell command. Add the provided CLAUDE.md snippet to your project and agents will use it automatically.
+Scope integrates with Claude Code, Cursor, Aider, and any other agent that can run a shell command. Install the [code-navigation skill](#agent-integration) and agents use scope automatically.
 
 ```
 $ scope sketch PaymentService
@@ -183,9 +183,9 @@ scope index --watch                      # auto re-index on file changes
 
 `scope index --watch` monitors your project for file changes and re-indexes automatically with a 300ms debounce. Run it in a terminal tab during development -- agents never see stale line numbers.
 
-### 5. Add to CLAUDE.md
+### 5. Install the agent skill
 
-Paste the [CLAUDE.md snippet](#claudemd-integration) into your project so agents use Scope automatically.
+Follow the [agent integration](#agent-integration) steps to install the skill and CLAUDE.md snippet. Agents will use scope automatically.
 
 ---
 
