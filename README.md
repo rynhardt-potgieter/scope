@@ -101,9 +101,22 @@ Language support means: tree-sitter grammar integrated, symbol extraction tested
 
 ## Installation
 
+### From crates.io (recommended)
+
 ```bash
 cargo install scope-cli
 ```
+
+### Pre-built binaries (no Rust required)
+
+Download the latest binary for your platform from [GitHub Releases](https://github.com/rynhardt-potgieter/scope/releases/latest), then add it to your PATH.
+
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `scope-vX.Y.Z-aarch64-apple-darwin` |
+| macOS (Intel) | `scope-vX.Y.Z-x86_64-apple-darwin` |
+| Linux (x86_64) | `scope-vX.Y.Z-x86_64-unknown-linux-gnu` |
+| Windows (x86_64) | `scope-vX.Y.Z-x86_64-pc-windows-msvc.exe` |
 
 After installation, verify with:
 
