@@ -91,6 +91,13 @@ impl LanguagePlugin for PythonPlugin {
     fn extract_docstring(&self, node: &tree_sitter::Node, source: &str) -> Option<String> {
         extract_docstring(node, source)
     }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[
+            "__init__", "__str__", "__repr__", "__eq__", "__hash__", "__len__", "__iter__",
+            "__next__",
+        ]
+    }
 }
 
 /// Structured metadata for a Python symbol.

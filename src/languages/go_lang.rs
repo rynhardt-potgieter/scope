@@ -112,6 +112,12 @@ impl LanguagePlugin for GoPlugin {
         lines.reverse();
         Some(lines.join("\n"))
     }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[
+            "String", "Error", "Close", "Read", "Write", "New", "Init", "Run",
+        ]
+    }
 }
 
 /// Structured metadata for a Go symbol.

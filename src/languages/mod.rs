@@ -97,4 +97,28 @@ pub trait LanguagePlugin: Send + Sync {
             None
         }
     }
+
+    /// Returns symbol names that are too generic to be useful in search results.
+    ///
+    /// These names are de-ranked (not excluded) in FTS5 search — they never
+    /// receive an importance boost regardless of caller count.
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[]
+    }
+}
+
+/// Look up stopwords for a language by name string.
+///
+/// Used by the embedder to check generic names without needing
+/// a full `LanguagePlugin` instance.
+pub fn stopwords_for_language(language: &str) -> &'static [&'static str] {
+    match language {
+        "typescript" => typescript::TypeScriptPlugin.generic_name_stopwords(),
+        "csharp" => csharp::CSharpPlugin.generic_name_stopwords(),
+        "python" => python::PythonPlugin.generic_name_stopwords(),
+        "rust" => rust_lang::RustPlugin.generic_name_stopwords(),
+        "go" => go_lang::GoPlugin.generic_name_stopwords(),
+        "java" => java::JavaPlugin.generic_name_stopwords(),
+        _ => &[],
+    }
 }

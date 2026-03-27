@@ -6,6 +6,7 @@
 //! table and searched against user queries.
 
 use crate::core::graph::Symbol;
+use crate::languages::stopwords_for_language;
 
 /// Build the searchable text representation of a symbol.
 ///
@@ -91,11 +92,20 @@ pub fn build_embedding_text(
         parts.push(format!("calls {}", callees.join(" ")));
     }
 
-    // Add importance tier for search boosting
-    if importance > 0.7 {
-        parts.push("importance high core".to_string());
-    } else if importance > 0.3 {
-        parts.push("importance medium".to_string());
+    // De-rank generic names (e.g. new, toString, __init__) by forcing importance
+    // to "low" regardless of caller count. This prevents them from polluting
+    // FTS5 search results while still keeping them discoverable.
+    let stopwords = stopwords_for_language(&symbol.language);
+    let is_generic = stopwords.contains(&symbol.name.as_str());
+
+    // Add importance tier for search boosting.
+    // Generic names never get an importance boost — they stay at baseline.
+    if !is_generic {
+        if importance > 0.7 {
+            parts.push("importance high core".to_string());
+        } else if importance > 0.3 {
+            parts.push("importance medium".to_string());
+        }
     }
 
     parts.join(" | ")
@@ -292,5 +302,63 @@ mod tests {
         let sym = make_symbol("PaymentService", "class");
         let text = build_embedding_text(&sym, &[], &[], 0.1);
         assert!(!text.contains("importance"));
+    }
+
+    fn make_symbol_with_language(name: &str, kind: &str, language: &str) -> Symbol {
+        Symbol {
+            id: format!("test.rs::{name}::{kind}"),
+            name: name.to_string(),
+            kind: kind.to_string(),
+            file_path: "test.rs".to_string(),
+            line_start: 1,
+            line_end: 10,
+            signature: None,
+            docstring: None,
+            parent_id: None,
+            language: language.to_string(),
+            metadata: "{}".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_generic_name_deranked_rust_new() {
+        // "new" is a Rust stopword — should NOT get importance boost even with high score
+        let sym = make_symbol_with_language("new", "function", "rust");
+        let text = build_embedding_text(&sym, &[], &[], 0.9);
+        assert!(
+            !text.contains("importance"),
+            "generic name 'new' should not get importance boost, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_non_generic_name_gets_importance_rust() {
+        // "processPayment" is NOT a stopword — should get normal importance
+        let sym = make_symbol_with_language("processPayment", "method", "rust");
+        let text = build_embedding_text(&sym, &[], &[], 0.9);
+        assert!(
+            text.contains("importance high core"),
+            "non-generic name should get importance boost, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_generic_name_deranked_python_init() {
+        let sym = make_symbol_with_language("__init__", "method", "python");
+        let text = build_embedding_text(&sym, &[], &[], 0.8);
+        assert!(
+            !text.contains("importance"),
+            "generic name '__init__' should not get importance boost, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_generic_name_deranked_typescript_constructor() {
+        let sym = make_symbol_with_language("constructor", "method", "typescript");
+        let text = build_embedding_text(&sym, &[], &[], 0.8);
+        assert!(
+            !text.contains("importance"),
+            "generic name 'constructor' should not get importance boost, got: {text}"
+        );
     }
 }
