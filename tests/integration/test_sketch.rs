@@ -311,10 +311,7 @@ fn test_sketch_enum_json_includes_variants() {
         "PaymentMethod should have at least 3 variants"
     );
 
-    let variant_names: Vec<&str> = variants
-        .iter()
-        .filter_map(|v| v["name"].as_str())
-        .collect();
+    let variant_names: Vec<&str> = variants.iter().filter_map(|v| v["name"].as_str()).collect();
     assert!(variant_names.contains(&"CreditCard"));
     assert!(variant_names.contains(&"BankTransfer"));
     assert!(variant_names.contains(&"Wallet"));
@@ -348,10 +345,7 @@ fn test_sketch_class_json_includes_fields() {
     );
 
     // Verify the logger field exists
-    let field_names: Vec<&str> = fields
-        .iter()
-        .filter_map(|f| f["name"].as_str())
-        .collect();
+    let field_names: Vec<&str> = fields.iter().filter_map(|f| f["name"].as_str()).collect();
     assert!(
         field_names.contains(&"logger"),
         "PaymentService should have a 'logger' field"

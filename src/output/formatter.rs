@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use crate::commands::entrypoints::EntrypointInfo;
+use crate::commands::flow::FlowPath;
 use crate::commands::map::{CoreSymbol, DirStats, MapStats};
 use crate::core::graph::{
     CallerInfo, ClassRelationships, Dependency, ImpactResult, Reference, Symbol, TraceResult,
@@ -293,7 +294,41 @@ pub fn print_file_sketch(
     }
 }
 
-/// Print a generic symbol sketch (enum, const, type, struct).
+/// Print an enum sketch — variants and caller count.
+///
+/// Format:
+/// ```text
+/// PaymentStatus                                     enum  src/payments/types.ts:1-6
+/// ──────────────────────────────────────────────────────────────────────────────
+/// variants:
+///   Active
+///   Inactive
+///   Pending
+///
+/// [3 callers]
+/// ```
+pub fn print_enum_sketch(symbol: &Symbol, variants: &[&Symbol], caller_count: usize) {
+    print_header(symbol);
+
+    if !variants.is_empty() {
+        println!("variants:");
+        for v in variants {
+            println!("  {}", v.name);
+        }
+    }
+
+    println!();
+    if caller_count > 0 {
+        println!(
+            "[{caller_count} caller{}]",
+            if caller_count == 1 { "" } else { "s" }
+        );
+    } else {
+        println!("[internal]");
+    }
+}
+
+/// Print a generic symbol sketch (const, type, struct).
 ///
 /// Falls back to a simple header + signature.
 pub fn print_generic_sketch(symbol: &Symbol) {
@@ -772,6 +807,50 @@ pub fn print_trace(symbol_name: &str, result: &TraceResult, total: usize, trunca
             total - path_count
         );
     }
+}
+
+/// Print flow paths between two symbols.
+///
+/// Format:
+/// ```text
+/// PaymentService → OrderProcessor → NotificationService
+///   src/payments/service.ts:15  →  src/orders/processor.ts:42  →  src/notifications/service.ts:22
+///
+/// ─ 2 paths found (depth limit: 10)
+/// ```
+pub fn print_flow(start: &str, end: &str, paths: &[FlowPath], total: usize, depth_limit: usize) {
+    if paths.is_empty() {
+        println!(
+            "No path found from {} to {} within depth {}.",
+            start, end, depth_limit
+        );
+        return;
+    }
+
+    for (i, path) in paths.iter().enumerate() {
+        // Line 1: symbol names connected by ` → `
+        let names: Vec<&str> = path.steps.iter().map(|s| s.name.as_str()).collect();
+        println!("{}", names.join(" \u{2192} "));
+
+        // Line 2 (indented): file:line for each step, connected by `  →  `
+        let locations: Vec<String> = path
+            .steps
+            .iter()
+            .map(|s| format!("{}:{}", normalize_path(&s.file_path), s.line_start))
+            .collect();
+        println!("  {}", locations.join("  \u{2192}  "));
+
+        // Blank line between paths (but not after the last one)
+        if i < paths.len() - 1 {
+            println!();
+        }
+    }
+
+    let path_word = if total == 1 { "path" } else { "paths" };
+    println!(
+        "\n\u{2500} {} {} found (depth limit: {})",
+        total, path_word, depth_limit
+    );
 }
 
 /// Print entry points grouped by type.

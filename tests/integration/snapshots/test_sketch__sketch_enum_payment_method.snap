@@ -1,0 +1,12 @@
+---
+source: tests/integration/test_sketch.rs
+expression: normalized
+---
+PaymentMethod                                     enum  src/payments/types.ts:15-19
+──────────────────────────────────────────────────────────────────────────────
+variants:
+  CreditCard
+  BankTransfer
+  Wallet
+
+[internal]

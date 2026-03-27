@@ -81,6 +81,7 @@ fn run_symbol_sketch(args: &SketchArgs, graph: &Graph) -> Result<()> {
         "class" | "struct" => sketch_class(args, graph, &symbol),
         "method" | "function" => sketch_method(args, graph, &symbol),
         "interface" => sketch_interface(args, graph, &symbol),
+        "enum" => sketch_enum(args, graph, &symbol),
         _ => sketch_generic(args, &symbol),
     }
 }
@@ -99,9 +100,22 @@ fn sketch_class(
     let caller_counts = graph.get_caller_counts(&method_ids)?;
 
     if args.json {
+        let (fields, actual_methods): (Vec<_>, Vec<_>) =
+            methods.iter().partition(|m| m.kind == "property");
+        let field_data: Vec<serde_json::Value> = fields
+            .iter()
+            .map(|f| {
+                serde_json::json!({
+                    "name": f.name,
+                    "signature": f.signature,
+                    "line_start": f.line_start,
+                })
+            })
+            .collect();
         let data = serde_json::json!({
             "symbol": symbol,
-            "methods": methods,
+            "methods": actual_methods,
+            "fields": field_data,
             "caller_counts": caller_counts,
             "relationships": relationships,
         });
@@ -187,7 +201,50 @@ fn sketch_interface(
     Ok(())
 }
 
-/// Sketch a generic symbol (enum, const, type).
+/// Sketch an enum — shows variants and caller count.
+fn sketch_enum(
+    args: &SketchArgs,
+    graph: &Graph,
+    symbol: &crate::core::graph::Symbol,
+) -> Result<()> {
+    // get_methods returns all children by parent_id; filter for variants
+    let children = graph.get_methods(&symbol.id)?;
+    let variants: Vec<&crate::core::graph::Symbol> =
+        children.iter().filter(|c| c.kind == "variant").collect();
+    let caller_count = graph.get_caller_count(&symbol.id)?;
+
+    if args.json {
+        let variant_data: Vec<serde_json::Value> = variants
+            .iter()
+            .map(|v| {
+                serde_json::json!({
+                    "name": v.name,
+                    "line_start": v.line_start,
+                    "line_end": v.line_end,
+                })
+            })
+            .collect();
+        let data = serde_json::json!({
+            "symbol": symbol,
+            "variants": variant_data,
+            "caller_count": caller_count,
+        });
+        let output = JsonOutput {
+            command: "sketch",
+            symbol: Some(symbol.name.clone()),
+            data,
+            truncated: false,
+            total: 1,
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        formatter::print_enum_sketch(symbol, &variants, caller_count);
+    }
+
+    Ok(())
+}
+
+/// Sketch a generic symbol (const, type).
 fn sketch_generic(args: &SketchArgs, symbol: &crate::core::graph::Symbol) -> Result<()> {
     if args.json {
         let data = serde_json::json!({
