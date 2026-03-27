@@ -136,6 +136,21 @@ pub enum Commands {
     ///   scope impact PaymentConfig              — blast radius of config change
     Impact(commands::impact::ImpactArgs),
 
+    /// Find call paths between two symbols.
+    ///
+    /// Shows how <start> reaches <end> through the call graph.
+    /// Use this when you need to understand how data or control flows
+    /// between two specific points in the codebase.
+    ///
+    /// Unlike `scope trace` (entry points → target), this finds paths
+    /// between any two symbols.
+    ///
+    /// Examples:
+    ///   scope flow PaymentService OrderController
+    ///   scope flow processPayment handleWebhook --depth 5
+    ///   scope flow "src/auth.ts::validate" "src/api.ts::respond" --json
+    Flow(commands::flow::FlowArgs),
+
     /// Find code by intent using semantic search.
     ///
     /// Uses embeddings to find symbols by what they do, not what they
@@ -295,6 +310,10 @@ fn main() -> Result<()> {
         Commands::Trace(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::trace::run(args, root)
+        }
+        Commands::Flow(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::flow::run(args, root)
         }
 
         // --- Workspace management subcommands ---

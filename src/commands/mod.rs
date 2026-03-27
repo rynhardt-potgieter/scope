@@ -4,6 +4,7 @@
 pub mod deps;
 pub mod entrypoints;
 pub mod find;
+pub mod flow;
 pub mod impact;
 pub mod index;
 pub mod init;

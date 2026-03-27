@@ -1400,14 +1400,70 @@ impl Graph {
         })
     }
 
+    /// Find call paths from `start_id` to `end_id` through the call graph.
+    ///
+    /// Uses a forward BFS via recursive CTE. Returns up to `max_paths`
+    /// shortest paths, each as a `Vec<CallPathStep>`.
+    pub fn find_flow_paths(
+        &self,
+        start_id: &str,
+        end_id: &str,
+        max_depth: usize,
+        max_paths: usize,
+    ) -> Result<Vec<Vec<CallPathStep>>> {
+        let sql = "
+            WITH RECURSIVE flow(current_id, path, depth) AS (
+                -- Seed: the start symbol
+                SELECT ?1, ?1, 0
+
+                UNION ALL
+
+                -- Walk forward via 'calls' edges
+                SELECT e.to_id,
+                       flow.path || '>' || e.to_id,
+                       flow.depth + 1
+                FROM edges e
+                JOIN flow ON e.from_id = flow.current_id
+                WHERE e.kind = 'calls'
+                  AND flow.depth < ?3
+                  AND INSTR('>' || flow.path || '>', '>' || e.to_id || '>') = 0
+            )
+            SELECT path FROM flow
+            WHERE current_id = ?2
+            ORDER BY depth
+            LIMIT ?4
+        ";
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(
+            params![start_id, end_id, max_depth as i64, max_paths as i64],
+            |row| {
+                let path: String = row.get(0)?;
+                Ok(path)
+            },
+        )?;
+
+        let mut result: Vec<Vec<CallPathStep>> = Vec::new();
+        for row in rows {
+            let raw_path = row?;
+            let ids: Vec<&str> = raw_path.split('>').collect();
+            let mut steps = Vec::new();
+            for id in &ids {
+                steps.push(self.resolve_call_path_step(id)?);
+            }
+            if !steps.is_empty() {
+                result.push(steps);
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Find all call paths from entry points to a target symbol.
     ///
     /// Walks the call graph backward from the target to discover entry points
     /// (symbols with no incoming `calls` edges). Returns all distinct paths
     /// from each entry point through intermediate callers to the target.
-    ///
-    /// Uses a recursive CTE that tracks the full path as a comma-separated
-    /// string to detect cycles and reconstruct paths afterward.
     pub fn find_call_paths(
         &self,
         target_id: &str,
