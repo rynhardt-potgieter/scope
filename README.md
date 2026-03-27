@@ -101,16 +101,8 @@ Language support means: tree-sitter grammar integrated, symbol extraction tested
 
 ## Installation
 
-### curl (Linux and macOS)
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rynhardt-potgieter/scope/main/install.sh | sh
-```
-
-### cargo
-
-```bash
-cargo install --git https://github.com/rynhardt-potgieter/scope.git scope
+cargo install scope-cli
 ```
 
 After installation, verify with:
@@ -119,8 +111,6 @@ After installation, verify with:
 scope --version
 # scope 0.9.0
 ```
-
-> **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
 
 ---
 
