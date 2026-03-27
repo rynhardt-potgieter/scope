@@ -33,3 +33,7 @@
 ; Delegate declarations
 (delegate_declaration
   name: (identifier) @name) @definition
+
+; Enum member definitions
+(enum_member_declaration
+  name: (identifier) @name) @definition

@@ -488,3 +488,58 @@ fn test_refs_finds_java_callers() {
         .assert()
         .success();
 }
+
+// ---------------------------------------------------------------------------
+// Tests — enum variant extraction
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_index_detects_java_enum_variants() {
+    let (conn, _dir) = indexed_java_fixture_db();
+
+    // PaymentResult has three enum constants: SUCCESS, FAILED, PENDING
+    let variants: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT name FROM symbols WHERE kind = 'variant' ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    assert!(
+        variants.contains(&"SUCCESS".to_string()),
+        "SUCCESS variant should be indexed; found: {variants:?}"
+    );
+    assert!(
+        variants.contains(&"FAILED".to_string()),
+        "FAILED variant should be indexed; found: {variants:?}"
+    );
+    assert!(
+        variants.contains(&"PENDING".to_string()),
+        "PENDING variant should be indexed; found: {variants:?}"
+    );
+}
+
+#[test]
+fn test_java_enum_variant_has_parent_id() {
+    let (conn, _dir) = indexed_java_fixture_db();
+
+    // Verify variants have parent_id pointing to their enum
+    let parent_name: String = conn
+        .query_row(
+            "SELECT p.name FROM symbols v
+             JOIN symbols p ON v.parent_id = p.id
+             WHERE v.name = 'SUCCESS' AND v.kind = 'variant'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert_eq!(
+        parent_name, "PaymentResult",
+        "SUCCESS variant should have PaymentResult as parent"
+    );
+}

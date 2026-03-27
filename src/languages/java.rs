@@ -47,6 +47,7 @@ impl LanguagePlugin for JavaPlugin {
             "constructor_declaration" => "method",
             "field_declaration" => "property",
             "annotation_type_declaration" => "type",
+            "enum_constant" => "variant",
             _ => "function",
         }
     }
@@ -104,6 +105,12 @@ impl LanguagePlugin for JavaPlugin {
             }
             _ => None,
         }
+    }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[
+            "toString", "hashCode", "equals", "get", "set", "of", "main", "run", "close",
+        ]
     }
 }
 
@@ -272,8 +279,8 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<Java
 ///
 /// Pattern indices map to the order of patterns in `queries/java/edges.scm`:
 /// 0 = import declaration, 1 = member method call, 2 = direct method call,
-/// 3 = object creation (new), 4 = extends (superclass), 5 = class implements,
-/// 6 = interface extends, 7 = field type ref, 8 = param type ref
+/// 3 = this.method() call, 4 = object creation (new), 5 = extends (superclass),
+/// 6 = class implements, 7 = interface extends, 8 = field type ref, 9 = param type ref
 fn extract_java_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -328,8 +335,20 @@ fn extract_java_edge(
                 });
             }
         }
-        // Object creation (new Foo())
+        // this.method() call — captures method name only
         3 => {
+            if let Some((method, line)) = captures.get("method") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: method.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Object creation (new Foo())
+        4 => {
             if let Some((class_name, line)) = captures.get("class_name") {
                 edges.push(Edge {
                     from_id: from_function.clone(),
@@ -341,7 +360,7 @@ fn extract_java_edge(
             }
         }
         // Superclass (extends)
-        4 => {
+        5 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
                     from_id: from_class.clone(),
@@ -353,7 +372,7 @@ fn extract_java_edge(
             }
         }
         // Class implements
-        5 => {
+        6 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
                     from_id: from_class.clone(),
@@ -365,7 +384,7 @@ fn extract_java_edge(
             }
         }
         // Interface extends
-        6 => {
+        7 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
                     from_id: from_class.clone(),
@@ -377,7 +396,7 @@ fn extract_java_edge(
             }
         }
         // Field type reference
-        7 => {
+        8 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
                 edges.push(Edge {
                     from_id: from_function.clone(),
@@ -389,7 +408,7 @@ fn extract_java_edge(
             }
         }
         // Parameter type reference
-        8 => {
+        9 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
                 edges.push(Edge {
                     from_id: from_function.clone(),

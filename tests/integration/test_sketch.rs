@@ -247,6 +247,117 @@ fn test_sketch_file_output_format() {
     assert_snapshot!("sketch_file_service_ts", normalized);
 }
 
+/// scope sketch PaymentMethod should show enum variants.
+#[test]
+fn test_sketch_enum_shows_variants() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentMethod"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .stdout(contains("enum"))
+        .stdout(contains("PaymentMethod"))
+        .stdout(contains("variants:"))
+        .stdout(contains("CreditCard"))
+        .stdout(contains("BankTransfer"))
+        .stdout(contains("Wallet"));
+}
+
+/// Snapshot the full stdout of `scope sketch PaymentMethod`.
+#[test]
+fn test_sketch_enum_output_format() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let raw = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentMethod"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(raw.stdout).unwrap();
+    let normalized = normalize_paths(&stdout, &root);
+
+    assert_snapshot!("sketch_enum_payment_method", normalized);
+}
+
+/// --json output for enum must include variants array.
+#[test]
+fn test_sketch_enum_json_includes_variants() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentMethod", "--json"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("stdout should be valid JSON");
+
+    assert_eq!(json["command"], "sketch");
+    let variants = json["data"]["variants"]
+        .as_array()
+        .expect("data.variants should be an array");
+    assert!(
+        variants.len() >= 3,
+        "PaymentMethod should have at least 3 variants"
+    );
+
+    let variant_names: Vec<&str> = variants
+        .iter()
+        .filter_map(|v| v["name"].as_str())
+        .collect();
+    assert!(variant_names.contains(&"CreditCard"));
+    assert!(variant_names.contains(&"BankTransfer"));
+    assert!(variant_names.contains(&"Wallet"));
+}
+
+/// --json output for class must include fields array.
+#[test]
+fn test_sketch_class_json_includes_fields() {
+    let (_dir, root) = setup_indexed_fixture();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentService", "--json"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("stdout should be valid JSON");
+
+    assert_eq!(json["command"], "sketch");
+    let fields = json["data"]["fields"]
+        .as_array()
+        .expect("data.fields should be an array");
+    assert!(
+        !fields.is_empty(),
+        "PaymentService should have at least one field"
+    );
+
+    // Verify the logger field exists
+    let field_names: Vec<&str> = fields
+        .iter()
+        .filter_map(|f| f["name"].as_str())
+        .collect();
+    assert!(
+        field_names.contains(&"logger"),
+        "PaymentService should have a 'logger' field"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Helpers for snapshot normalization
 // ---------------------------------------------------------------------------

@@ -30,3 +30,7 @@
 ; Annotation type declarations
 (annotation_type_declaration
   name: (identifier) @name) @definition
+
+; Enum constant definitions
+(enum_constant
+  name: (identifier) @name) @definition

@@ -2,7 +2,7 @@
 source: tests/integration/test_map.rs
 expression: normalized
 ---
-<PROJECT_NAME> — 5 files, 21 symbols, 22 edges
+<PROJECT_NAME> — 5 files, 25 symbols, 22 edges
 ──────────────────────────────────────────────────────────────────────────────
 Languages: typescript
 
@@ -20,5 +20,5 @@ Core symbols (by caller count):
 
 Architecture:
   controllers/            2 files       9 symbols
-  payments/               2 files       9 symbols
+  payments/               2 files       13 symbols
   utils/                  1 file        3 symbols

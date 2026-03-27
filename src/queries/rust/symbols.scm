@@ -25,3 +25,7 @@
 ; Static definitions
 (static_item
   name: (identifier) @name) @definition
+
+; Enum variant definitions
+(enum_variant
+  name: (identifier) @name) @definition

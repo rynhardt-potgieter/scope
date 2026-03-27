@@ -8,7 +8,7 @@ expression: normalized
   "data": {
     "stats": {
       "file_count": 5,
-      "symbol_count": 21,
+      "symbol_count": 25,
       "edge_count": 22,
       "languages": [
         "typescript"
@@ -89,7 +89,7 @@ expression: normalized
       {
         "directory": "payments/",
         "file_count": 2,
-        "symbol_count": 9
+        "symbol_count": 13
       },
       {
         "directory": "utils/",

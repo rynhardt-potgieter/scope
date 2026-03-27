@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS symbols (
     name        TEXT NOT NULL,
     kind        TEXT NOT NULL CHECK(kind IN (
                     'function','class','method','interface',
-                    'struct','enum','const','type','property'
+                    'struct','enum','const','type','property','variant'
                 )),
     file_path   TEXT NOT NULL,
     line_start  INTEGER NOT NULL,

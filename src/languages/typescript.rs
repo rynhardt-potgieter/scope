@@ -45,6 +45,7 @@ impl LanguagePlugin for TypeScriptPlugin {
             "type_alias_declaration" => "type",
             "public_field_definition" => "property",
             "lexical_declaration" | "arrow_function" | "function_expression" => "function",
+            "enum_assignment" | "property_identifier" => "variant",
             _ => "function",
         }
     }
@@ -61,11 +62,11 @@ impl LanguagePlugin for TypeScriptPlugin {
     }
 
     fn class_body_node_types(&self) -> &[&str] {
-        &["class_body"]
+        &["class_body", "enum_body"]
     }
 
     fn class_decl_node_types(&self) -> &[&str] {
-        &["class_declaration"]
+        &["class_declaration", "enum_declaration"]
     }
 
     fn extract_metadata(
@@ -85,6 +86,10 @@ impl LanguagePlugin for TypeScriptPlugin {
         enclosing_scope_id: Option<&str>,
     ) -> Vec<Edge> {
         extract_ts_edge(pattern_index, captures, file_path, enclosing_scope_id)
+    }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &["constructor", "toString", "valueOf", "render", "default"]
     }
 }
 
@@ -202,7 +207,8 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<Para
 ///
 /// Pattern indices map to the order of patterns in `queries/typescript/edges.scm`:
 /// 0 = import, 1 = direct call, 2 = member call, 3 = chained member call,
-/// 4 = new expression, 5 = extends, 6 = implements, 7 = type reference
+/// 4 = new expression, 5 = extends, 6 = implements, 7 = this.method() call,
+/// 8 = type reference
 fn extract_ts_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -297,8 +303,20 @@ fn extract_ts_edge(
                 });
             }
         }
-        // Type reference
+        // this.method() call — captures method name only
         7 => {
+            if let Some((method, line)) = captures.get("method") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: method.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Type reference
+        8 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
                 edges.push(Edge {
                     from_id: from_function.clone(),

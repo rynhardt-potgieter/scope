@@ -47,6 +47,7 @@ impl LanguagePlugin for CSharpPlugin {
             "struct_declaration" => "struct",
             "record_declaration" => "class",
             "delegate_declaration" => "type",
+            "enum_member_declaration" => "variant",
             _ => "function",
         }
     }
@@ -63,7 +64,7 @@ impl LanguagePlugin for CSharpPlugin {
     }
 
     fn class_body_node_types(&self) -> &[&str] {
-        &["declaration_list"]
+        &["declaration_list", "enum_member_declaration_list"]
     }
 
     fn class_decl_node_types(&self) -> &[&str] {
@@ -72,6 +73,7 @@ impl LanguagePlugin for CSharpPlugin {
             "struct_declaration",
             "interface_declaration",
             "record_declaration",
+            "enum_declaration",
         ]
     }
 
@@ -92,6 +94,17 @@ impl LanguagePlugin for CSharpPlugin {
         enclosing_scope_id: Option<&str>,
     ) -> Vec<Edge> {
         extract_cs_edge(pattern_index, captures, file_path, enclosing_scope_id)
+    }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[
+            "ToString",
+            "GetHashCode",
+            "Equals",
+            "Dispose",
+            "GetType",
+            "Main",
+        ]
     }
 }
 
@@ -304,8 +317,8 @@ pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
 ///
 /// Pattern indices map to the order of patterns in `queries/csharp/edges.scm`:
 /// 0 = using (identifier), 1 = using (qualified), 2 = member call,
-/// 3 = direct call, 4 = new expression, 5 = base list (identifier),
-/// 6 = base list (qualified)
+/// 3 = direct call, 4 = new expression, 5 = this.Method() call,
+/// 6 = base list (identifier), 7 = base list (qualified)
 fn extract_cs_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -385,8 +398,20 @@ fn extract_cs_edge(
                 });
             }
         }
-        // Base list with identifier (implements/extends)
+        // this.Method() call — captures method name only
         5 => {
+            if let Some((method, line)) = captures.get("method") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: method.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Base list with identifier (implements/extends)
+        6 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
                     from_id: from_class.clone(),
@@ -398,7 +423,7 @@ fn extract_cs_edge(
             }
         }
         // Base list with qualified name
-        6 => {
+        7 => {
             if let Some((base_type, line)) = captures.get("base_type") {
                 edges.push(Edge {
                     from_id: from_class.clone(),

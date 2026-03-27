@@ -236,3 +236,58 @@ fn test_index_detects_edges() {
         "at least one 'calls' or 'imports' edge should exist"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Tests — TypeScript enum variant extraction
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_index_detects_typescript_enum_variants() {
+    let (conn, _dir) = indexed_fixture_db();
+
+    // PaymentMethod has three members: CreditCard, BankTransfer, Wallet
+    let variants: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT name FROM symbols WHERE kind = 'variant' ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    assert!(
+        variants.contains(&"CreditCard".to_string()),
+        "CreditCard variant should be indexed; found: {variants:?}"
+    );
+    assert!(
+        variants.contains(&"BankTransfer".to_string()),
+        "BankTransfer variant should be indexed; found: {variants:?}"
+    );
+    assert!(
+        variants.contains(&"Wallet".to_string()),
+        "Wallet variant (with initializer) should be indexed; found: {variants:?}"
+    );
+}
+
+#[test]
+fn test_typescript_enum_variant_has_parent_id() {
+    let (conn, _dir) = indexed_fixture_db();
+
+    // Verify at least one variant has parent_id pointing to PaymentMethod
+    let parent_name: String = conn
+        .query_row(
+            "SELECT p.name FROM symbols v
+             JOIN symbols p ON v.parent_id = p.id
+             WHERE v.name = 'Wallet' AND v.kind = 'variant'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert_eq!(
+        parent_name, "PaymentMethod",
+        "Wallet variant should have PaymentMethod as parent"
+    );
+}

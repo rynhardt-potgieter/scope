@@ -44,6 +44,7 @@ impl LanguagePlugin for RustPlugin {
             "trait_item" => "interface",
             "type_item" => "type",
             "const_item" | "static_item" => "const",
+            "enum_variant" => "variant",
             _ => "function",
         }
     }
@@ -56,12 +57,12 @@ impl LanguagePlugin for RustPlugin {
         // Rust impl blocks contain a `declaration_list` body, but `impl_item` is not
         // stored as a symbol. The standard `find_parent_class` would generate a
         // parent_id referencing a non-existent symbol, causing FK constraint errors.
-        // Leave empty so methods don't get an incorrect parent_id.
-        &[]
+        // Only `enum_variant_list` is included so enum variants get their parent enum.
+        &["enum_variant_list"]
     }
 
     fn class_decl_node_types(&self) -> &[&str] {
-        &[]
+        &["enum_item"]
     }
 
     fn extract_metadata(
@@ -81,6 +82,12 @@ impl LanguagePlugin for RustPlugin {
         enclosing_scope_id: Option<&str>,
     ) -> Vec<Edge> {
         extract_rust_edge(pattern_index, captures, file_path, enclosing_scope_id)
+    }
+
+    fn generic_name_stopwords(&self) -> &[&str] {
+        &[
+            "new", "default", "from", "into", "run", "build", "try_from", "fmt", "clone", "drop",
+        ]
     }
 }
 

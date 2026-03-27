@@ -35,3 +35,11 @@
 ; Property declarations in classes (fields)
 (public_field_definition
   name: (property_identifier) @name) @definition
+
+; Enum member definitions (with initializer)
+(enum_assignment
+  name: (property_identifier) @name) @definition
+
+; Enum member definitions (without initializer — bare identifiers in enum body)
+(enum_body
+  name: (property_identifier) @name @definition)

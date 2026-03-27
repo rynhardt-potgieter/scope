@@ -11,3 +11,9 @@ export interface PaymentResult {
 }
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed';
+
+export enum PaymentMethod {
+  CreditCard,
+  BankTransfer,
+  Wallet = 3,
+}

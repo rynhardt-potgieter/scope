@@ -226,7 +226,7 @@ impl CodeParser {
             let docstring = entry.plugin.extract_docstring(&def, source);
 
             // Determine parent_id for methods inside classes
-            let parent_id = if kind == "method" || kind == "property" {
+            let parent_id = if kind == "method" || kind == "property" || kind == "variant" {
                 find_parent_class(&def, source, file_path, entry.plugin.as_ref())
             } else {
                 None
