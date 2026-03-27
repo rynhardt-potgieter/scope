@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.8.0-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.0-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/badge/build-passing-22863a)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -88,7 +88,7 @@ fields:
 ![Go](https://img.shields.io/badge/Go-ready-22863a?style=flat-square&logo=go&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-ready-22863a?style=flat-square&logo=openjdk&logoColor=white)
 
-All six languages have full support: tree-sitter grammar integration, symbol extraction, edge detection (calls, imports, extends, implements), and enriched metadata. C# includes partial class merging; Python includes decorator and docstring extraction; Rust includes visibility modifiers; Go includes receiver metadata; Java includes annotations and access modifiers.
+All six languages have full support: tree-sitter grammar integration, symbol extraction, edge detection (calls, imports, extends, implements), and enriched metadata. C# includes partial class merging; Python includes decorator and docstring extraction; Rust includes visibility modifiers; Go includes receiver metadata; Java includes annotations and access modifiers. TypeScript, C#, Java, and Rust also extract enum variants as a dedicated `variant` symbol kind with parent linking.
 
 ### Planned
 
@@ -117,7 +117,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.8.0
+# scope 0.9.0
 ```
 
 > **Windows PowerShell note:** The binary is named `scope` -- no conflicts with PowerShell aliases.
@@ -166,6 +166,7 @@ scope sketch PaymentService              # structural overview of a class
 scope refs processPayment                # find all callers
 scope callers processPayment --depth 2   # transitive callers
 scope trace processPayment               # entry-point-to-symbol call paths
+scope flow PaymentService NotificationService  # call paths between any two symbols
 scope deps PaymentService                # what does it depend on?
 scope find "payment retry logic"         # semantic search
 scope status                             # is my index fresh?
@@ -204,6 +205,7 @@ Follow the [agent integration](#agent-integration) steps to install the skill an
 | `scope rdeps` | `<symbol> [--depth 1-3] [--json]` | What depends on this symbol? Reverse dependency traversal. | Before deleting or renaming a symbol. |
 | `scope impact` | `<symbol> [--depth 1-5] [--json]` | *Deprecated* -- delegates to `scope callers --depth N`. Blast radius analysis. | Use `scope callers --depth N` instead. |
 | `scope trace` | `<symbol> [--limit N] [--json]` | Trace call paths from entry points to a symbol. Shows how API endpoints and workers reach a function. | Understanding how a bug is triggered or what code paths exercise a function. |
+| `scope flow` | `<start> <end> [--depth N] [--limit N] [--json]` | Find call paths between any two symbols. Unlike `trace` (entry points to target), this traces forward from start to end through the call graph. | Understanding how two arbitrary symbols are connected. |
 | `scope find` | `"<query>" [--kind function\|class] [--limit N] [--json]` | Full-text search with BM25 ranking, importance-boosted results. CamelCase and snake_case aware. | Navigating an unfamiliar codebase or finding code by intent. |
 | `scope similar` | `<symbol> [--kind function\|class] [--json]` | *Stub* -- find structurally similar symbols. Not yet implemented. | Future: discovering existing implementations. |
 | `scope source` | `<symbol> [--json]` | *Stub* -- fetch full source of a symbol. Not yet implemented. | Future: reading implementation after `scope sketch`. |
@@ -443,7 +445,7 @@ Your codebase
 +-----------------------------+  for LLM consumption, not human readability.
 ```
 
-**Parsing** -- tree-sitter produces a concrete syntax tree for every file. Scope extracts symbols (functions, classes, methods, interfaces, enums, types) with their signatures, type annotations, access modifiers, async status, and docstrings. For C#, partial classes are merged across files before indexing.
+**Parsing** -- tree-sitter produces a concrete syntax tree for every file. Scope extracts symbols (functions, classes, methods, interfaces, enums, enum variants, types) with their signatures, type annotations, access modifiers, async status, and docstrings. For C#, partial classes are merged across files before indexing.
 
 **Structural graph** -- symbols are nodes in a SQLite database. Edges represent relationships: `calls`, `imports`, `extends`, `implements`, `instantiates`, `references_type`. Impact analysis uses recursive common table expressions to traverse this graph to arbitrary depth.
 
@@ -474,6 +476,10 @@ ignore = [
 
 # Include test files in refs and impact output
 include_tests = true
+
+# Vendor code patterns (auto-configured by scope init)
+# Files matching these patterns are de-ranked in find and refs results
+vendor_patterns = ["node_modules/", "vendor/", "third_party/"]
 
 [embeddings]
 # "local" uses SQLite FTS5 -- no API key, works offline
@@ -613,11 +619,11 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.8.0 (current)**
+**v0.1.0 -- v0.9.0 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
-- [x] 15 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `entrypoints`, `map`, `status`, `similar` (stub), `source` (stub)
+- [x] 16 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `flow`, `entrypoints`, `map`, `status`, `similar` (stub), `source` (stub)
 - [x] `scope index --watch` -- auto re-index on file changes with notify crate
 - [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting, workspace-level `--watch`
 - [x] `WorkspaceGraph` federated query facade with symbol ID namespacing
@@ -627,10 +633,14 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Enriched output with method modifiers, CamelCase/snake_case-aware FTS5
 - [x] `--json` output on all commands
 - [x] Benchmark harness with 12 tasks, 3-arm experiment, correctness verification
+- [x] Go language support -- receiver metadata, export inference, struct embedding
+- [x] Java language support -- annotations, access modifiers, extends/implements, records
+- [x] `scope flow` -- find call paths between any two arbitrary symbols
+- [x] Enum variant extraction -- `variant` symbol kind with parent linking (TS, C#, Java, Rust)
+- [x] `this`/`self` edge capture for TypeScript, C#, and Java
+- [x] Generic name de-ranking and vendor code de-ranking in search results
 
 **Next**
-- [x] Go language support — receiver metadata, export inference, struct embedding
-- [x] Java language support — annotations, access modifiers, extends/implements, records
 - [ ] `scope similar`, `scope source` commands (currently stubs)
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
 - [ ] Cross-project edge detection via `scope link`

@@ -67,6 +67,9 @@ New task arrives
     ├─ Debugging / tracing a bug?
     │      → scope trace <symbol>         # entry-point-to-symbol paths
     │
+    ├─ Need to find how A connects to B?
+    │      → scope flow <start> <end>     # call paths between any two symbols
+    │
     └─ Simple known-location edit?
            → Just read the file directly
 ```
@@ -84,6 +87,12 @@ Total: 1 scope command + 1-3 reads. Do NOT sketch after find.
 scope trace <symbol>           → Read suspected file → EDIT
 ```
 Total: 1 scope command + 2-3 reads. If you don't know the symbol, use `scope find` first.
+
+### Connection analysis — "How does A reach B?"
+```
+scope flow <start> <end>      → Read files along the path → EDIT
+```
+Total: 1 scope command + 1-3 reads. Use `flow` (not `trace`) when you have two specific symbols and want to know how they connect. `trace` finds paths from entry points to a target; `flow` finds paths between any two arbitrary symbols.
 
 ### Refactoring — "Restructure X to pattern Y"
 ```
@@ -116,6 +125,7 @@ Total: 1 scope command gives you every file to change. No need for grep.
 | `scope refs <symbol>` | All references by kind (calls, imports, extends) | varies | Complete reference audit |
 | `scope find "<query>"` | Symbols matching intent, ranked by relevance | varies | Finding code you can't name |
 | `scope trace <symbol>` | Entry-point-to-symbol call paths | varies | Bug tracing |
+| `scope flow <start> <end>` | Call paths between any two symbols | varies | Understanding how A connects to B |
 | `scope entrypoints` | API controllers, workers, event handlers | varies | Understanding request flow |
 | `scope deps <symbol>` | What this depends on | varies | Understanding prerequisites |
 | `scope rdeps <symbol>` | What depends on this | varies | Before deleting/renaming |

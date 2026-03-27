@@ -561,7 +561,7 @@
         <span>·</span>
         <span>git:main</span>
         <span>·</span>
-        <span>open source · MIT · v0.8.0</span>
+        <span>open source · MIT · v0.9.0</span>
       </div>
 
       <h1 class="hero-title">
@@ -766,6 +766,7 @@
       <div class="cmd-card"><div class="cmd-name">scope find</div><div class="cmd-sig">"&lt;intent&gt;" [--kind function|class|method|...]</div><div class="cmd-desc">Semantic search by what code does, not what it's named. Local embeddings — no API key, works offline.</div><div class="cmd-when"><strong>use when:</strong> navigating unfamiliar code by intent.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope deps</div><div class="cmd-sig">&lt;symbol&gt; [--depth 1-3]</div><div class="cmd-desc">What does this symbol depend on? Direct imports, called functions, extended classes. Transitive with --depth.</div><div class="cmd-when"><strong>use when:</strong> understanding what must exist first.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope trace</div><div class="cmd-sig">&lt;symbol&gt; [--depth 1-3]</div><div class="cmd-desc">Show how requests reach a symbol. Traces the call graph backward from target to entry points. Use for debugging — see how a bug is triggered.</div><div class="cmd-when"><strong>use when:</strong> checking if an internal change is safe.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope flow</div><div class="cmd-sig">&lt;start&gt; &lt;end&gt; [--depth N] [--limit N]</div><div class="cmd-desc">Find call paths between any two symbols. Unlike trace (entry points to target), this traces forward from start to end through the call graph.</div><div class="cmd-when"><strong>use when:</strong> understanding how two symbols are connected.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope map</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">Full repository overview in ~500-1000 tokens. Entry points, core symbols ranked by caller count, architecture layers. Start here for complex tasks.</div><div class="cmd-when"><strong>use when:</strong> starting work on an unfamiliar codebase.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope entrypoints</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">List API controllers, workers, and event handlers. Symbols with zero incoming calls — the starting points for every request flow.</div><div class="cmd-when"><strong>use when:</strong> understanding how requests enter the system.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope index</div><div class="cmd-sig">[--full] [--watch]</div><div class="cmd-desc">Build or refresh the code index. Incremental by default. --full rebuilds from scratch. --watch auto re-indexes on file changes.</div><div class="cmd-when"><strong>use:</strong> once on setup. --watch during development.</div></div>

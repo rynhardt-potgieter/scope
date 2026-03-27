@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.0 (2026-03-27)
+
+### New Features
+- **`scope flow <start> <end>`** — find call paths between any two symbols. Unlike `scope trace` (entry points → target), this traces forward from start to end through the call graph. Supports `--depth`, `--limit`, `--json`.
+- **Enum variant extraction** — new `variant` symbol kind. Extracts enum variants for TypeScript, C#, Java, and Rust with parent_id linking to parent enum. `scope sketch` now shows dedicated enum output with variant listing.
+- **`this`/`self` edge capture** — TypeScript `this.method()`, C# `this.Method()`, Java `this.method()` calls now correctly captured in the edge graph. Previously missed because `this`/`self` are keyword nodes, not identifiers.
+- **Generic name de-ranking** — per-language stopword lists prevent common names (`new`, `constructor`, `__init__`, `toString`) from dominating `scope find` results. Added `generic_name_stopwords()` to the LanguagePlugin trait.
+- **Vendor code de-ranking** — `scope find` and `scope refs` partition results: first-party code appears before vendor code. Configurable `vendor_patterns` in config.toml, auto-configured per detected language by `scope init`.
+
+### Improvements
+- **Richer sketch output** — `sketch_enum()` handler shows enum variants. Class sketch JSON now includes `fields` array separate from methods.
+
+---
+
 ## v0.8.0 (2026-03-26)
 
 ### New Features
