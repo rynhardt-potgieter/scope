@@ -342,6 +342,31 @@ fn test_index_go_value_receiver_metadata() {
 }
 
 // ---------------------------------------------------------------------------
+// Tests -- embedded struct method call edge capture (G13 regression)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_go_embedded_struct_method_call_creates_edge() {
+    let (conn, _dir) = indexed_go_fixture_db();
+
+    // PaymentService embeds utils.Logger. In ProcessPayment, `s.Info(...)` calls
+    // Logger.Info via the embedding. The selector pattern captures this as
+    // to_id = "s.Info" with kind = "calls".
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges WHERE kind = 'calls' AND to_id = 's.Info'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "s.Info() call on embedded Logger should produce a calls edge; got count={count}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Tests -- Go symbol count is reasonable
 // ---------------------------------------------------------------------------
 
@@ -404,6 +429,27 @@ fn test_sketch_go_struct_json() {
         serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
 
     assert_eq!(json["command"], "sketch");
+}
+
+#[test]
+fn test_sketch_go_method_shows_receiver() {
+    let dir = setup_go_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    // ProcessPayment has a *PaymentService pointer receiver — sketch the method directly
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "ProcessPayment"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("(p *PaymentService)"),
+        "Sketch should show receiver prefix on ProcessPayment. Got:\n{stdout}"
+    );
 }
 
 // ---------------------------------------------------------------------------

@@ -2,14 +2,14 @@
 source: tests/integration/test_map.rs
 expression: normalized
 ---
-<PROJECT_NAME> — 5 files, 25 symbols, 22 edges
+<PROJECT_NAME> — 5 files, 26 symbols, 26 edges
 ──────────────────────────────────────────────────────────────────────────────
 Languages: typescript
 
 Entry points:
   OrderController                 controllers/                       → 4 methods
   RefundController                controllers/                       → 3 methods
-  PaymentService                  payments/                          → 5 methods
+  PaymentService                  payments/                          → 6 methods
   Logger                          utils/                             → 2 methods
 
 Core symbols (by caller count):
@@ -17,8 +17,9 @@ Core symbols (by caller count):
   processPayment                  2 callers     payments/service.ts
   error                           1 caller      utils/logger.ts
   refundPayment                   1 caller      payments/service.ts
+  validateAmount                  1 caller      payments/service.ts
 
 Architecture:
   controllers/            2 files       9 symbols
-  payments/               2 files       13 symbols
+  payments/               2 files       14 symbols
   utils/                  1 file        3 symbols

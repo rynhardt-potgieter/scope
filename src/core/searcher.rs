@@ -16,6 +16,7 @@ use std::path::Path;
 
 use crate::core::embedder::build_embedding_text;
 use crate::core::graph::Symbol;
+use crate::languages::stopwords_for_language;
 
 /// A single result from a search query.
 #[derive(Debug, Clone, Serialize)]
@@ -299,16 +300,82 @@ fn normalize_scores(raw: Vec<RawFtsResult>) -> Vec<SearchResult> {
         .collect()
 }
 
+/// Check if a term is a stopword in any supported language.
+///
+/// Used by `build_fts_query` to identify generic names that should be
+/// treated as optional boosters rather than primary search terms when
+/// the query also contains specific (non-stopword) terms.
+fn is_any_stopword(term: &str) -> bool {
+    const LANGUAGES: &[&str] = &["typescript", "csharp", "python", "rust", "go", "java"];
+    let lower = term.to_lowercase();
+    for lang in LANGUAGES {
+        for sw in stopwords_for_language(lang) {
+            if sw.to_lowercase() == lower {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Expand a single token into FTS5 terms with prefix matching.
+///
+/// Handles camelCase and snake_case splitting. Returns a deduplicated
+/// list of terms like `["PaymentService*", "payment*", "service*"]`.
+fn expand_token(token: &str) -> Vec<String> {
+    let cleaned: String = token
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    if cleaned.is_empty() {
+        return Vec::new();
+    }
+
+    let mut terms: Vec<String> = Vec::new();
+
+    // Add the full token with prefix matching
+    terms.push(format!("{cleaned}*"));
+
+    // Also split camelCase and add component words (min 3 chars)
+    let split = crate::core::embedder::split_camel_case(&cleaned);
+    for word in split.split_whitespace() {
+        let lower = word.to_lowercase();
+        if lower != cleaned.to_lowercase() && lower.len() >= 3 {
+            terms.push(format!("{lower}*"));
+        }
+    }
+
+    // Also split snake_case and add component words
+    if cleaned.contains('_') {
+        for word in crate::core::embedder::split_snake_case(&cleaned).split_whitespace() {
+            let lower = word.to_lowercase();
+            if lower.len() >= 3 {
+                terms.push(format!("{lower}*"));
+            }
+        }
+    }
+
+    terms.dedup();
+    terms
+}
+
 /// Build an FTS5 query from a natural-language search string.
 ///
 /// Splits the query into tokens and joins them with OR for partial matching.
 /// Each token gets a `*` suffix for prefix matching, and camelCase tokens
 /// are additionally split into component words for broader recall.
 ///
+/// When a query contains a mix of specific (non-stopword) and generic
+/// (stopword) terms, the query is restructured so that the specific terms
+/// form the primary match and generic terms act as optional boosters.
+/// This ensures `"payment new"` ranks `PaymentService::new` higher than
+/// `Logger::new` because the query context provides specificity.
+///
 /// Examples:
 /// - `"TransactionController"` -> `TransactionController* OR transaction* OR controller*`
 /// - `"payment"` -> `payment*`
 /// - `"authentication errors"` -> `authentication* OR errors*`
+/// - `"payment new"` -> `(payment*) OR (payment* new*)` (context-boosted)
 fn build_fts_query(query: &str) -> String {
     let tokens: Vec<&str> = query.split_whitespace().filter(|t| !t.is_empty()).collect();
 
@@ -316,42 +383,45 @@ fn build_fts_query(query: &str) -> String {
         return String::new();
     }
 
-    let mut fts_tokens: Vec<String> = Vec::new();
+    // Expand all tokens into FTS5 terms
+    let mut all_terms: Vec<String> = Vec::new();
+    let mut specific_terms: Vec<String> = Vec::new();
+    let mut generic_terms: Vec<String> = Vec::new();
 
     for token in &tokens {
-        let cleaned: String = token
-            .chars()
-            .filter(|c| c.is_alphanumeric() || *c == '_')
-            .collect();
-        if cleaned.is_empty() {
+        let expanded = expand_token(token);
+        if expanded.is_empty() {
             continue;
         }
 
-        // Add the full token with prefix matching
-        fts_tokens.push(format!("{cleaned}*"));
+        let is_generic = is_any_stopword(token);
 
-        // Also split camelCase and add component words (min 3 chars)
-        let split = crate::core::embedder::split_camel_case(&cleaned);
-        for word in split.split_whitespace() {
-            let lower = word.to_lowercase();
-            if lower != cleaned.to_lowercase() && lower.len() >= 3 {
-                fts_tokens.push(format!("{lower}*"));
-            }
-        }
-
-        // Also split snake_case and add component words
-        if cleaned.contains('_') {
-            for word in crate::core::embedder::split_snake_case(&cleaned).split_whitespace() {
-                let lower = word.to_lowercase();
-                if lower.len() >= 3 {
-                    fts_tokens.push(format!("{lower}*"));
-                }
+        for term in &expanded {
+            all_terms.push(term.clone());
+            if is_generic {
+                generic_terms.push(term.clone());
+            } else {
+                specific_terms.push(term.clone());
             }
         }
     }
 
-    fts_tokens.dedup();
-    fts_tokens.join(" OR ")
+    all_terms.dedup();
+    specific_terms.dedup();
+    generic_terms.dedup();
+
+    // If there are both specific and generic terms, construct a context-boosted query.
+    // The specific terms form the base match; generic terms are optional boosters.
+    // FTS5 BM25 naturally ranks results matching more terms higher, so the OR
+    // branch with all terms scores above the branch with only specific terms.
+    if !specific_terms.is_empty() && !generic_terms.is_empty() {
+        let specific_clause = specific_terms.join(" OR ");
+        let all_clause = all_terms.join(" OR ");
+        return format!("({specific_clause}) OR ({all_clause})");
+    }
+
+    // All specific or all generic — use the existing OR join
+    all_terms.join(" OR ")
 }
 
 #[cfg(test)]
@@ -402,6 +472,80 @@ mod tests {
     fn test_build_fts_query_camel_case_no_short_words() {
         // Short component words (< 3 chars) should be excluded
         assert_eq!(build_fts_query("GoTo"), "GoTo*");
+    }
+
+    #[test]
+    fn test_is_any_stopword() {
+        // Rust stopwords
+        assert!(is_any_stopword("new"));
+        assert!(is_any_stopword("default"));
+        assert!(is_any_stopword("from"));
+        // Go stopwords (case-insensitive)
+        assert!(is_any_stopword("New"));
+        assert!(is_any_stopword("Init"));
+        // TypeScript stopwords
+        assert!(is_any_stopword("constructor"));
+        assert!(is_any_stopword("render"));
+        // Python stopwords
+        assert!(is_any_stopword("__init__"));
+        // Non-stopwords
+        assert!(!is_any_stopword("payment"));
+        assert!(!is_any_stopword("service"));
+        assert!(!is_any_stopword("TransactionController"));
+    }
+
+    #[test]
+    fn test_build_fts_query_context_boost_generic_name() {
+        // "payment new" should produce a context-boosted query where
+        // "payment" is the primary match and "new" is an optional booster
+        let query = build_fts_query("payment new");
+        // Should have the specific-only clause and the all-terms clause
+        assert!(
+            query.contains("(payment*)"),
+            "expected specific-only clause, got: {query}"
+        );
+        assert!(
+            query.contains("new*"),
+            "expected generic term as booster, got: {query}"
+        );
+        // The query should be in the form: (specific) OR (specific OR generic)
+        assert!(
+            query.starts_with('('),
+            "expected grouped query, got: {query}"
+        );
+    }
+
+    #[test]
+    fn test_build_fts_query_all_specific_no_boost() {
+        // When all terms are specific, no context-boost restructuring
+        let query = build_fts_query("payment service");
+        assert_eq!(query, "payment* OR service*");
+    }
+
+    #[test]
+    fn test_build_fts_query_all_generic_no_boost() {
+        // When all terms are generic, no restructuring either
+        let query = build_fts_query("new default");
+        assert!(
+            !query.starts_with('('),
+            "should not be grouped when all generic, got: {query}"
+        );
+        assert!(query.contains("new*"));
+        assert!(query.contains("default*"));
+    }
+
+    #[test]
+    fn test_build_fts_query_multi_specific_one_generic() {
+        // "payment service new" — specific terms form primary match
+        let query = build_fts_query("payment service new");
+        assert!(
+            query.contains("(payment* OR service*)"),
+            "expected specific clause, got: {query}"
+        );
+        assert!(
+            query.contains("new*"),
+            "expected generic booster, got: {query}"
+        );
     }
 
     #[test]

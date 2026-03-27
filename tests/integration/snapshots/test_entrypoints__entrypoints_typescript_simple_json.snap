@@ -31,7 +31,7 @@ expression: normalized
         {
           "name": "PaymentService",
           "file_path": "src/payments/service.ts",
-          "method_count": 5,
+          "method_count": 6,
           "outgoing_call_count": 0,
           "kind": "class"
         },

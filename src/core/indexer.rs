@@ -112,7 +112,15 @@ impl Indexer {
 
             // Extract symbols and edges
             let symbols = self.parser.extract_symbols(rel_path, &source, *lang)?;
-            let edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+            let mut edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+
+            // Rust: extract trait implementation edges (impl Trait for Type)
+            if *lang == SupportedLanguage::Rust {
+                let trait_edges = self
+                    .parser
+                    .extract_rust_impl_trait_edges(rel_path, &source, &symbols)?;
+                edges.extend(trait_edges);
+            }
 
             let sym_count = symbols.len();
             let edge_count = edges.len();
@@ -236,7 +244,15 @@ impl Indexer {
                 .with_context(|| format!("Failed to read {}", abs_path.display()))?;
 
             let symbols = self.parser.extract_symbols(rel_path, &source, *lang)?;
-            let edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+            let mut edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+
+            // Rust: extract trait implementation edges (impl Trait for Type)
+            if *lang == SupportedLanguage::Rust {
+                let trait_edges = self
+                    .parser
+                    .extract_rust_impl_trait_edges(rel_path, &source, &symbols)?;
+                edges.extend(trait_edges);
+            }
 
             // Atomic per-file update: delete old data, insert new
             graph.insert_file_data(rel_path, &symbols, &edges)?;

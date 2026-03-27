@@ -129,3 +129,11 @@ path = "tests/integration/test_go.rs"
 [[test]]
 name = "test_java"
 path = "tests/integration/test_java.rs"
+
+[[test]]
+name = "test_csharp"
+path = "tests/integration/test_csharp.rs"
+
+[[test]]
+name = "test_flow"
+path = "tests/integration/test_flow.rs"

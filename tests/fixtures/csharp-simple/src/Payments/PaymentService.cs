@@ -14,6 +14,7 @@ namespace CSharpSimple.Payments
         public async Task<bool> ProcessPayment(decimal amount, string userId)
         {
             _logger.Info("Processing payment");
+            this.ValidateAmount(amount);
             return true;
         }
 
@@ -25,7 +26,23 @@ namespace CSharpSimple.Payments
 
         private bool ValidateAmount(decimal amount)
         {
+            base.OnValidating(amount);
             return amount > 0;
+        }
+
+        public string DescribeStatus(PaymentStatus status)
+        {
+            switch (status)
+            {
+                case PaymentStatus.Pending:
+                    return "Pending";
+                case PaymentStatus.Completed:
+                    return "Done";
+                case PaymentStatus.Failed:
+                    return "Error";
+                default:
+                    return "Unknown";
+            }
         }
     }
 }

@@ -9,5 +9,5 @@ API Controllers:
   RefundController      src/controllers/refund.ts   → 3 methods
 
 Other:
-  PaymentService        src/payments/service.ts   → 5 methods
+  PaymentService        src/payments/service.ts   → 6 methods
   Logger                src/utils/logger.ts   → 2 methods

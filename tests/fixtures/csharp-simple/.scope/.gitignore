@@ -1,5 +1,0 @@
-# Ignore all Scope index files
-graph.db
-vectors/
-file_hashes.db
-models/

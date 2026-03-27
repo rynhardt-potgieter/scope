@@ -28,6 +28,14 @@ impl PaymentService {
     fn validate_card(card: &CardDetails) -> bool {
         card.number.is_some()
     }
+
+    /// Check the result of a payment and return a status string.
+    pub fn check_result(result: &PaymentResult) -> &'static str {
+        match result {
+            PaymentResult::Success { .. } => "ok",
+            PaymentResult::Failure { .. } => "fail",
+        }
+    }
 }
 
 /// Trait for payment processing backends.

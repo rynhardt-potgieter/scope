@@ -637,8 +637,12 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Java language support -- annotations, access modifiers, extends/implements, records
 - [x] `scope flow` -- find call paths between any two arbitrary symbols
 - [x] Enum variant extraction -- `variant` symbol kind with parent linking (TS, C#, Java, Rust)
-- [x] `this`/`self` edge capture for TypeScript, C#, and Java
+- [x] Match/switch arm edge detection for enum variant refs (Rust, Java, C#)
+- [x] `this`/`self`/`base`/`super` edge capture for TypeScript, C#, and Java
+- [x] Rust impl block association -- struct sketches now show methods and trait implementations
+- [x] Sketch enrichments -- Java annotations, Python decorators, Go receiver types on methods
 - [x] Generic name de-ranking and vendor code de-ranking in search results
+- [x] Query context specificity boost for mixed specific/generic searches
 
 **Next**
 - [ ] `scope similar`, `scope source` commands (currently stubs)

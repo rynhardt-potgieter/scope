@@ -318,7 +318,8 @@ pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
 /// Pattern indices map to the order of patterns in `queries/csharp/edges.scm`:
 /// 0 = using (identifier), 1 = using (qualified), 2 = member call,
 /// 3 = direct call, 4 = new expression, 5 = this.Method() call,
-/// 6 = base list (identifier), 7 = base list (qualified)
+/// 6 = base list (identifier), 7 = base list (qualified), 8 = base.Method() call,
+/// 9 = switch case member access variant ref
 fn extract_cs_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -429,6 +430,30 @@ fn extract_cs_edge(
                     from_id: from_class.clone(),
                     to_id: base_type.clone(),
                     kind: "implements".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // base.Method() call — captures method name only
+        8 => {
+            if let Some((method, line)) = captures.get("method") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: method.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Switch case with member access variant ref (e.g. case PaymentStatus.Pending:)
+        9 => {
+            if let Some((variant_ref, line)) = captures.get("variant_ref") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: variant_ref.clone(),
+                    kind: "references".to_string(),
                     file_path: file_path.to_string(),
                     line: Some(*line),
                 });

@@ -247,6 +247,11 @@ impl CodeParser {
             });
         }
 
+        // Post-extraction pass: associate Rust impl block methods with their target type.
+        if lang == SupportedLanguage::Rust {
+            associate_rust_impl_methods(&mut symbols, &tree, source, file_path);
+        }
+
         Ok(symbols)
     }
 
@@ -320,13 +325,77 @@ impl CodeParser {
 
         Ok(edges)
     }
+
+    /// Extract Rust trait implementation edges (`impl Trait for Type`).
+    ///
+    /// Must be called after `extract_symbols` so that the symbols list is available
+    /// to resolve the correct `from_id` for the target type.
+    pub fn extract_rust_impl_trait_edges(
+        &mut self,
+        file_path: &str,
+        source: &str,
+        symbols: &[Symbol],
+    ) -> Result<Vec<Edge>> {
+        let entry = self
+            .find_plugin(SupportedLanguage::Rust)
+            .ok_or_else(|| anyhow::anyhow!("Rust language not loaded"))?;
+
+        let ts_lang = entry.plugin.ts_language();
+
+        self.parser
+            .set_language(&ts_lang)
+            .context("Failed to set parser language")?;
+
+        let tree = self
+            .parser
+            .parse(source, None)
+            .ok_or_else(|| anyhow::anyhow!("Parse failed for {file_path}"))?;
+
+        Ok(extract_rust_trait_impl_edges(
+            symbols, &tree, source, file_path,
+        ))
+    }
 }
 
 /// Extract the signature — first line of the definition up to `{` or end of the line.
+///
+/// For enum variants, the full text is used (including struct body like `{ field: Type }`)
+/// so that data shapes are preserved in the signature.
 fn extract_signature(node: &tree_sitter::Node, source: &str) -> Option<String> {
     let start = node.start_byte();
     let end = node.end_byte();
     let text = &source[start..end];
+
+    // Enum variants: preserve the full data shape (struct fields, tuple types)
+    // e.g. "Success { tx_id: String }" or "Error(String)" or "Pending"
+    if node.kind() == "enum_variant" {
+        // Take up to the first newline, preserving struct bodies
+        let sig = if let Some(nl_pos) = text.find('\n') {
+            // For multi-line struct variants, collapse to a single line
+            let full = text.trim();
+            if full.contains('{') && full.contains('}') {
+                // Single-line or collapsible struct variant
+                let collapsed: String =
+                    full.lines().map(|l| l.trim()).collect::<Vec<_>>().join(" ");
+                return if collapsed.is_empty() {
+                    None
+                } else {
+                    // Strip trailing comma from variant
+                    Some(collapsed.trim_end_matches(',').trim().to_string())
+                };
+            }
+            text[..nl_pos].trim()
+        } else {
+            text.trim()
+        };
+        // Strip trailing comma from variant
+        let sig = sig.trim_end_matches(',').trim();
+        return if sig.is_empty() {
+            None
+        } else {
+            Some(sig.to_string())
+        };
+    }
 
     // Take up to the first `{` or newline, whichever comes first
     let sig = if let Some(brace_pos) = text.find('{') {
@@ -379,7 +448,24 @@ fn find_enclosing_scope(
             // Named scope — get its name and build the ID
             if let Some(name_node) = parent.child_by_field_name("name") {
                 if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
-                    let kind = plugin.infer_symbol_kind(parent.kind());
+                    let mut kind = plugin.infer_symbol_kind(parent.kind());
+
+                    // For Rust: function_item inside an impl_item is a "method"
+                    if kind == "function"
+                        && plugin.language() == SupportedLanguage::Rust
+                        && parent.kind() == "function_item"
+                    {
+                        if let Some(grandparent) = parent.parent() {
+                            if grandparent.kind() == "declaration_list" {
+                                if let Some(great_grandparent) = grandparent.parent() {
+                                    if great_grandparent.kind() == "impl_item" {
+                                        kind = "method";
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let line = parent.start_position().row as u32 + 1;
                     return Some(format!("{file_path}::{name}::{kind}::{line}"));
                 }
@@ -418,4 +504,209 @@ fn find_parent_class(
         current = parent.parent();
     }
     None
+}
+
+/// Associate Rust methods inside `impl` blocks with their target struct/enum.
+///
+/// Rust defines methods in separate `impl Type { ... }` blocks, not inside the
+/// struct/enum body. After extracting all symbols from a file, this function
+/// walks the AST for `impl_item` nodes and sets `parent_id` on each function
+/// inside the impl's `declaration_list` to point to the target struct/enum
+/// symbol in the same file.
+///
+/// Handles both `impl Type { ... }` and `impl Trait for Type { ... }`.
+/// Generic type parameters (e.g., `impl<T> Foo<T>`) are handled by extracting
+/// only the base type name. Methods targeting types defined in other files
+/// (i.e., no matching struct/enum in the current file's symbols) are skipped.
+fn associate_rust_impl_methods(
+    symbols: &mut [Symbol],
+    tree: &tree_sitter::Tree,
+    source: &str,
+    file_path: &str,
+) {
+    let root = tree.root_node();
+    let mut tree_cursor = root.walk();
+
+    // Collect impl block info: (target_type_name, Vec<(method_name, method_line_start)>)
+    let mut impl_associations: Vec<(String, Vec<(String, u32)>)> = Vec::new();
+
+    for child in root.children(&mut tree_cursor) {
+        if child.kind() != "impl_item" {
+            continue;
+        }
+
+        let target_type_name = match extract_impl_target_type(&child, source) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        // Collect function_item children inside the declaration_list
+        let mut methods = Vec::new();
+        let mut impl_cursor = child.walk();
+        for impl_child in child.children(&mut impl_cursor) {
+            if impl_child.kind() == "declaration_list" {
+                let mut decl_cursor = impl_child.walk();
+                for decl_child in impl_child.children(&mut decl_cursor) {
+                    if decl_child.kind() == "function_item" {
+                        if let Some(name_node) = decl_child.child_by_field_name("name") {
+                            if let Ok(name) = name_node.utf8_text(source.as_bytes()) {
+                                let line = decl_child.start_position().row as u32 + 1;
+                                methods.push((name.to_string(), line));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !methods.is_empty() {
+            impl_associations.push((target_type_name, methods));
+        }
+    }
+
+    // Now match extracted symbols to their target types
+    for (target_type_name, methods) in &impl_associations {
+        // Find the target struct/enum symbol in the same file
+        let target_id = symbols
+            .iter()
+            .find(|s| {
+                s.file_path == file_path
+                    && s.name == *target_type_name
+                    && (s.kind == "struct" || s.kind == "enum" || s.kind == "interface")
+            })
+            .map(|s| s.id.clone());
+
+        let Some(target_id) = target_id else {
+            // Target type not in this file — skip
+            continue;
+        };
+
+        // Set parent_id on each method symbol
+        for (method_name, method_line) in methods {
+            if let Some(sym) = symbols.iter_mut().find(|s| {
+                s.file_path == file_path
+                    && s.name == *method_name
+                    && s.line_start == *method_line
+                    && s.kind == "function"
+                    && s.parent_id.is_none()
+            }) {
+                sym.parent_id = Some(target_id.clone());
+                sym.kind = "method".to_string();
+                // Update ID to reflect the new kind
+                sym.id = format!(
+                    "{}::{}::method::{}",
+                    sym.file_path, sym.name, sym.line_start
+                );
+            }
+        }
+    }
+}
+
+/// Extract `implements` edges from Rust `impl Trait for Type` blocks.
+///
+/// Walks the AST for `impl_item` nodes that have a `trait` field and creates
+/// an `implements` edge from the target type to the trait. Requires the extracted
+/// symbols to resolve the correct `from_id` (the target type's symbol ID).
+pub fn extract_rust_trait_impl_edges(
+    symbols: &[Symbol],
+    tree: &tree_sitter::Tree,
+    source: &str,
+    file_path: &str,
+) -> Vec<Edge> {
+    let root = tree.root_node();
+    let mut tree_cursor = root.walk();
+    let mut edges = Vec::new();
+
+    for child in root.children(&mut tree_cursor) {
+        if child.kind() != "impl_item" {
+            continue;
+        }
+
+        // Only process trait impls (impl Trait for Type)
+        let trait_node = match child.child_by_field_name("trait") {
+            Some(node) => node,
+            None => continue,
+        };
+
+        let trait_name = match extract_base_type_name(&trait_node, source) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        let target_type_name = match extract_impl_target_type(&child, source) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        let line = child.start_position().row as u32 + 1;
+
+        // Find the actual symbol ID for the target type
+        let from_id = symbols
+            .iter()
+            .find(|s| {
+                s.file_path == file_path
+                    && s.name == target_type_name
+                    && (s.kind == "struct" || s.kind == "enum" || s.kind == "interface")
+            })
+            .map(|s| s.id.clone())
+            .unwrap_or_else(|| {
+                // Fallback: use a synthetic ID if the type is defined in another file
+                format!("{file_path}::__module__::class")
+            });
+
+        edges.push(Edge {
+            from_id,
+            to_id: trait_name,
+            kind: "implements".to_string(),
+            file_path: file_path.to_string(),
+            line: Some(line),
+        });
+    }
+
+    edges
+}
+
+/// Extract the target type name from a Rust `impl_item` node.
+///
+/// For `impl Type { ... }`, returns `Type`.
+/// For `impl Trait for Type { ... }`, returns `Type` (after `for`).
+/// For `impl<T> Type<T> { ... }`, returns `Type` (strips generic params).
+fn extract_impl_target_type(impl_node: &tree_sitter::Node, source: &str) -> Option<String> {
+    // In tree-sitter-rust, `impl_item` uses a `type` field for the target type
+    // in both plain `impl Type` and `impl Trait for Type`.
+    let type_node = impl_node.child_by_field_name("type")?;
+    extract_base_type_name(&type_node, source)
+}
+
+/// Extract the base type name from a type node, stripping generic parameters.
+///
+/// For `Foo<T>`, returns `Foo`. For `Foo`, returns `Foo`.
+fn extract_base_type_name(type_node: &tree_sitter::Node, source: &str) -> Option<String> {
+    match type_node.kind() {
+        "type_identifier" => {
+            let text = type_node.utf8_text(source.as_bytes()).ok()?;
+            Some(text.to_string())
+        }
+        "generic_type" => {
+            // The first child is the type_identifier
+            let mut cursor = type_node.walk();
+            for child in type_node.children(&mut cursor) {
+                if child.kind() == "type_identifier" {
+                    let text = child.utf8_text(source.as_bytes()).ok()?;
+                    return Some(text.to_string());
+                }
+            }
+            None
+        }
+        "scoped_type_identifier" => {
+            // e.g., path::Type — take the last identifier
+            let text = type_node.utf8_text(source.as_bytes()).ok()?;
+            text.rsplit("::").next().map(|s| s.to_string())
+        }
+        _ => {
+            // Fallback: try to get text
+            let text = type_node.utf8_text(source.as_bytes()).ok()?;
+            Some(text.to_string())
+        }
+    }
 }

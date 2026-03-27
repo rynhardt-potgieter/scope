@@ -257,7 +257,8 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<Rust
 /// Pattern indices map to the order of patterns in `queries/rust/edges.scm`:
 /// 0 = use scoped, 1 = use aliased, 2 = direct call, 3 = scoped call,
 /// 4 = method call, 5 = macro invocation, 6 = scoped macro,
-/// 7 = field type ref, 8 = param type ref, 9 = return type ref
+/// 7 = field type ref, 8 = param type ref, 9 = return type ref,
+/// 10 = match arm struct pattern variant ref, 11 = match arm tuple struct pattern variant ref
 fn extract_rust_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -389,6 +390,22 @@ fn extract_rust_edge(
                     from_id: from_function.clone(),
                     to_id: type_ref.clone(),
                     kind: "references_type".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Match arm — struct pattern variant ref (e.g. PaymentResult::Success { .. })
+        // Match arm — tuple struct pattern variant ref (e.g. PaymentMethod::CreditCard(details))
+        10 | 11 => {
+            if let Some((variant_ref, line)) = captures.get("variant_ref") {
+                // For scoped identifiers like "PaymentMethod::CreditCard", extract just the
+                // variant name (last segment after ::)
+                let variant_name = variant_ref.rsplit("::").next().unwrap_or(variant_ref);
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: variant_name.to_string(),
+                    kind: "references".to_string(),
                     file_path: file_path.to_string(),
                     line: Some(*line),
                 });

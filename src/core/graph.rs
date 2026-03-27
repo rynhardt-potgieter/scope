@@ -417,15 +417,19 @@ impl Graph {
 
     /// Get incoming callers for a symbol, grouped by caller with count.
     ///
-    /// Returns `(caller_display_name, call_count)` pairs.
+    /// Uses broad matching (exact ID, bare name, and member-call pattern)
+    /// to find all call edges targeting this symbol, consistent with
+    /// `get_caller_count()`.
     pub fn get_incoming_callers(&self, symbol_id: &str) -> Result<Vec<CallerInfo>> {
+        let bare_name = self.symbol_name_from_id(symbol_id);
+        let like_member = format!("%.{bare_name}");
         let mut stmt = self.conn.prepare(
             "SELECT e.from_id, COUNT(*) as cnt FROM edges e
-             WHERE e.to_id = ?1 AND e.kind = 'calls'
+             WHERE (e.to_id = ?1 OR e.to_id = ?2 OR e.to_id LIKE ?3) AND e.kind = 'calls'
              GROUP BY e.from_id
              ORDER BY cnt DESC",
         )?;
-        let rows = stmt.query_map(params![symbol_id], |row| {
+        let rows = stmt.query_map(params![symbol_id, bare_name, like_member], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })?;
         let mut result = Vec::new();
@@ -2085,5 +2089,76 @@ mod tests {
         assert!(is_test_file("Tests/Unit/PaymentTests.cs"));
         assert!(!is_test_file("src/payments/PaymentService.ts"));
         assert!(!is_test_file("src/controllers/OrderController.cs"));
+    }
+
+    #[test]
+    fn test_incoming_callers_finds_bare_name_edges() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let db_path = dir.path().join("graph.db");
+        let mut graph = Graph::open(&db_path).unwrap();
+
+        // Target symbol with full ID
+        let target = Symbol {
+            id: "src/payment.ts::processPayment::function::10".to_string(),
+            name: "processPayment".to_string(),
+            kind: "function".to_string(),
+            file_path: "src/payment.ts".to_string(),
+            line_start: 10,
+            line_end: 20,
+            signature: None,
+            docstring: None,
+            parent_id: None,
+            language: "typescript".to_string(),
+            metadata: "{}".to_string(),
+        };
+
+        // Caller symbol
+        let caller = Symbol {
+            id: "src/order.ts::checkout::function::5".to_string(),
+            name: "checkout".to_string(),
+            kind: "function".to_string(),
+            file_path: "src/order.ts".to_string(),
+            line_start: 5,
+            line_end: 15,
+            signature: None,
+            docstring: None,
+            parent_id: None,
+            language: "typescript".to_string(),
+            metadata: "{}".to_string(),
+        };
+
+        graph
+            .insert_file_data("src/payment.ts", &[target], &[])
+            .unwrap();
+
+        // Edge uses bare name as to_id (the bug scenario)
+        let edge_bare = Edge {
+            from_id: "src/order.ts::checkout::function::5".to_string(),
+            to_id: "processPayment".to_string(),
+            kind: "calls".to_string(),
+            file_path: "src/order.ts".to_string(),
+            line: Some(8),
+        };
+
+        // Edge uses member-call pattern as to_id
+        let edge_member = Edge {
+            from_id: "src/order.ts::checkout::function::5".to_string(),
+            to_id: "svc.processPayment".to_string(),
+            kind: "calls".to_string(),
+            file_path: "src/order.ts".to_string(),
+            line: Some(9),
+        };
+
+        graph
+            .insert_file_data("src/order.ts", &[caller], &[edge_bare, edge_member])
+            .unwrap();
+
+        let callers = graph
+            .get_incoming_callers("src/payment.ts::processPayment::function::10")
+            .unwrap();
+
+        // Should find the caller via bare-name and member-pattern matching
+        assert_eq!(callers.len(), 1, "expected 1 caller, got {:?}", callers);
+        assert_eq!(callers[0].count, 2, "expected 2 call sites from checkout");
     }
 }

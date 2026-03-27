@@ -43,4 +43,11 @@ class Logger(BaseLogger):
     @classmethod
     def create(cls, name: str) -> "Logger":
         """Factory method to create a logger."""
+        cls.validate_name(name)
         return cls(name)
+
+    @classmethod
+    def validate_name(cls, name: str) -> None:
+        """Validate logger name before creation."""
+        if not name:
+            raise ValueError("Logger name must not be empty")

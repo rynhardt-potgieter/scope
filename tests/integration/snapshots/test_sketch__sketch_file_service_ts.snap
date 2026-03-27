@@ -4,9 +4,10 @@ expression: normalized
 ---
 src/payments/service.ts
 ──────────────────────────────────────────────────────────────────────────────
-  PaymentService          class     4-24     [internal]
+  PaymentService          class     4-37     [internal]
   logger                  property  5        [internal]
   constructor             method    7-9      [internal]
-  processPayment          method    11-14    [2 callers]
-  refundPayment           method    16-19    [1 caller]
-  validateAmount          method    21-23    [internal]
+  processPayment          method    11-15    [2 callers]
+  refundPayment           method    17-20    [1 caller]
+  validateAmount          method    22-25    [1 caller]
+  describeMethod          method    27-36    [internal]

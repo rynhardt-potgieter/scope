@@ -291,3 +291,37 @@ fn test_typescript_enum_variant_has_parent_id() {
         "Wallet variant should have PaymentMethod as parent"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Tests — TypeScript edge patterns (G7)
+// ---------------------------------------------------------------------------
+
+/// TypeScript `this.method()` edge — pattern: `this.validateAmount(request.amount)`
+/// in processPayment. Uses the `@this_call` query pattern in typescript/edges.scm.
+///
+/// The edge extractor (pattern 7) stores the bare method name as to_id.
+#[test]
+fn test_typescript_this_method_call_edge_detected() {
+    let (conn, _dir) = indexed_fixture_db();
+
+    // The fixture has `this.validateAmount(request.amount)` in processPayment.
+    // Pattern 7 in typescript/edges.scm captures the method name and stores it as to_id.
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges
+             WHERE (to_id = 'validateAmount' OR to_id LIKE '%::validateAmount') AND kind = 'calls'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "this.validateAmount() call should generate a 'calls' edge with to_id='validateAmount'; got {count}"
+    );
+}
+
+// Note: TypeScript enum member access (e.g. PaymentMethod.CreditCard) cannot be
+// reliably detected via tree-sitter patterns without type information — the
+// `member_expression` pattern is indistinguishable from regular property access.
+// Enum variant refs for TypeScript are deferred to future type-aware analysis.

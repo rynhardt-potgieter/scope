@@ -44,3 +44,12 @@
 ; Type references in method parameters
 (formal_parameter
   type: (type_identifier) @type_ref) @param_type_ref
+
+; super.method() calls — parent class method invocation
+(method_invocation
+  object: (super)
+  name: (identifier) @method) @super_call
+
+; Switch case label referencing an enum constant (e.g. case SUCCESS:)
+(switch_label
+  (identifier) @variant_ref) @switch_case_ref

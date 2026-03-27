@@ -10,7 +10,16 @@
 - **Vendor code de-ranking** — `scope find` and `scope refs` partition results: first-party code appears before vendor code. Configurable `vendor_patterns` in config.toml, auto-configured per detected language by `scope init`.
 
 ### Improvements
-- **Richer sketch output** — `sketch_enum()` handler shows enum variants. Class sketch JSON now includes `fields` array separate from methods.
+- **Richer sketch output** — `sketch_enum()` handler shows enum variants with data shapes (e.g., `Success { tx_id: String }`). Class sketch JSON now includes `fields` array separate from methods.
+- **Rust impl block association** — methods inside `impl` blocks now get `parent_id` linking to their target struct/enum. `scope sketch MyStruct` shows methods. `impl Trait for Type` produces `implements` edges shown in sketch output.
+- **Match/switch arm edges** — Rust match arms, Java switch cases, and C# switch cases now produce `references` edges to enum variants. `scope refs SomeVariant` finds usage sites.
+- **`base`/`super` edge capture** — C# `base.Method()` and Java `super.method()` calls now captured in the edge graph.
+- **Sketch enrichments** — Java class sketch shows `@Override`, `@Deprecated` annotations on methods. Python sketch shows `@staticmethod`, `@property` decorators. Go sketch shows `(p *Type)` receiver on methods.
+- **`get_incoming_callers` broad matching** — caller count in sketch output now matches the same broad pattern as `scope refs` (exact ID + bare name + member pattern). Previously under-reported callers.
+- **FTS5 query context boost** — when a search query mixes specific and generic terms (e.g., `"payment new"`), specific terms are weighted higher so `PaymentService::new` ranks above `Logger::new`.
+
+### Known Limitations
+- **TypeScript enum variant refs** — `PaymentMethod.CreditCard` uses the same `member_expression` AST node as `request.amount`. Cannot distinguish enum access from property access without type information. Rust, Java, and C# enum refs work because their match/switch patterns are syntactically distinct.
 
 ---
 

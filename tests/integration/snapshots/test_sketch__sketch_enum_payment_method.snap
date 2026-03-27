@@ -7,6 +7,6 @@ PaymentMethod                                     enum  src/payments/types.ts:15
 variants:
   CreditCard
   BankTransfer
-  Wallet
+  Wallet = 3
 
 [internal]

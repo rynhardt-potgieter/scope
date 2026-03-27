@@ -306,6 +306,30 @@ fn test_index_python_decorated_symbols_detected() {
 }
 
 // ---------------------------------------------------------------------------
+// Tests — cls.method() edge capture (G12 regression)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_python_cls_method_call_creates_edge() {
+    let (conn, _dir) = indexed_py_fixture_db();
+
+    // Logger.create() calls cls.validate_name() — this should produce a "calls" edge
+    // with to_id = "cls.validate_name" from the enclosing scope of `create`.
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges WHERE kind = 'calls' AND to_id = 'cls.validate_name'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "cls.validate_name() call inside classmethod should produce a calls edge; got count={count}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Tests — scope sketch on Python symbols
 // ---------------------------------------------------------------------------
 
@@ -343,6 +367,41 @@ fn test_sketch_python_class_json() {
         serde_json::from_slice(&output.stdout).expect("Output should be valid JSON");
 
     assert_eq!(json["command"], "sketch");
+}
+
+#[test]
+fn test_sketch_python_shows_decorators_on_methods() {
+    let dir = setup_py_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    // validate_card has @staticmethod decorator — sketch the method directly
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "validate_card"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("@staticmethod"),
+        "Sketch should show @staticmethod decorator on validate_card. Got:\n{stdout}"
+    );
+
+    // is_connected has @property decorator
+    let output2 = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "is_connected"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    assert!(
+        stdout2.contains("@property"),
+        "Sketch should show @property decorator on is_connected. Got:\n{stdout2}"
+    );
 }
 
 // ---------------------------------------------------------------------------

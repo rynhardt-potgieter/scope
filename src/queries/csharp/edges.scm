@@ -33,3 +33,14 @@
 ; Type references in qualified base types
 (base_list
   (qualified_name) @base_type) @qualified_inheritance
+
+; base.Method() calls — base class method invocation
+(invocation_expression
+  function: (member_access_expression
+    expression: "base"
+    name: (identifier) @method)) @base_call
+
+; Switch case with member access (e.g. case PaymentStatus.Pending:)
+(constant_pattern
+  (member_access_expression
+    name: (identifier) @variant_ref)) @switch_member_ref

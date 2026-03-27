@@ -8,8 +8,8 @@ expression: normalized
   "data": {
     "stats": {
       "file_count": 5,
-      "symbol_count": 25,
-      "edge_count": 22,
+      "symbol_count": 26,
+      "edge_count": 26,
       "languages": [
         "typescript"
       ]
@@ -40,7 +40,7 @@ expression: normalized
           {
             "name": "PaymentService",
             "file_path": "src/payments/service.ts",
-            "method_count": 5,
+            "method_count": 6,
             "outgoing_call_count": 0,
             "kind": "class"
           },
@@ -78,6 +78,12 @@ expression: normalized
         "kind": "method",
         "file_path": "src/payments/service.ts",
         "caller_count": 1
+      },
+      {
+        "name": "validateAmount",
+        "kind": "method",
+        "file_path": "src/payments/service.ts",
+        "caller_count": 1
       }
     ],
     "architecture": [
@@ -89,7 +95,7 @@ expression: normalized
       {
         "directory": "payments/",
         "file_count": 2,
-        "symbol_count": 13
+        "symbol_count": 14
       },
       {
         "directory": "utils/",

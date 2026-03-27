@@ -1,14 +1,14 @@
 ---
 source: tests/integration/test_refs.rs
-assertion_line: 223
 expression: normalized
 ---
-PaymentService — 9 references
+PaymentService — 10 references
 ──────────────────────────────────────────────────────────────────────────────
-called (3):
+called (4):
   src/controllers/order.ts:13           await this.paymentService.processPayment(request);
   src/controllers/order.ts:18           await this.paymentService.processPayment(request);
   src/controllers/refund.ts:11          return await this.paymentService.refundPayment(transactionId);
+  src/payments/service.ts:13            this.validateAmount(request.amount);
 
 imported (2):
   src/controllers/order.ts:1            import { PaymentService } from '../payments/service';

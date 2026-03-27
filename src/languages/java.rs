@@ -280,7 +280,8 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<Java
 /// Pattern indices map to the order of patterns in `queries/java/edges.scm`:
 /// 0 = import declaration, 1 = member method call, 2 = direct method call,
 /// 3 = this.method() call, 4 = object creation (new), 5 = extends (superclass),
-/// 6 = class implements, 7 = interface extends, 8 = field type ref, 9 = param type ref
+/// 6 = class implements, 7 = interface extends, 8 = field type ref, 9 = param type ref,
+/// 10 = super.method() call, 11 = switch case enum constant ref
 fn extract_java_edge(
     pattern: usize,
     captures: &HashMap<String, (String, u32)>,
@@ -414,6 +415,30 @@ fn extract_java_edge(
                     from_id: from_function.clone(),
                     to_id: type_ref.clone(),
                     kind: "references_type".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // super.method() call — captures method name only
+        10 => {
+            if let Some((method, line)) = captures.get("method") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: method.clone(),
+                    kind: "calls".to_string(),
+                    file_path: file_path.to_string(),
+                    line: Some(*line),
+                });
+            }
+        }
+        // Switch case label referencing an enum constant (e.g. case SUCCESS:)
+        11 => {
+            if let Some((variant_ref, line)) = captures.get("variant_ref") {
+                edges.push(Edge {
+                    from_id: from_function.clone(),
+                    to_id: variant_ref.clone(),
+                    kind: "references".to_string(),
                     file_path: file_path.to_string(),
                     line: Some(*line),
                 });

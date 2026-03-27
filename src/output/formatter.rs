@@ -181,6 +181,12 @@ pub fn print_method_sketch(
 ) {
     print_header(symbol);
 
+    // Language-specific enrichment line (annotations, decorators, receiver)
+    let enrichment = extract_enrichment_prefix(&symbol.language, &symbol.metadata);
+    if !enrichment.is_empty() {
+        println!("{enrichment}");
+    }
+
     // Modifiers line (only if any non-default modifiers exist)
     let modifiers = extract_modifiers(&symbol.metadata);
     if !modifiers.is_empty() {
@@ -313,7 +319,9 @@ pub fn print_enum_sketch(symbol: &Symbol, variants: &[&Symbol], caller_count: us
     if !variants.is_empty() {
         println!("variants:");
         for v in variants {
-            println!("  {}", v.name);
+            // Show signature (data shape) if available, otherwise just the name
+            let display = v.signature.as_deref().unwrap_or(&v.name);
+            println!("  {display}");
         }
     }
 
@@ -343,25 +351,106 @@ pub fn print_generic_sketch(symbol: &Symbol) {
 ///
 /// Uses the signature if available, otherwise just the name.
 /// Prepends any modifiers from metadata that are not already present in the signature.
+/// Adds language-specific enrichments: Java annotations, Python decorators, Go receivers.
 fn method_display_line(method: &Symbol) -> String {
     let sig = method.signature.as_deref().unwrap_or(&method.name);
 
     let modifiers = extract_modifiers(&method.metadata);
-    if modifiers.is_empty() {
-        return sig.to_string();
-    }
-
-    // Only prepend modifiers not already present in the signature text
-    let missing: Vec<&str> = modifiers
-        .iter()
-        .filter(|m| !sig.contains(m.as_str()))
-        .map(|m| m.as_str())
-        .collect();
-
-    if missing.is_empty() {
+    let base = if modifiers.is_empty() {
         sig.to_string()
     } else {
-        format!("{} {}", missing.join(" "), sig)
+        // Only prepend modifiers not already present in the signature text
+        let missing: Vec<&str> = modifiers
+            .iter()
+            .filter(|m| !sig.contains(m.as_str()))
+            .map(|m| m.as_str())
+            .collect();
+
+        if missing.is_empty() {
+            sig.to_string()
+        } else {
+            format!("{} {}", missing.join(" "), sig)
+        }
+    };
+
+    // Add language-specific enrichment prefix
+    let enrichment = extract_enrichment_prefix(&method.language, &method.metadata);
+    if enrichment.is_empty() {
+        base
+    } else {
+        format!("{enrichment} {base}")
+    }
+}
+
+/// Extract a language-specific enrichment prefix from a symbol's metadata JSON.
+///
+/// - **Java**: annotations (e.g. `@Override`, `@Deprecated`)
+/// - **Python**: decorators (e.g. `@staticmethod`, `@property`)
+/// - **Go**: receiver type (e.g. `(s *Server)`)
+///
+/// Returns an empty string if the language has no enrichments or parsing fails.
+fn extract_enrichment_prefix(language: &str, metadata_json: &str) -> String {
+    let parsed: serde_json::Value = match serde_json::from_str(metadata_json) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+
+    match language {
+        "java" => {
+            // Show annotations as @Name prefixes
+            if let Some(annotations) = parsed.get("annotations").and_then(|v| v.as_array()) {
+                let prefixes: Vec<String> = annotations
+                    .iter()
+                    .filter_map(|a| a.as_str())
+                    .filter(|a| !a.is_empty())
+                    .map(|a| format!("@{a}"))
+                    .collect();
+                if !prefixes.is_empty() {
+                    return prefixes.join(" ");
+                }
+            }
+            String::new()
+        }
+        "python" => {
+            // Show decorators as @name prefixes
+            if let Some(decorators) = parsed.get("decorators").and_then(|v| v.as_array()) {
+                let prefixes: Vec<String> = decorators
+                    .iter()
+                    .filter_map(|d| d.as_str())
+                    .filter(|d| !d.is_empty())
+                    .map(|d| format!("@{d}"))
+                    .collect();
+                if !prefixes.is_empty() {
+                    return prefixes.join(" ");
+                }
+            }
+            String::new()
+        }
+        "go" => {
+            // Show receiver type as (name *Type) or (name Type) prefix
+            if let Some(receiver) = parsed.get("receiver").and_then(|v| v.as_str()) {
+                if !receiver.is_empty() {
+                    let is_pointer = parsed
+                        .get("is_pointer_receiver")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    // Extract a short variable name from the receiver type
+                    let var_name = receiver
+                        .chars()
+                        .next()
+                        .map(|c| c.to_lowercase().to_string())
+                        .unwrap_or_default();
+                    let type_display = if is_pointer {
+                        format!("*{receiver}")
+                    } else {
+                        receiver.to_string()
+                    };
+                    return format!("({var_name} {type_display})");
+                }
+            }
+            String::new()
+        }
+        _ => String::new(),
     }
 }
 

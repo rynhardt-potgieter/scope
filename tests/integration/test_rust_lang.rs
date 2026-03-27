@@ -154,10 +154,8 @@ fn test_index_detects_rust_functions_in_impl() {
 fn test_index_rust_methods_inside_impl_are_indexed() {
     let (conn, _dir) = indexed_rust_db();
 
-    // All methods inside `impl PaymentService` should be extracted as function symbols.
-    // Note: Rust impl blocks don't support parent_id association (impl_item is not
-    // stored as a symbol), so methods are indexed as standalone functions.
-    // Parent association for Rust is deferred to a future enhancement.
+    // All methods inside `impl PaymentService` should be extracted as method symbols
+    // with parent_id pointing to PaymentService.
     let names = ["new", "process_payment", "refund", "validate_card"];
     for name in names {
         let count: i64 = conn
@@ -410,5 +408,340 @@ fn test_rust_enum_variant_has_parent_id() {
     assert_eq!(
         parent_name, "PaymentResult",
         "Success variant should have PaymentResult as parent"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Tests — impl block method-to-struct association
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_rust_impl_methods_have_parent_id_to_struct() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // Methods inside `impl PaymentService { ... }` should have parent_id
+    // pointing to the PaymentService struct.
+    let parent_name: String = conn
+        .query_row(
+            "SELECT p.name FROM symbols m
+             JOIN symbols p ON m.parent_id = p.id
+             WHERE m.name = 'process_payment' AND m.kind = 'method'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert_eq!(
+        parent_name, "PaymentService",
+        "process_payment should have PaymentService as parent"
+    );
+}
+
+#[test]
+fn test_rust_impl_methods_kind_is_method() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // Functions inside impl blocks should be stored with kind = 'method'
+    let methods_in_impl: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT m.name FROM symbols m
+                 JOIN symbols p ON m.parent_id = p.id
+                 WHERE p.name = 'PaymentService' AND m.kind = 'method'
+                 ORDER BY m.name",
+            )
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    assert!(
+        methods_in_impl.contains(&"new".to_string()),
+        "new should be a method of PaymentService; found: {methods_in_impl:?}"
+    );
+    assert!(
+        methods_in_impl.contains(&"process_payment".to_string()),
+        "process_payment should be a method of PaymentService; found: {methods_in_impl:?}"
+    );
+    assert!(
+        methods_in_impl.contains(&"refund".to_string()),
+        "refund should be a method of PaymentService; found: {methods_in_impl:?}"
+    );
+    assert!(
+        methods_in_impl.contains(&"validate_card".to_string()),
+        "validate_card should be a method of PaymentService; found: {methods_in_impl:?}"
+    );
+}
+
+#[test]
+fn test_rust_impl_trait_for_type_targets_type() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // `impl PaymentClient for MockPaymentClient` — methods should have parent_id
+    // pointing to MockPaymentClient (the target type), not PaymentClient (the trait).
+    let parent_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM symbols m
+             JOIN symbols p ON m.parent_id = p.id
+             WHERE p.name = 'MockPaymentClient' AND m.kind = 'method'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        parent_count >= 2,
+        "MockPaymentClient should have at least 2 impl methods (charge, refund); got {parent_count}"
+    );
+}
+
+#[test]
+fn test_rust_sketch_shows_methods_for_struct() {
+    let dir = setup_rust_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    // `scope sketch PaymentService` should now list methods
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentService"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(contains("process_payment"));
+}
+
+// ---------------------------------------------------------------------------
+// Tests — Rust enum variant data shapes (G9)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_rust_enum_variant_signatures_have_data_shapes() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // Success { tx_id: String } — struct variant should have data shape in signature
+    let sig: String = conn
+        .query_row(
+            "SELECT signature FROM symbols WHERE name = 'Success' AND kind = 'variant' LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        sig.contains("tx_id"),
+        "Success variant signature should contain field name 'tx_id'; got: {sig}"
+    );
+    assert!(
+        sig.contains("String"),
+        "Success variant signature should contain type 'String'; got: {sig}"
+    );
+}
+
+#[test]
+fn test_rust_enum_variant_tuple_signature() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // CreditCard(CardDetails) — tuple variant should have data shape in signature
+    let sig: String = conn
+        .query_row(
+            "SELECT signature FROM symbols WHERE name = 'CreditCard' AND kind = 'variant' LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        sig.contains("CardDetails"),
+        "CreditCard variant signature should contain 'CardDetails'; got: {sig}"
+    );
+}
+
+#[test]
+fn test_rust_enum_sketch_shows_data_shapes() {
+    let dir = setup_rust_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    // `scope sketch PaymentResult` should show variant data shapes
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentResult"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(contains("Success"))
+        .stdout(contains("tx_id"))
+        .stdout(contains("Failure"))
+        .stdout(contains("reason"));
+}
+
+#[test]
+fn test_rust_enum_sketch_json_includes_signatures() {
+    let dir = setup_rust_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    let output = Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "PaymentResult", "--json"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "sketch --json should succeed");
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON");
+
+    let variants = json["data"]["variants"]
+        .as_array()
+        .expect("data.variants should be an array");
+
+    // Check that at least one variant has a signature with data shape
+    let has_sig = variants.iter().any(|v| {
+        v["signature"]
+            .as_str()
+            .map_or(false, |s| s.contains("tx_id"))
+    });
+
+    assert!(
+        has_sig,
+        "At least one variant should have a signature with data shape; variants: {variants:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Tests — Rust trait implementation edges (G9)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_rust_trait_impl_creates_implements_edge() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // `impl PaymentClient for MockPaymentClient` should create an implements edge
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges WHERE kind = 'implements'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "trait impl should produce 'implements' edges; got {count}"
+    );
+}
+
+#[test]
+fn test_rust_trait_impl_edge_points_to_trait() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // The implements edge should have to_id = 'PaymentClient'
+    let to_id: String = conn
+        .query_row(
+            "SELECT to_id FROM edges WHERE kind = 'implements' LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert_eq!(
+        to_id, "PaymentClient",
+        "implements edge should point to trait name"
+    );
+}
+
+#[test]
+fn test_rust_struct_sketch_shows_trait_implementations() {
+    let dir = setup_rust_fixture();
+    sc_init(dir.path()).success();
+    sc_index_full(dir.path()).success();
+
+    // `scope sketch MockPaymentClient` should show "implements: PaymentClient"
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["sketch", "MockPaymentClient"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(contains("implements:"))
+        .stdout(contains("PaymentClient"));
+}
+
+// ---------------------------------------------------------------------------
+// Tests — Rust match arm variant refs (G7)
+// ---------------------------------------------------------------------------
+
+/// Rust match arm struct pattern — `PaymentResult::Success { .. }` in check_result.
+///
+/// The edge extractor (patterns 10-11) stores the bare variant name as to_id
+/// and uses kind='references'. We verify by matching to_id directly.
+#[test]
+fn test_rust_match_arm_struct_pattern_variant_ref_detected() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // The fixture has `match result { PaymentResult::Success { .. } => ... }`
+    // in check_result. Pattern 10 in rust/edges.scm extracts just 'Success' as to_id.
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges
+             WHERE to_id = 'Success' AND kind = 'references'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "match arm `PaymentResult::Success {{ .. }}` should generate a 'references' edge with to_id='Success'; got {count}"
+    );
+}
+
+/// Rust match arm failure struct pattern — `PaymentResult::Failure { .. }` in check_result.
+///
+/// The edge extractor (pattern 10) stores the bare variant name 'Failure' as to_id.
+#[test]
+fn test_rust_match_arm_failure_variant_ref_detected() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // The fixture has `PaymentResult::Failure { .. }` in check_result.
+    // Pattern 10 in rust/edges.scm extracts just 'Failure' as to_id.
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges
+             WHERE to_id = 'Failure' AND kind = 'references'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "match arm `PaymentResult::Failure {{ .. }}` should generate a 'references' edge with to_id='Failure'; got {count}"
+    );
+}
+
+/// Both match arm variant ref patterns produce 'references' edges in the Rust fixture.
+#[test]
+fn test_rust_match_arms_produce_references_edges() {
+    let (conn, _dir) = indexed_rust_db();
+
+    // Total 'references' edges should be > 0 because of match arm variant patterns.
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM edges WHERE kind = 'references'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert!(
+        count > 0,
+        "Rust match arm patterns should produce 'references' edges; got {count}"
     );
 }

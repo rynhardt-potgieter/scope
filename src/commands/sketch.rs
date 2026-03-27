@@ -219,6 +219,7 @@ fn sketch_enum(
             .map(|v| {
                 serde_json::json!({
                     "name": v.name,
+                    "signature": v.signature,
                     "line_start": v.line_start,
                     "line_end": v.line_end,
                 })

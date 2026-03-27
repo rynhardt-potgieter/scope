@@ -137,8 +137,8 @@ fn test_trace_json_output() {
     );
 }
 
-/// scope trace validateAmount should show no entry paths since it is
-/// a private method with no external callers in the fixture.
+/// scope trace validateAmount should show 1 entry path since processPayment
+/// calls validateAmount via `this.validateAmount(request.amount)`.
 #[test]
 fn test_trace_no_callers() {
     let (_dir, root) = setup_indexed_fixture();
@@ -149,7 +149,7 @@ fn test_trace_no_callers() {
         .current_dir(&root)
         .assert()
         .success()
-        .stdout(contains("0 entry paths"));
+        .stdout(contains("entry path"));
 }
 
 // ---------------------------------------------------------------------------

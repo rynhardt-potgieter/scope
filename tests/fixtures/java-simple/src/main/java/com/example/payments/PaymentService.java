@@ -18,6 +18,7 @@ public class PaymentService implements IPaymentClient {
     @Override
     public PaymentResult processPayment(String orderId, double amount) {
         logger.info("Processing payment for order: " + orderId);
+        this.calculateFee(amount);
         transactionCount++;
         return new PaymentResult(orderId, true);
     }
@@ -28,10 +29,24 @@ public class PaymentService implements IPaymentClient {
     }
 
     protected double calculateFee(double amount) {
+        super.validate(amount);
         return amount * 0.03;
     }
 
     static int getTransactionCount() {
         return transactionCount;
+    }
+
+    public String describeResult(PaymentResult result) {
+        switch (result) {
+            case SUCCESS:
+                return "Payment succeeded";
+            case FAILED:
+                return "Payment failed";
+            case PENDING:
+                return "Payment pending";
+            default:
+                return "Unknown";
+        }
     }
 }

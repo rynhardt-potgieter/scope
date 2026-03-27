@@ -39,3 +39,16 @@
 ; Type references in function return types
 (function_item
   return_type: (type_identifier) @type_ref) @return_type_ref
+
+; Match arm — struct pattern with scoped type (e.g. PaymentResult::Success { .. })
+(match_arm
+  pattern: (match_pattern
+    (struct_pattern
+      type: (scoped_type_identifier
+        name: (type_identifier) @variant_ref)))) @match_struct_ref
+
+; Match arm — tuple struct pattern (e.g. PaymentMethod::CreditCard(details))
+(match_arm
+  pattern: (match_pattern
+    (tuple_struct_pattern
+      type: (scoped_identifier) @variant_ref))) @match_tuple_ref

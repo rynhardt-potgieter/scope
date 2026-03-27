@@ -2,15 +2,16 @@
 source: tests/integration/test_sketch.rs
 expression: normalized
 ---
-PaymentService                                    class  src/payments/service.ts:4-24
+PaymentService                                    class  src/payments/service.ts:4-37
 ──────────────────────────────────────────────────────────────────────────────
-deps:     Logger, PaymentRequest, logger.info
+deps:     Logger, PaymentMethod, PaymentRequest, logger.info, validateAmount, logger.warn
 
 methods:
   constructor(logger: Logger)                                       [internal]
   async processPayment(request: PaymentRequest): Promise<PaymentResult>[2 callers]
   async refundPayment(transactionId: string): Promise<boolean>      [1 caller]
-  private validateAmount(amount: number): boolean                   [internal]
+  private validateAmount(amount: number): boolean                   [1 caller]
+  describeMethod(method: PaymentMethod): string                     [internal]
 
 fields:
   private logger: Logger
