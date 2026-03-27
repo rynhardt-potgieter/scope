@@ -20,6 +20,12 @@
 (object_creation_expression
   type: (identifier) @class_name) @instantiation
 
+; this.Method() calls — `this` is an unnamed keyword node, matched with string literal
+(invocation_expression
+  function: (member_access_expression
+    expression: "this"
+    name: (identifier) @method)) @this_call
+
 ; Base types in class/interface/struct inheritance
 (base_list
   (identifier) @base_type) @inheritance

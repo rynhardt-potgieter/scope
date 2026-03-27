@@ -37,6 +37,12 @@
   (implements_clause
     (type_identifier) @interface_name))
 
+; this.method() calls — `this` is a keyword node, not an identifier
+(call_expression
+  function: (member_expression
+    object: (this)
+    property: (property_identifier) @method)) @this_call
+
 ; Type annotations referencing other types
 (type_annotation
   (type_identifier) @type_ref)

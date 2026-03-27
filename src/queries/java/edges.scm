@@ -11,6 +11,11 @@
 (method_invocation
   name: (identifier) @callee) @call
 
+; this.method() calls — `this` is a keyword node, not an identifier
+(method_invocation
+  object: (this)
+  name: (identifier) @method) @this_call
+
 ; Object creation (e.g. new PaymentService(...))
 (object_creation_expression
   type: (type_identifier) @class_name) @instantiation
