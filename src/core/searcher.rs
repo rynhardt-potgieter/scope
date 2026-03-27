@@ -117,6 +117,32 @@ impl Searcher {
         Ok(())
     }
 
+    /// Search with vendor de-ranking applied.
+    ///
+    /// First-party results appear before vendor results; within each
+    /// partition the original BM25 relevance order is preserved.
+    pub fn search_with_vendor_derank(
+        &self,
+        query: &str,
+        limit: usize,
+        kind_filter: Option<&str>,
+        vendor_patterns: &[String],
+    ) -> Result<Vec<SearchResult>> {
+        let results = self.search(query, limit, kind_filter)?;
+
+        if vendor_patterns.is_empty() {
+            return Ok(results);
+        }
+
+        let (first_party, vendor): (Vec<_>, Vec<_>) = results
+            .into_iter()
+            .partition(|r| !crate::config::project::is_vendor_path(&r.file_path, vendor_patterns));
+
+        let mut combined = first_party;
+        combined.extend(vendor);
+        Ok(combined)
+    }
+
     /// Search for symbols matching a natural-language query.
     ///
     /// Uses FTS5 MATCH with BM25 ranking. The query is automatically

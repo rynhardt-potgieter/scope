@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
 
+use crate::config::project::vendor_patterns_for_languages;
 use crate::config::ProjectConfig;
 
 /// Arguments for the `scope init` command.
@@ -84,8 +85,12 @@ pub fn run(args: &InitArgs, project_root: &Path) -> Result<()> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // Write config.toml
-    let config = ProjectConfig::default_for(&project_name, languages.clone());
+    // Write config.toml with language-specific vendor patterns
+    let mut config = ProjectConfig::default_for(&project_name, languages.clone());
+    let vendor = vendor_patterns_for_languages(&languages);
+    if !vendor.is_empty() {
+        config.index.vendor_patterns = vendor;
+    }
     config.save(&scope_dir)?;
 
     // Write .gitignore inside .scope/

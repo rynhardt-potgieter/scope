@@ -40,6 +40,13 @@ pub struct IndexSection {
     /// Whether to include test files in refs/impact output.
     #[serde(default = "default_true")]
     pub include_tests: bool,
+    /// Path components that identify vendor/dependency code.
+    ///
+    /// Results from vendor paths are de-ranked (shown after first-party results)
+    /// in `scope find` and `scope refs` output. Vendor code is still indexed,
+    /// just sorted lower in results.
+    #[serde(default = "default_vendor_patterns")]
+    pub vendor_patterns: Vec<String>,
 }
 
 /// The `[embeddings]` section of config.toml.
@@ -103,6 +110,7 @@ impl Default for IndexSection {
         Self {
             ignore: default_ignore_patterns(),
             include_tests: true,
+            vendor_patterns: default_vendor_patterns(),
         }
     }
 }
@@ -152,4 +160,145 @@ fn default_max_refs() -> usize {
 
 fn default_max_impact_depth() -> usize {
     3
+}
+
+fn default_vendor_patterns() -> Vec<String> {
+    vec![
+        "node_modules".to_string(),
+        "vendor".to_string(),
+        "target".to_string(),
+        ".cargo".to_string(),
+        "venv".to_string(),
+        "site-packages".to_string(),
+        ".m2".to_string(),
+        "third_party".to_string(),
+    ]
+}
+
+/// Return vendor patterns appropriate for the given set of detected languages.
+///
+/// Each language contributes its known vendor/build directories. Results
+/// are deduplicated so overlapping languages don't produce duplicates.
+pub fn vendor_patterns_for_languages(languages: &[String]) -> Vec<String> {
+    let mut patterns = Vec::new();
+
+    for lang in languages {
+        match lang.as_str() {
+            "typescript" => {
+                patterns.extend_from_slice(&[
+                    "node_modules".to_string(),
+                    "dist".to_string(),
+                    "build".to_string(),
+                ]);
+            }
+            "rust" => {
+                patterns.extend_from_slice(&["target".to_string(), ".cargo".to_string()]);
+            }
+            "python" => {
+                patterns.extend_from_slice(&[
+                    "venv".to_string(),
+                    ".venv".to_string(),
+                    "site-packages".to_string(),
+                    "__pycache__".to_string(),
+                ]);
+            }
+            "go" => {
+                patterns.push("vendor".to_string());
+            }
+            "java" => {
+                patterns.extend_from_slice(&[
+                    ".m2".to_string(),
+                    "build".to_string(),
+                    "out".to_string(),
+                ]);
+            }
+            "csharp" => {
+                patterns.extend_from_slice(&[
+                    "bin".to_string(),
+                    "obj".to_string(),
+                    "packages".to_string(),
+                ]);
+            }
+            _ => {}
+        }
+    }
+
+    // Deduplicate while preserving order
+    let mut seen = std::collections::HashSet::new();
+    patterns.retain(|p| seen.insert(p.clone()));
+    patterns
+}
+
+/// Check whether a file path passes through a vendor directory.
+///
+/// Returns `true` if any path component exactly matches one of the
+/// vendor patterns. Uses path component matching, not substring matching,
+/// so `"vendor"` won't match `"my-vendor-lib"`.
+pub fn is_vendor_path(file_path: &str, vendor_patterns: &[String]) -> bool {
+    let path = std::path::Path::new(file_path);
+    path.components().any(|c| {
+        if let std::path::Component::Normal(s) = c {
+            vendor_patterns
+                .iter()
+                .any(|p| s.to_str() == Some(p.as_str()))
+        } else {
+            false
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_vendor_path_node_modules() {
+        let patterns = default_vendor_patterns();
+        assert!(is_vendor_path("node_modules/stripe/payment.js", &patterns));
+    }
+
+    #[test]
+    fn test_is_vendor_path_first_party() {
+        let patterns = default_vendor_patterns();
+        assert!(!is_vendor_path("src/payments/service.ts", &patterns));
+    }
+
+    #[test]
+    fn test_is_vendor_path_go_vendor() {
+        let patterns = default_vendor_patterns();
+        assert!(is_vendor_path(
+            "vendor/github.com/pkg/errors/errors.go",
+            &patterns
+        ));
+    }
+
+    #[test]
+    fn test_is_vendor_path_no_substring_match() {
+        let patterns = default_vendor_patterns();
+        assert!(!is_vendor_path("src/my-vendor-lib/util.rs", &patterns));
+    }
+
+    #[test]
+    fn test_is_vendor_path_nested_vendor() {
+        let patterns = default_vendor_patterns();
+        assert!(is_vendor_path(
+            "packages/api/node_modules/lodash/index.js",
+            &patterns
+        ));
+    }
+
+    #[test]
+    fn test_vendor_patterns_for_languages_dedup() {
+        let langs = vec!["typescript".to_string(), "java".to_string()];
+        let patterns = vendor_patterns_for_languages(&langs);
+        let build_count = patterns.iter().filter(|p| p.as_str() == "build").count();
+        assert_eq!(build_count, 1);
+    }
+
+    #[test]
+    fn test_vendor_patterns_for_languages_unknown() {
+        let langs = vec!["brainfuck".to_string()];
+        let patterns = vendor_patterns_for_languages(&langs);
+        assert!(patterns.is_empty());
+    }
 }

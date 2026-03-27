@@ -18,6 +18,7 @@ use serde::Serialize;
 use std::path::Path;
 
 use crate::config::workspace::WorkspaceConfig;
+use crate::config::ProjectConfig;
 use crate::core::searcher::{SearchResult, Searcher};
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
@@ -86,7 +87,17 @@ fn run_single(args: &FindArgs, project_root: &Path) -> Result<()> {
 
     let searcher = Searcher::open(&db_path)?;
 
-    let results = searcher.search(&args.query, args.limit, args.kind.as_deref())?;
+    // Load vendor patterns from config for de-ranking
+    let vendor_patterns = ProjectConfig::load(&scope_dir)
+        .map(|c| c.index.vendor_patterns)
+        .unwrap_or_default();
+
+    let results = searcher.search_with_vendor_derank(
+        &args.query,
+        args.limit,
+        args.kind.as_deref(),
+        &vendor_patterns,
+    )?;
 
     if args.json {
         let total = results.len();
@@ -126,7 +137,17 @@ fn run_workspace(args: &FindArgs, workspace_root: &Path, config: &WorkspaceConfi
             }
         };
 
-        match searcher.search(&args.query, args.limit, args.kind.as_deref()) {
+        // Load vendor patterns per member for de-ranking
+        let member_vendor = ProjectConfig::load(&member_path.join(".scope"))
+            .map(|c| c.index.vendor_patterns)
+            .unwrap_or_default();
+
+        match searcher.search_with_vendor_derank(
+            &args.query,
+            args.limit,
+            args.kind.as_deref(),
+            &member_vendor,
+        ) {
             Ok(results) => {
                 for r in results {
                     all_results.push(WorkspaceSearchResult {

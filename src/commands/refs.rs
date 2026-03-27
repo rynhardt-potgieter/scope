@@ -20,7 +20,9 @@ use clap::Args;
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::config::project::is_vendor_path;
 use crate::config::workspace::WorkspaceConfig;
+use crate::config::ProjectConfig;
 use crate::core::graph::Graph;
 use crate::core::graph::Reference;
 use crate::core::workspace_graph::WorkspaceGraph;
@@ -194,6 +196,21 @@ fn enrich_refs_with_snippets(refs: &mut [Reference], project_root: &Path, contex
 
 use super::looks_like_file_path;
 
+/// Partition references so first-party results appear before vendor results.
+///
+/// Within each partition the original order is preserved.
+fn derank_vendor_refs(refs: Vec<Reference>, vendor_patterns: &[String]) -> Vec<Reference> {
+    if vendor_patterns.is_empty() {
+        return refs;
+    }
+    let (first_party, vendor): (Vec<_>, Vec<_>) = refs
+        .into_iter()
+        .partition(|r| !is_vendor_path(&r.file_path, vendor_patterns));
+    let mut combined = first_party;
+    combined.extend(vendor);
+    combined
+}
+
 /// Run the `scope refs` command.
 pub fn run(args: &RefsArgs, ctx: &Context) -> Result<()> {
     match ctx {
@@ -233,12 +250,23 @@ fn run_symbol_refs(args: &RefsArgs, graph: &Graph, project_root: &Path) -> Resul
     let kinds: Option<Vec<&str>> = args.kind.as_deref().map(|k| vec![k]);
     let kinds_slice = kinds.as_deref();
 
+    // Load vendor patterns for de-ranking
+    let vendor_patterns = ProjectConfig::load(&project_root.join(".scope"))
+        .map(|c| c.index.vendor_patterns)
+        .unwrap_or_default();
+
     // Check if this is a class-like symbol for grouped output
     let is_class = graph.is_class_like(&args.symbol)?;
 
     if is_class && kinds_slice.is_none() {
         // Grouped output for class symbols
         let (mut groups, total) = graph.find_refs_grouped(&args.symbol, args.limit)?;
+
+        // De-rank vendor refs within each group
+        for (_kind, refs) in &mut groups {
+            let taken = std::mem::take(refs);
+            *refs = derank_vendor_refs(taken, &vendor_patterns);
+        }
 
         // Enrich all refs in all groups with source snippets
         for (_kind, refs) in &mut groups {
@@ -267,9 +295,10 @@ fn run_symbol_refs(args: &RefsArgs, graph: &Graph, project_root: &Path) -> Resul
         }
     } else {
         // Flat output for functions/methods or filtered queries
-        let (mut refs, total) = graph.find_refs(&args.symbol, kinds_slice, args.limit)?;
+        let (refs, total) = graph.find_refs(&args.symbol, kinds_slice, args.limit)?;
 
-        // Enrich refs with source snippets
+        // De-rank vendor refs, then enrich with source snippets
+        let mut refs = derank_vendor_refs(refs, &vendor_patterns);
         enrich_refs_with_snippets(&mut refs, project_root, args.context);
 
         if args.json {
