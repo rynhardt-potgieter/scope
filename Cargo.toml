@@ -1,10 +1,15 @@
 [package]
-name = "scope"
+name = "scope-cli"
 version = "0.9.0"
 edition = "2021"
-description = "Code intelligence CLI for LLM coding agents"
+description = "Code intelligence CLI for LLM coding agents — structural navigation, dependency graphs, and semantic search without reading full source files"
 license = "MIT"
-repository = "https://github.com/rynhardt-engelbrecht/scope"
+repository = "https://github.com/rynhardt-potgieter/scope"
+homepage = "https://github.com/rynhardt-potgieter/scope"
+readme = "README.md"
+keywords = ["cli", "code-intelligence", "tree-sitter", "llm", "code-navigation"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = ["benchmarks/", "docs/", "skills/", ".claude/", ".github/", "overview/", "project.md"]
 
 [[bin]]
 name = "scope"
