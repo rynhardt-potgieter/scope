@@ -53,7 +53,11 @@ impl Searcher {
         let conn = Connection::open(db_path)
             .with_context(|| format!("Failed to open search index at {}", db_path.display()))?;
 
-        // Apply same performance pragmas as the graph
+        // Match the graph connection's locking behavior when both handles
+        // access the same SQLite database during indexing and search.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+
+        // Apply same performance pragmas as the graph.
         conn.execute_batch(
             "
             PRAGMA journal_mode = WAL;
@@ -161,22 +165,26 @@ impl Searcher {
             return Ok(Vec::new());
         }
 
-        // Build SQL with optional kind filter
+        // JOIN symbols to get line numbers in the same query (avoids N+1).
         let (sql, has_kind_filter) = if kind_filter.is_some() {
             (
-                "SELECT symbol_id, name, kind, file_path,
-                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank
-                 FROM symbols_fts
-                 WHERE symbols_fts MATCH ?1 AND kind = ?3
+                "SELECT f.symbol_id, f.name, f.kind, f.file_path,
+                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank,
+                        COALESCE(s.line_start, 0), COALESCE(s.line_end, 0)
+                 FROM symbols_fts f
+                 LEFT JOIN symbols s ON s.id = f.symbol_id
+                 WHERE symbols_fts MATCH ?1 AND f.kind = ?3
                  ORDER BY rank
                  LIMIT ?2",
                 true,
             )
         } else {
             (
-                "SELECT symbol_id, name, kind, file_path,
-                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank
-                 FROM symbols_fts
+                "SELECT f.symbol_id, f.name, f.kind, f.file_path,
+                        bm25(symbols_fts, 0.0, 5.0, 0.0, 2.0, 10.0) AS rank,
+                        COALESCE(s.line_start, 0), COALESCE(s.line_end, 0)
+                 FROM symbols_fts f
+                 LEFT JOIN symbols s ON s.id = f.symbol_id
                  WHERE symbols_fts MATCH ?1
                  ORDER BY rank
                  LIMIT ?2",
@@ -200,40 +208,7 @@ impl Searcher {
         // Convert BM25 ranks to 0.0-1.0 scores (BM25 returns negative values; lower = better)
         let results = normalize_scores(raw_results);
 
-        // Enrich with line numbers from the symbols table
-        let enriched = self.enrich_with_lines(&results)?;
-
-        Ok(enriched)
-    }
-
-    /// Look up line_start and line_end for each search result from the symbols table.
-    fn enrich_with_lines(&self, results: &[SearchResult]) -> Result<Vec<SearchResult>> {
-        let mut enriched = Vec::new();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT line_start, line_end FROM symbols WHERE id = ?1")?;
-
-        for result in results {
-            let lines = stmt
-                .query_row(params![result.id], |row| {
-                    Ok((row.get::<_, u32>(0)?, row.get::<_, u32>(1)?))
-                })
-                .ok();
-
-            let (line_start, line_end) = lines.unwrap_or((result.line_start, result.line_end));
-
-            enriched.push(SearchResult {
-                id: result.id.clone(),
-                name: result.name.clone(),
-                file_path: result.file_path.clone(),
-                kind: result.kind.clone(),
-                score: result.score,
-                line_start,
-                line_end,
-            });
-        }
-
-        Ok(enriched)
+        Ok(results)
     }
 }
 
@@ -247,6 +222,8 @@ fn map_fts_row(row: &rusqlite::Row) -> rusqlite::Result<RawFtsResult> {
         kind: row.get(2)?,
         file_path: row.get(3)?,
         rank: row.get(4)?,
+        line_start: row.get(5)?,
+        line_end: row.get(6)?,
     })
 }
 
@@ -257,6 +234,8 @@ struct RawFtsResult {
     kind: String,
     file_path: String,
     rank: f64,
+    line_start: u32,
+    line_end: u32,
 }
 
 /// Convert BM25 rank values to 0.0-1.0 similarity scores.
@@ -293,8 +272,8 @@ fn normalize_scores(raw: Vec<RawFtsResult>) -> Vec<SearchResult> {
                 file_path: r.file_path,
                 kind: r.kind,
                 score,
-                line_start: 0,
-                line_end: 0,
+                line_start: r.line_start,
+                line_end: r.line_end,
             }
         })
         .collect()
@@ -562,6 +541,8 @@ mod tests {
             kind: "function".to_string(),
             file_path: "test.ts".to_string(),
             rank: -5.0,
+            line_start: 0,
+            line_end: 0,
         }];
         let results = normalize_scores(raw);
         assert_eq!(results.len(), 1);
@@ -577,6 +558,8 @@ mod tests {
                 kind: "function".to_string(),
                 file_path: "test.ts".to_string(),
                 rank: -10.0, // best match (most negative)
+                line_start: 0,
+                line_end: 0,
             },
             RawFtsResult {
                 symbol_id: "id2".to_string(),
@@ -584,6 +567,8 @@ mod tests {
                 kind: "function".to_string(),
                 file_path: "test.ts".to_string(),
                 rank: -2.0, // worst match (least negative)
+                line_start: 0,
+                line_end: 0,
             },
         ];
         let results = normalize_scores(raw);

@@ -14,7 +14,7 @@ use tree_sitter::Language;
 
 use crate::core::graph::Edge;
 use crate::core::parser::SupportedLanguage;
-use crate::languages::LanguagePlugin;
+use crate::languages::{make_edge, resolve_scope_id, LanguagePlugin};
 
 /// Go language plugin.
 pub struct GoPlugin;
@@ -332,12 +332,8 @@ fn extract_go_edge(
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+    let from_fn = resolve_scope_id(enclosing_scope_id, file_path, "function");
+    let from_cls = resolve_scope_id(enclosing_scope_id, file_path, "class");
 
     match pattern {
         // Import spec (e.g. import "fmt")
@@ -345,25 +341,19 @@ fn extract_go_edge(
             if let Some((source_path, line)) = captures.get("source") {
                 // Strip quotes from the import path
                 let clean = source_path.trim_matches('"');
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: clean.to_string(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    format!("{file_path}::__module__::function"),
+                    clean,
+                    "imports",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Direct function call (e.g. processPayment(...))
         1 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Selector/method call (e.g. s.Handle(), fmt.Println())
@@ -371,25 +361,19 @@ fn extract_go_edge(
             if let (Some((object, line)), Some((method, _))) =
                 (captures.get("object"), captures.get("method"))
             {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{object}.{method}"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    format!("{object}.{method}"),
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Struct embedding (e.g. type Server struct { Logger })
         3 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_type.clone(),
-                    kind: "extends".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_cls.clone(), base_type, "extends", file_path, *line));
             }
         }
         _ => {}

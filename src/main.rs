@@ -3,8 +3,6 @@
 //! Builds a local code intelligence index and lets you query it efficiently.
 //! Use it before editing any non-trivial code to understand structure,
 //! dependencies, and blast radius.
-#![allow(dead_code)]
-
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
@@ -12,7 +10,6 @@ use std::path::{Path, PathBuf};
 mod commands;
 mod config;
 mod core;
-mod error;
 mod languages;
 mod output;
 
@@ -135,6 +132,18 @@ pub enum Commands {
     ///   scope impact processPayment             — who breaks if this changes
     ///   scope impact PaymentConfig              — blast radius of config change
     Impact(commands::impact::ImpactArgs),
+
+    /// Show which symbols changed since a git ref.
+    ///
+    /// Cross-references `git diff --name-only` with the index to show
+    /// exactly which symbols were added, modified, or deleted.
+    /// Designed for code review and PR triage.
+    ///
+    /// Examples:
+    ///   scope diff                     — changes since last commit
+    ///   scope diff --ref main          — changes vs main branch
+    ///   scope diff --ref HEAD~3 --json — last 3 commits, JSON output
+    Diff(commands::diff::DiffArgs),
 
     /// Find call paths between two symbols.
     ///
@@ -312,10 +321,17 @@ fn main() -> Result<()> {
             let root = project_root_from_context(&ctx)?;
             commands::similar::run(args, root)
         }
-        Commands::Source(args) => commands::source::run(args),
+        Commands::Source(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::source::run(args, root)
+        }
         Commands::Trace(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::trace::run(args, root)
+        }
+        Commands::Diff(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::diff::run(args, root)
         }
         Commands::Flow(args) => {
             let root = project_root_from_context(&ctx)?;

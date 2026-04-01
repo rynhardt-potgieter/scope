@@ -19,16 +19,6 @@ use tree_sitter::Language;
 use crate::core::graph::Edge;
 use crate::core::parser::SupportedLanguage;
 
-/// Raw edge data returned by language plugins before scope resolution.
-pub struct RawEdge {
-    /// The edge kind (e.g. "calls", "imports", "extends").
-    pub kind: String,
-    /// The target symbol identifier.
-    pub target: String,
-    /// The source line number.
-    pub line: u32,
-}
-
 /// Trait that each language plugin implements.
 ///
 /// Adding a new language means implementing this trait and registering
@@ -104,6 +94,38 @@ pub trait LanguagePlugin: Send + Sync {
     /// receive an importance boost regardless of caller count.
     fn generic_name_stopwords(&self) -> &[&str] {
         &[]
+    }
+}
+
+/// Resolve the `from_id` for an outgoing edge.
+///
+/// If there is an `enclosing_scope_id` (i.e. the edge originates inside a
+/// function or method), that ID is used directly.  Otherwise a synthetic
+/// module-level ID of the form `"{file_path}::__module__::{kind}"` is
+/// returned, where `kind` is either `"function"` or `"class"`.
+pub fn resolve_scope_id(enclosing_scope_id: Option<&str>, file_path: &str, kind: &str) -> String {
+    enclosing_scope_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{file_path}::__module__::{kind}"))
+}
+
+/// Build an [`Edge`] with the given fields.
+///
+/// Convenience wrapper so individual language plugins don't have to repeat
+/// the full struct literal each time.
+pub fn make_edge(
+    from_id: impl Into<String>,
+    to_id: impl Into<String>,
+    kind: &str,
+    file_path: &str,
+    line: u32,
+) -> Edge {
+    Edge {
+        from_id: from_id.into(),
+        to_id: to_id.into(),
+        kind: kind.to_string(),
+        file_path: file_path.to_string(),
+        line: Some(line),
     }
 }
 

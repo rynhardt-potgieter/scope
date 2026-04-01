@@ -184,6 +184,7 @@ fn run_single(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
 }
 
 /// Entrypoint info tagged with project name for workspace mode.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkspaceEntrypointInfo {
     /// Project name.

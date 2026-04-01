@@ -13,7 +13,7 @@ use tree_sitter::Language;
 
 use crate::core::graph::Edge;
 use crate::core::parser::SupportedLanguage;
-use crate::languages::LanguagePlugin;
+use crate::languages::{make_edge, resolve_scope_id, LanguagePlugin};
 
 /// Python language plugin.
 pub struct PythonPlugin;
@@ -384,25 +384,20 @@ fn extract_py_edge(
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
-    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+    let from_fn = resolve_scope_id(enclosing_scope_id, file_path, "function");
+    let from_cls = resolve_scope_id(enclosing_scope_id, file_path, "class");
 
     match pattern {
         // import statement (e.g. `import os`) — always module-level
         0 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    format!("{file_path}::__module__::function"),
+                    imported_name,
+                    "imports",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // from-import statement (e.g. `from os.path import join`)
@@ -410,25 +405,19 @@ fn extract_py_edge(
             if let (Some((imported_name, line)), Some((source_mod, _))) =
                 (captures.get("imported_name"), captures.get("source"))
             {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: format!("{source_mod}::{imported_name}"),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    format!("{file_path}::__module__::function"),
+                    format!("{source_mod}::{imported_name}"),
+                    "imports",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Direct function call (e.g. `foo()`)
         2 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Attribute/method call (e.g. `self.foo()`, `obj.bar()`)
@@ -436,25 +425,25 @@ fn extract_py_edge(
             if let (Some((object, line)), Some((method, _))) =
                 (captures.get("object"), captures.get("method"))
             {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{object}.{method}"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    format!("{object}.{method}"),
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Class inheritance (e.g. `class Foo(Bar):`)
         4 => {
             if let Some((base_class, line)) = captures.get("base_class") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_class.clone(),
-                    kind: "extends".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_cls.clone(),
+                    base_class,
+                    "extends",
+                    file_path,
+                    *line,
+                ));
             }
         }
         _ => {}

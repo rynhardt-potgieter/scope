@@ -188,14 +188,25 @@ impl Indexer {
         // Collect all current files and compute hashes
         let files = self.collect_files(project_root, config)?;
         let mut current_hashes: HashMap<String, String> = HashMap::new();
-        let mut file_map: HashMap<String, (std::path::PathBuf, SupportedLanguage)> = HashMap::new();
+        let mut file_map: HashMap<
+            String,
+            (
+                std::path::PathBuf,
+                SupportedLanguage,
+                String,
+                String,
+            ),
+        > = HashMap::new();
 
         for (rel_path, abs_path, lang) in &files {
             let source = std::fs::read_to_string(abs_path)
                 .with_context(|| format!("Failed to read {}", abs_path.display()))?;
             let hash = compute_hash(&source);
             current_hashes.insert(rel_path.clone(), hash);
-            file_map.insert(rel_path.clone(), (abs_path.clone(), *lang));
+            file_map.insert(
+                rel_path.clone(),
+                (abs_path.clone(), *lang, source, current_hashes[rel_path].clone()),
+            );
         }
 
         // Compare against stored hashes
@@ -220,22 +231,36 @@ impl Indexer {
         }
 
         // Process modified and added files
-        let files_to_reindex: Vec<(String, std::path::PathBuf, SupportedLanguage)> = changed
+        let files_to_reindex: Vec<(
+            String,
+            std::path::PathBuf,
+            SupportedLanguage,
+            String,
+            String,
+        )> = changed
             .modified
             .iter()
             .chain(changed.added.iter())
             .filter_map(|rel_path| {
                 file_map
                     .get(rel_path)
-                    .map(|(abs, lang)| (rel_path.clone(), abs.clone(), *lang))
+                    .map(|(abs, lang, source, hash)| {
+                        (
+                            rel_path.clone(),
+                            abs.clone(),
+                            *lang,
+                            source.clone(),
+                            hash.clone(),
+                        )
+                    })
             })
             .collect();
 
         // Parse changed files in parallel
         let parsed: Vec<ParsedFile> = files_to_reindex
             .par_iter()
-            .filter_map(|(rel_path, abs_path, lang)| {
-                parse_file(rel_path, abs_path, *lang)
+            .filter_map(|(rel_path, abs_path, lang, source, hash)| {
+                parse_loaded_source(rel_path, source, *lang, hash.clone())
                     .map_err(|e| tracing::warn!("Failed to parse {}: {e}", abs_path.display()))
                     .ok()
             })
@@ -464,9 +489,17 @@ fn parse_file(
 ) -> Result<ParsedFile> {
     let source = std::fs::read_to_string(abs_path)
         .with_context(|| format!("Failed to read {}", abs_path.display()))?;
-
     let hash = compute_hash(&source);
+    parse_loaded_source(rel_path, &source, lang, hash)
+}
 
+/// Parse a previously loaded source file without reading it again from disk.
+fn parse_loaded_source(
+    rel_path: &str,
+    source: &str,
+    lang: SupportedLanguage,
+    hash: String,
+) -> Result<ParsedFile> {
     let mut parser = CodeParser::new()?;
     let symbols = parser.extract_symbols(rel_path, &source, lang)?;
     let mut edges = parser.extract_edges(rel_path, &source, lang)?;
