@@ -300,12 +300,18 @@ fn main() -> Result<()> {
             let root = project_root_from_context(&ctx)?;
             commands::deps::run(args, root)
         }
-        Commands::Rdeps(args) => commands::rdeps::run(args),
+        Commands::Rdeps(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::rdeps::run(args, root)
+        }
         Commands::Impact(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::impact::run(args, root)
         }
-        Commands::Similar(args) => commands::similar::run(args),
+        Commands::Similar(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::similar::run(args, root)
+        }
         Commands::Source(args) => commands::source::run(args),
         Commands::Trace(args) => {
             let root = project_root_from_context(&ctx)?;

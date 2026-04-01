@@ -319,18 +319,21 @@ impl Graph {
 
     /// Batch version of `get_caller_count` — returns a map of symbol_id to caller count.
     ///
-    /// Efficiently fetches caller counts for multiple symbols in a single query.
-    /// Matches by exact ID, bare name, and member-call patterns (e.g. `svc.processPayment`).
+    /// Fetches all caller counts in a single aggregate query, then resolves
+    /// each symbol in O(1) using pre-computed HashMaps. Much faster than
+    /// calling `get_caller_count` per symbol (which would be N individual queries).
     pub fn get_caller_counts(&self, symbol_ids: &[&str]) -> Result<HashMap<String, usize>> {
         let mut result = HashMap::new();
         if symbol_ids.is_empty() {
             return Ok(result);
         }
 
-        // For each symbol ID, we need to count call edges that reference it.
-        // We query each individually since to_id formats vary (exact, bare name, member.name).
+        // Single aggregate query over all call edges, then O(1) lookups per symbol.
+        let maps = self.get_all_caller_counts()?;
+
         for &sym_id in symbol_ids {
-            let count = self.get_caller_count(sym_id)?;
+            let bare_name = self.symbol_name_from_id(sym_id);
+            let count = resolve_caller_count(&maps, sym_id, &bare_name);
             if count > 0 {
                 result.insert(sym_id.to_string(), count);
             }
