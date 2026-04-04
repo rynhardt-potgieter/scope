@@ -65,7 +65,7 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
 
     // Get changed files from git
     let output = Command::new("git")
-        .args(["diff", "--name-only", &args.r#ref])
+        .args(["diff", "--name-only", &args.r#ref, "--"])
         .current_dir(project_root)
         .output()?;
 

@@ -145,3 +145,19 @@ path = "tests/integration/test_csharp.rs"
 [[test]]
 name = "test_flow"
 path = "tests/integration/test_flow.rs"
+
+[[test]]
+name = "test_rdeps"
+path = "tests/integration/test_rdeps.rs"
+
+[[test]]
+name = "test_similar"
+path = "tests/integration/test_similar.rs"
+
+[[test]]
+name = "test_source"
+path = "tests/integration/test_source.rs"
+
+[[test]]
+name = "test_diff"
+path = "tests/integration/test_diff.rs"
