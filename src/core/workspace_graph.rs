@@ -1,3 +1,4 @@
+#![allow(dead_code)] // Workspace feature is scaffolded but not yet fully wired
 //! Workspace-level query facade over multiple independent project graphs.
 //!
 //! `WorkspaceGraph` opens N `Graph` instances (one per workspace member)
@@ -294,6 +295,7 @@ impl WorkspaceGraph {
 /// Prefix a symbol ID with the project name for workspace display.
 ///
 /// Never stored — used only at the output boundary.
+#[allow(dead_code)]
 pub fn workspace_display_id(project: &str, id: &str) -> String {
     format!("{project}::{id}")
 }

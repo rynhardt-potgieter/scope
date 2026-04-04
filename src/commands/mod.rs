@@ -2,6 +2,7 @@
 ///
 /// Each module corresponds to one `scope` subcommand.
 pub mod deps;
+pub mod diff;
 pub mod entrypoints;
 pub mod find;
 pub mod flow;
@@ -17,6 +18,60 @@ pub mod source;
 pub mod status;
 pub mod trace;
 pub mod workspace;
+
+use crate::core::graph::{Graph, Symbol};
+
+/// Resolve a symbol name, bailing with a disambiguation list if ambiguous.
+///
+/// If the name contains `::` it's treated as an exact ID prefix match.
+/// Otherwise delegates to `Graph::find_symbol` (single result) and falls
+/// back to `find_all_matching_symbols` when the caller needs to know
+/// about ambiguity.
+pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
+    // Allow exact ID prefix: "src/core/graph.rs::find_symbol"
+    if name.contains("::") {
+        let sym = graph.find_symbol_by_id_prefix(name)?;
+        if let Some(s) = sym {
+            return Ok(s);
+        }
+    }
+
+    // Try normal resolution first
+    if let Some(sym) = graph.find_symbol(name)? {
+        // Check if ambiguous
+        let all = graph.find_all_matching_symbols(name)?;
+        if all.len() > 1 {
+            let mut msg = format!(
+                "Ambiguous symbol '{}' matches {} definitions:\n",
+                name,
+                all.len()
+            );
+            for (i, s) in all.iter().enumerate() {
+                msg.push_str(&format!(
+                    "  {}. {} ({})  {}:{}\n",
+                    i + 1,
+                    s.name,
+                    s.kind,
+                    s.file_path,
+                    s.line_start,
+                ));
+            }
+            msg.push_str(&format!(
+                "\nUse a qualified name to disambiguate:\n  scope <cmd> {}::{}::{}",
+                all[0].file_path, all[0].name, all[0].kind,
+            ));
+            anyhow::bail!("{msg}");
+        }
+        return Ok(sym);
+    }
+
+    anyhow::bail!(
+        "Symbol '{}' not found in index.\n\
+         Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
+        name,
+        name,
+    );
+}
 
 /// Check if an input string looks like a file path rather than a symbol name.
 pub fn looks_like_file_path(input: &str) -> bool {

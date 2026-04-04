@@ -10,7 +10,7 @@ use tree_sitter::Language;
 
 use crate::core::graph::Edge;
 use crate::core::parser::SupportedLanguage;
-use crate::languages::LanguagePlugin;
+use crate::languages::{make_edge, resolve_scope_id, LanguagePlugin};
 
 /// Rust language plugin.
 pub struct RustPlugin;
@@ -267,132 +267,53 @@ fn extract_rust_edge(
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let _from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+    let from_fn = resolve_scope_id(enclosing_scope_id, file_path, "function");
+    let module_fn = || format!("{file_path}::__module__::function");
 
     match pattern {
         // Use declaration — scoped identifier (e.g. use std::io)
-        0 => {
-            if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
         // Use declaration — aliased (use ... as ...)
-        1 => {
+        0 | 1 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(module_fn(), imported_name, "imports", file_path, *line));
             }
         }
         // Direct call expression (e.g. process_payment(...))
-        2 => {
-            if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
         // Scoped call expression (e.g. PaymentService::new(...))
-        3 => {
+        2 | 3 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Method call expression (e.g. self.client.charge(...))
         4 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: method.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
             }
         }
         // Macro invocation (e.g. println!(...))
-        5 => {
-            if let Some((macro_name, line)) = captures.get("macro_name") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{macro_name}!"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
         // Scoped macro invocation (e.g. std::println!(...))
-        6 => {
+        5 | 6 => {
             if let Some((macro_name, line)) = captures.get("macro_name") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{macro_name}!"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    format!("{macro_name}!"),
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
-        // Field type reference
-        7 => {
+        // Field / parameter / return type reference
+        7 | 8 | 9 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: type_ref.clone(),
-                    kind: "references_type".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Parameter type reference
-        8 => {
-            if let Some((type_ref, line)) = captures.get("type_ref") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: type_ref.clone(),
-                    kind: "references_type".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Return type reference
-        9 => {
-            if let Some((type_ref, line)) = captures.get("type_ref") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: type_ref.clone(),
-                    kind: "references_type".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    type_ref,
+                    "references_type",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Match arm — struct pattern variant ref (e.g. PaymentResult::Success { .. })
@@ -402,13 +323,13 @@ fn extract_rust_edge(
                 // For scoped identifiers like "PaymentMethod::CreditCard", extract just the
                 // variant name (last segment after ::)
                 let variant_name = variant_ref.rsplit("::").next().unwrap_or(variant_ref);
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: variant_name.to_string(),
-                    kind: "references".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    variant_name,
+                    "references",
+                    file_path,
+                    *line,
+                ));
             }
         }
         _ => {}

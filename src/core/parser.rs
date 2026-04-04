@@ -19,15 +19,15 @@ use crate::languages::LanguagePlugin;
 pub enum SupportedLanguage {
     /// TypeScript (.ts, .tsx)
     TypeScript,
-    /// C# (.cs) — planned
+    /// C# (.cs)
     CSharp,
-    /// Python (.py) — planned
+    /// Python (.py)
     Python,
-    /// Go (.go) — planned
+    /// Go (.go)
     Go,
-    /// Java (.java) — planned
+    /// Java (.java)
     Java,
-    /// Rust (.rs) — planned
+    /// Rust (.rs)
     Rust,
 }
 
@@ -146,6 +146,7 @@ impl CodeParser {
     }
 
     /// Get the file extensions supported by a language.
+    #[allow(dead_code)]
     pub fn extensions_for(&self, lang: SupportedLanguage) -> &[&str] {
         self.find_plugin(lang)
             .map(|e| e.plugin.extensions())

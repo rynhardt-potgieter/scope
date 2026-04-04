@@ -13,6 +13,7 @@ use clap::Args;
 use serde::Serialize;
 use std::path::Path;
 
+use crate::commands::resolve_symbol;
 use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
@@ -101,21 +102,11 @@ pub fn run(args: &FlowArgs, project_root: &Path) -> Result<()> {
 
     let graph = Graph::open(&db_path)?;
 
-    // Resolve start symbol
-    let start_sym = graph.find_symbol(&args.start)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Symbol not found: {}. Run 'scope index' to refresh the index.",
-            args.start
-        )
-    })?;
+    // Resolve start symbol (with disambiguation)
+    let start_sym = resolve_symbol(&graph, &args.start)?;
 
-    // Resolve end symbol
-    let end_sym = graph.find_symbol(&args.end)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Symbol not found: {}. Run 'scope index' to refresh the index.",
-            args.end
-        )
-    })?;
+    // Resolve end symbol (with disambiguation)
+    let end_sym = resolve_symbol(&graph, &args.end)?;
 
     // Fetch one extra to detect truncation
     let raw_paths =

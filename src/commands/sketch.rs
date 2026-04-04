@@ -39,6 +39,13 @@ pub struct SketchArgs {
     /// Suppress docstring display in sketch output
     #[arg(long)]
     pub no_docs: bool,
+
+    /// Treat the argument as a file path (sketch all symbols in the file).
+    ///
+    /// Useful when the path doesn't contain `/` and would otherwise be
+    /// treated as a symbol name.
+    #[arg(long)]
+    pub file: bool,
 }
 
 /// Returns true if the input looks like a file path rather than a symbol name.
@@ -59,7 +66,7 @@ pub fn run(args: &SketchArgs, project_root: &Path) -> Result<()> {
 
     let graph = Graph::open(&db_path)?;
 
-    if looks_like_file_path(&args.symbol) {
+    if args.file || looks_like_file_path(&args.symbol) {
         return run_file_sketch(args, &graph);
     }
 

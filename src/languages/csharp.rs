@@ -10,7 +10,7 @@ use tree_sitter::Language;
 
 use crate::core::graph::{Edge, Symbol};
 use crate::core::parser::SupportedLanguage;
-use crate::languages::LanguagePlugin;
+use crate::languages::{make_edge, resolve_scope_id, LanguagePlugin};
 
 /// C# language plugin.
 pub struct CSharpPlugin;
@@ -268,6 +268,10 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<CSha
 /// Groups symbols by class name, keeps the first as primary, and re-parents
 /// methods from secondary definitions to the primary class symbol.
 /// Returns the IDs of symbols that should be removed (secondary class definitions).
+///
+/// Not yet wired into the indexing pipeline — will be called from `indexer.rs`
+/// after C# files are parsed, once partial-class test fixtures are added.
+#[allow(dead_code)]
 pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
     use std::collections::HashMap;
 
@@ -328,37 +332,16 @@ fn extract_cs_edge(
 ) -> Vec<Edge> {
     let mut edges = Vec::new();
 
-    // Resolve from_id: use enclosing scope when available, fall back to __module__ synthetic ID.
-    let from_function = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::function"));
-    let from_class = enclosing_scope_id
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("{file_path}::__module__::class"));
+    let from_fn = resolve_scope_id(enclosing_scope_id, file_path, "function");
+    let from_cls = resolve_scope_id(enclosing_scope_id, file_path, "class");
+    let module_fn = || format!("{file_path}::__module__::function");
 
     match pattern {
-        // Using directive with identifier — always module-level, use __module__ synthetic ID
-        0 => {
+        // Using directive with identifier — always module-level
+        // Using directive with qualified name — always module-level
+        0 | 1 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // Using directive with qualified name — always module-level, use __module__ synthetic ID
-        1 => {
-            if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(Edge {
-                    from_id: format!("{file_path}::__module__::function"),
-                    to_id: imported_name.clone(),
-                    kind: "imports".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(module_fn(), imported_name, "imports", file_path, *line));
             }
         }
         // Member access call (e.g. _logger.Info(...))
@@ -366,97 +349,51 @@ fn extract_cs_edge(
             if let (Some((object, line)), Some((method, _))) =
                 (captures.get("object"), captures.get("method"))
             {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: format!("{object}.{method}"),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    format!("{object}.{method}"),
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Direct call (e.g. DoSomething(...))
         3 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: callee.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Object creation (new ...)
         4 => {
             if let Some((class_name, line)) = captures.get("class_name") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: class_name.clone(),
-                    kind: "instantiates".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    class_name,
+                    "instantiates",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // this.Method() call — captures method name only
-        5 => {
+        // base.Method() call — captures method name only
+        5 | 8 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: method.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
             }
         }
         // Base list with identifier (implements/extends)
-        6 => {
-            if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_type.clone(),
-                    kind: "implements".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
         // Base list with qualified name
-        7 => {
+        6 | 7 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(Edge {
-                    from_id: from_class.clone(),
-                    to_id: base_type.clone(),
-                    kind: "implements".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
-            }
-        }
-        // base.Method() call — captures method name only
-        8 => {
-            if let Some((method, line)) = captures.get("method") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: method.clone(),
-                    kind: "calls".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_cls.clone(), base_type, "implements", file_path, *line));
             }
         }
         // Switch case with member access variant ref (e.g. case PaymentStatus.Pending:)
         9 => {
             if let Some((variant_ref, line)) = captures.get("variant_ref") {
-                edges.push(Edge {
-                    from_id: from_function.clone(),
-                    to_id: variant_ref.clone(),
-                    kind: "references".to_string(),
-                    file_path: file_path.to_string(),
-                    line: Some(*line),
-                });
+                edges.push(make_edge(from_fn.clone(), variant_ref, "references", file_path, *line));
             }
         }
         _ => {}

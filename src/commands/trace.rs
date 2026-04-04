@@ -14,6 +14,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
 
+use crate::commands::resolve_symbol;
 use crate::core::graph::Graph;
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
@@ -64,14 +65,7 @@ pub fn run(args: &TraceArgs, project_root: &Path) -> Result<()> {
 
     let graph = Graph::open(&db_path)?;
 
-    let symbol = graph.find_symbol(&args.symbol)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Symbol '{}' not found in index.\n\
-             Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
-            args.symbol,
-            args.symbol
-        )
-    })?;
+    let symbol = resolve_symbol(&graph, &args.symbol)?;
 
     let mut result = graph.find_call_paths(&symbol.id, &symbol.name, args.max_depth)?;
     let total = result.paths.len();

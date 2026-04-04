@@ -73,6 +73,7 @@ impl ChangedFiles {
     }
 
     /// Total number of changed files.
+    #[allow(dead_code)]
     pub fn total(&self) -> usize {
         self.added.len() + self.modified.len() + self.deleted.len()
     }
@@ -289,6 +290,37 @@ impl Graph {
         Ok(None)
     }
 
+    /// Find a symbol by ID prefix (e.g. `"src/core/graph.rs::find_symbol"`).
+    ///
+    /// Matches any symbol whose `id` starts with the given prefix.
+    /// Returns the first match, or `None` if no symbol matches.
+    pub fn find_symbol_by_id_prefix(&self, prefix: &str) -> Result<Option<Symbol>> {
+        self.conn
+            .query_row(
+                "SELECT * FROM symbols WHERE substr(id, 1, length(?1)) = ?1 LIMIT 1",
+                params![prefix],
+                Symbol::from_row,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    /// Find all symbols matching a name (for disambiguation).
+    ///
+    /// Unlike `find_symbol` which returns at most one, this returns all
+    /// symbols with the given name so the caller can present a choice.
+    pub fn find_all_matching_symbols(&self, name: &str) -> Result<Vec<Symbol>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM symbols WHERE name = ?1 ORDER BY file_path, line_start")?;
+        let rows = stmt.query_map(params![name], Symbol::from_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Get all child symbols (methods, properties) of a class/interface.
     ///
     /// Returns symbols where `parent_id = class_id`, ordered by `line_start`.
@@ -319,18 +351,21 @@ impl Graph {
 
     /// Batch version of `get_caller_count` — returns a map of symbol_id to caller count.
     ///
-    /// Efficiently fetches caller counts for multiple symbols in a single query.
-    /// Matches by exact ID, bare name, and member-call patterns (e.g. `svc.processPayment`).
+    /// Fetches all caller counts in a single aggregate query, then resolves
+    /// each symbol in O(1) using pre-computed HashMaps. Much faster than
+    /// calling `get_caller_count` per symbol (which would be N individual queries).
     pub fn get_caller_counts(&self, symbol_ids: &[&str]) -> Result<HashMap<String, usize>> {
         let mut result = HashMap::new();
         if symbol_ids.is_empty() {
             return Ok(result);
         }
 
-        // For each symbol ID, we need to count call edges that reference it.
-        // We query each individually since to_id formats vary (exact, bare name, member.name).
+        // Single aggregate query over all call edges, then O(1) lookups per symbol.
+        let maps = self.get_all_caller_counts()?;
+
         for &sym_id in symbol_ids {
-            let count = self.get_caller_count(sym_id)?;
+            let bare_name = self.symbol_name_from_id(sym_id);
+            let count = resolve_caller_count(&maps, sym_id, &bare_name);
             if count > 0 {
                 result.insert(sym_id.to_string(), count);
             }
@@ -1339,7 +1374,7 @@ impl Graph {
                 FROM edges e
                 JOIN impact i ON e.to_id = i.id
                 WHERE i.depth < ?{depth_param}
-                  AND (',' || i.path || ',') NOT LIKE '%,' || e.from_id || ',%'
+                  AND INSTR(',' || i.path || ',', ',' || e.from_id || ',') = 0
             )
             SELECT DISTINCT i.id, MIN(i.depth) as min_depth, s.name, s.file_path, s.kind
             FROM impact i
@@ -1498,7 +1533,7 @@ impl Graph {
                 JOIN trace t ON e.to_id = t.id
                 WHERE e.kind = 'calls'
                   AND t.depth < ?5
-                  AND ('>' || t.path || '>') NOT LIKE '%>' || e.from_id || '>%'
+                  AND INSTR('>' || t.path || '>', '>' || e.from_id || '>') = 0
             )
             -- Return paths that terminate at entry points (no incoming calls)
             SELECT t.path, t.depth
@@ -1928,6 +1963,7 @@ impl Graph {
     }
 
     /// Get the number of tracked files in the file_hashes table.
+    #[allow(dead_code)]
     pub fn indexed_file_count(&self) -> Result<usize> {
         let count: i64 = self
             .conn
@@ -1936,6 +1972,7 @@ impl Graph {
     }
 
     /// Delete a file hash entry.
+    #[allow(dead_code)]
     pub fn delete_file_hash(&self, file_path: &str) -> Result<()> {
         self.conn.execute(
             "DELETE FROM file_hashes WHERE file_path = ?1",

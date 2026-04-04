@@ -1,15 +1,17 @@
 /// Orchestrates full and incremental indexing of a codebase.
 ///
 /// Walks the file tree, parses source files, and stores symbols and edges
-/// in the SQLite graph database.
+/// in the SQLite graph database. Parsing is parallelised across CPU cores
+/// using rayon; only the SQLite writes remain single-threaded.
 use anyhow::{Context, Result};
+use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 
 use crate::config::ProjectConfig;
-use crate::core::graph::Graph;
+use crate::core::graph::{Edge, Graph, Symbol};
 use crate::core::parser::{CodeParser, SupportedLanguage};
 use crate::core::searcher::Searcher;
 
@@ -96,47 +98,40 @@ impl Indexer {
         let total_files = files.len();
         eprintln!("Indexing {total_files} files...");
 
+        // Parse files in parallel — each thread gets its own CodeParser since
+        // tree-sitter's Parser is not Send. SQLite writes happen sequentially after.
+        let parsed: Vec<ParsedFile> = files
+            .par_iter()
+            .filter_map(|(rel_path, abs_path, lang)| {
+                parse_file(rel_path, abs_path, *lang)
+                    .map_err(|e| tracing::warn!("Failed to parse {}: {e}", abs_path.display()))
+                    .ok()
+            })
+            .collect();
+
         let mut total_symbols = 0usize;
         let mut total_edges = 0usize;
         let mut file_hashes: HashMap<String, String> = HashMap::new();
         let mut lang_stats: HashMap<String, (usize, usize)> = HashMap::new();
-        let mut all_symbols: Vec<crate::core::graph::Symbol> = Vec::new();
+        let mut all_symbols: Vec<Symbol> = Vec::new();
 
-        for (rel_path, abs_path, lang) in &files {
-            let source = std::fs::read_to_string(abs_path)
-                .with_context(|| format!("Failed to read {}", abs_path.display()))?;
+        for pf in &parsed {
+            // Store in graph (single-threaded — SQLite is single-writer)
+            graph.insert_file_data(&pf.rel_path, &pf.symbols, &pf.edges)?;
 
-            // Compute file hash
-            let hash = compute_hash(&source);
-            file_hashes.insert(rel_path.clone(), hash);
+            file_hashes.insert(pf.rel_path.clone(), pf.hash.clone());
 
-            // Extract symbols and edges
-            let symbols = self.parser.extract_symbols(rel_path, &source, *lang)?;
-            let mut edges = self.parser.extract_edges(rel_path, &source, *lang)?;
+            let sym_count = pf.symbols.len();
+            let edge_count = pf.edges.len();
 
-            // Rust: extract trait implementation edges (impl Trait for Type)
-            if *lang == SupportedLanguage::Rust {
-                let trait_edges = self
-                    .parser
-                    .extract_rust_impl_trait_edges(rel_path, &source, &symbols)?;
-                edges.extend(trait_edges);
-            }
-
-            let sym_count = symbols.len();
-            let edge_count = edges.len();
-
-            // Store in graph
-            graph.insert_file_data(rel_path, &symbols, &edges)?;
-
-            // Collect symbols for FTS indexing (done after all edges are in the graph)
             if searcher.is_some() {
-                all_symbols.extend(symbols);
+                all_symbols.extend(pf.symbols.clone());
             }
 
             total_symbols += sym_count;
             total_edges += edge_count;
 
-            let entry = lang_stats.entry(lang.to_string()).or_insert((0, 0));
+            let entry = lang_stats.entry(pf.lang.to_string()).or_insert((0, 0));
             entry.0 += 1;
             entry.1 += sym_count;
         }
@@ -193,14 +188,25 @@ impl Indexer {
         // Collect all current files and compute hashes
         let files = self.collect_files(project_root, config)?;
         let mut current_hashes: HashMap<String, String> = HashMap::new();
-        let mut file_map: HashMap<String, (std::path::PathBuf, SupportedLanguage)> = HashMap::new();
+        let mut file_map: HashMap<
+            String,
+            (
+                std::path::PathBuf,
+                SupportedLanguage,
+                String,
+                String,
+            ),
+        > = HashMap::new();
 
         for (rel_path, abs_path, lang) in &files {
             let source = std::fs::read_to_string(abs_path)
                 .with_context(|| format!("Failed to read {}", abs_path.display()))?;
             let hash = compute_hash(&source);
             current_hashes.insert(rel_path.clone(), hash);
-            file_map.insert(rel_path.clone(), (abs_path.clone(), *lang));
+            file_map.insert(
+                rel_path.clone(),
+                (abs_path.clone(), *lang, source, current_hashes[rel_path].clone()),
+            );
         }
 
         // Compare against stored hashes
@@ -225,53 +231,61 @@ impl Indexer {
         }
 
         // Process modified and added files
-        let files_to_reindex: Vec<String> = changed
+        let files_to_reindex: Vec<(
+            String,
+            std::path::PathBuf,
+            SupportedLanguage,
+            String,
+            String,
+        )> = changed
             .modified
             .iter()
             .chain(changed.added.iter())
-            .cloned()
+            .filter_map(|rel_path| {
+                file_map
+                    .get(rel_path)
+                    .map(|(abs, lang, source, hash)| {
+                        (
+                            rel_path.clone(),
+                            abs.clone(),
+                            *lang,
+                            source.clone(),
+                            hash.clone(),
+                        )
+                    })
+            })
+            .collect();
+
+        // Parse changed files in parallel
+        let parsed: Vec<ParsedFile> = files_to_reindex
+            .par_iter()
+            .filter_map(|(rel_path, abs_path, lang, source, hash)| {
+                parse_loaded_source(rel_path, source, *lang, hash.clone())
+                    .map_err(|e| tracing::warn!("Failed to parse {}: {e}", abs_path.display()))
+                    .ok()
+            })
             .collect();
 
         let mut updated_hashes: HashMap<String, String> = HashMap::new();
-        let mut all_reindexed_symbols: Vec<crate::core::graph::Symbol> = Vec::new();
+        let mut all_reindexed_symbols: Vec<Symbol> = Vec::new();
 
-        for rel_path in &files_to_reindex {
-            let (abs_path, lang) = file_map
-                .get(rel_path)
-                .ok_or_else(|| anyhow::anyhow!("File {} not found in file map", rel_path))?;
-
-            let source = std::fs::read_to_string(abs_path)
-                .with_context(|| format!("Failed to read {}", abs_path.display()))?;
-
-            let symbols = self.parser.extract_symbols(rel_path, &source, *lang)?;
-            let mut edges = self.parser.extract_edges(rel_path, &source, *lang)?;
-
-            // Rust: extract trait implementation edges (impl Trait for Type)
-            if *lang == SupportedLanguage::Rust {
-                let trait_edges = self
-                    .parser
-                    .extract_rust_impl_trait_edges(rel_path, &source, &symbols)?;
-                edges.extend(trait_edges);
-            }
-
+        for pf in &parsed {
             // Atomic per-file update: delete old data, insert new
-            graph.insert_file_data(rel_path, &symbols, &edges)?;
+            graph.insert_file_data(&pf.rel_path, &pf.symbols, &pf.edges)?;
 
             // Delete old search entries for this file
             if let Some(s) = searcher {
-                if let Err(e) = s.delete_file(rel_path) {
-                    tracing::warn!("Failed to clear search entries for {rel_path}: {e}");
+                if let Err(e) = s.delete_file(&pf.rel_path) {
+                    tracing::warn!("Failed to clear search entries for {}: {e}", pf.rel_path);
                 }
             }
 
-            // Collect symbols for FTS re-indexing with relationship context
             if searcher.is_some() {
-                all_reindexed_symbols.extend(symbols);
+                all_reindexed_symbols.extend(pf.symbols.clone());
             }
 
-            // Track the hash for this file
-            if let Some(hash) = current_hashes.get(rel_path) {
-                updated_hashes.insert(rel_path.clone(), hash.clone());
+            if let Some(hash) = current_hashes.get(&pf.rel_path) {
+                updated_hashes.insert(pf.rel_path.clone(), hash.clone());
             }
         }
 
@@ -453,6 +467,55 @@ fn scan_for_nested(
 
         scan_for_nested(project_root, &path, depth + 1, max_depth, results);
     }
+}
+
+/// Result of parsing a single file (produced in parallel, consumed sequentially).
+struct ParsedFile {
+    rel_path: String,
+    hash: String,
+    symbols: Vec<Symbol>,
+    edges: Vec<Edge>,
+    lang: SupportedLanguage,
+}
+
+/// Parse a single file: read, hash, extract symbols and edges.
+///
+/// Each invocation creates its own `CodeParser` because tree-sitter's `Parser`
+/// is not `Send`. This is cheap — the grammar pointers are shared.
+fn parse_file(
+    rel_path: &str,
+    abs_path: &std::path::Path,
+    lang: SupportedLanguage,
+) -> Result<ParsedFile> {
+    let source = std::fs::read_to_string(abs_path)
+        .with_context(|| format!("Failed to read {}", abs_path.display()))?;
+    let hash = compute_hash(&source);
+    parse_loaded_source(rel_path, &source, lang, hash)
+}
+
+/// Parse a previously loaded source file without reading it again from disk.
+fn parse_loaded_source(
+    rel_path: &str,
+    source: &str,
+    lang: SupportedLanguage,
+    hash: String,
+) -> Result<ParsedFile> {
+    let mut parser = CodeParser::new()?;
+    let symbols = parser.extract_symbols(rel_path, &source, lang)?;
+    let mut edges = parser.extract_edges(rel_path, &source, lang)?;
+
+    if lang == SupportedLanguage::Rust {
+        let trait_edges = parser.extract_rust_impl_trait_edges(rel_path, &source, &symbols)?;
+        edges.extend(trait_edges);
+    }
+
+    Ok(ParsedFile {
+        rel_path: rel_path.to_string(),
+        hash,
+        symbols,
+        edges,
+        lang,
+    })
 }
 
 /// Compute a SHA-256 hash of a file's contents.
