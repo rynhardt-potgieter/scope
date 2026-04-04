@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.9.1 (2026-04-04)
+
+### New Features
+- **`scope diff [--ref <git-ref>]`** — cross-references `git diff --name-only` with the index to show which symbols live in changed files. Great for PR triage.
+- **`scope source <symbol>`** — prints the full source between `line_start` and `line_end` from the index.
+- **`scope similar <symbol>`** — finds structurally similar symbols via FTS5 seeded from the target's kind/name/signature.
+- **`scope rdeps <symbol>`** — reverse dependency lookup (was a stub, now delegates to `find_impact`).
+- **`scope sketch --file`** — explicit flag so agents can sketch a file even when the path doesn't contain `/`.
+- **Symbol disambiguation** — `flow` and `trace` now print a numbered list when a name matches multiple symbols, with `file::name::kind` syntax suggestion.
+
+### Performance
+- **N+1 caller counts eliminated** — batch aggregate query replaces per-symbol SQL loop in `get_caller_counts`.
+- **N+1 search enrichment eliminated** — JOIN symbols in the FTS5 query instead of one lookup per result.
+- **Parallel file parsing** — `rayon` `par_iter` for the parse phase (DB writes stay sequential for WAL safety).
+- **No double file reads** — incremental indexing no longer re-reads files it just hashed.
+- **Shared SQLite config** — Graph and Searcher now use identical WAL/pragma settings.
+
+### Bug Fixes
+- **LIKE wildcard injection** — `_` in symbol IDs was treated as "match any char" in cycle detection CTEs. Replaced with `INSTR` for exact matching.
+- **Bounds validation** — `scope source` checks `line_start <= line_end`.
+
+### Code Quality
+- **Plugin boilerplate** — `make_edge` and `resolve_scope_id` helpers cut ~200 lines of repeated `Edge` literals across all 6 language plugins.
+- Removed unused `ScopeError` module and dead `RawEdge` struct.
+- Fixed stale "planned" doc comments (all 6 languages are fully implemented).
+- 12 new integration tests (316 total).
+
+*Community contribution by [Dawid Piaskowski](https://github.com/googlarz).*
+
+---
+
 ## v0.9.0 (2026-03-27)
 
 ### New Features

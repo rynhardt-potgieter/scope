@@ -2,13 +2,10 @@
 /target/
 
 # Scope index files (never commit these)
-.scope/graph.db
-.scope/vectors/
-.scope/file_hashes.db
-.scope/models/
+.scope/
 
-# Keep .scope/config.toml — users may want to commit their config
-!.scope/config.toml
+# Node modules (benchmark fixtures)
+node_modules/
 
 # Benchmark results (commit these intentionally per release)
 # benchmarks/results/ — DO commit, it's part of the record
