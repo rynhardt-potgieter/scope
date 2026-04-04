@@ -129,9 +129,17 @@ scope --version
 
 ## Quick start
 
-### 1. Initialise
+### Option A: One-command setup (recommended)
 
-Run once from your project root. Detects languages and writes a default `.scope/config.toml`.
+```bash
+scope setup --preload
+```
+
+This runs init + full index + installs the CLAUDE.md snippet + copies the agent skill file, all in one command. The `--preload` flag bakes `scope map` output into CLAUDE.md so agents start every conversation with the repo architecture already loaded. Benchmarks show this saves **32% on agent cost** and **35% on output tokens**.
+
+### Option B: Step by step
+
+#### 1. Initialise
 
 ```bash
 scope init
@@ -143,9 +151,7 @@ Detected languages: TypeScript
 Run 'scope index' to build the index.
 ```
 
-### 2. Build the index
-
-First run indexes the full codebase. Subsequent runs are incremental -- only changed files are re-indexed.
+#### 2. Build the index
 
 ```bash
 scope index
@@ -164,23 +170,29 @@ Start with the high-level overview, then drill down.
 
 ```bash
 scope map                                # full repo overview (~500-1000 tokens)
-scope entrypoints                        # API controllers, workers, event handlers
+scope summary PaymentService             # quick one-liner (~30 tokens)
 scope sketch PaymentService              # structural overview of a class
-scope refs processPayment                # find all callers
+scope source processPayment              # read just one symbol's code
 scope callers processPayment --depth 2   # transitive callers
 scope trace processPayment               # entry-point-to-symbol call paths
 scope flow PaymentService NotificationService  # call paths between any two symbols
-scope deps PaymentService                # what does it depend on?
 scope find "payment retry logic"         # semantic search
+scope similar PaymentService             # find structurally similar code
+scope diff --ref main                    # what changed vs main branch
 scope status                             # is my index fresh?
 ```
 
 ### 4. Keep the index fresh
 
-Line numbers in Scope output reflect the last `scope index` run. If you've edited files since then, re-index before querying:
+Scope warns you automatically when querying a stale index:
+
+```
+Warning: 3 file(s) changed since last index. Run `scope index` for accurate results.
+```
+
+To refresh:
 
 ```bash
-scope status                             # check freshness
 scope index                              # incremental -- < 1s for a few files
 scope index --watch                      # auto re-index on file changes
 ```
@@ -189,7 +201,7 @@ scope index --watch                      # auto re-index on file changes
 
 ### 5. Install the agent skill
 
-Follow the [agent integration](#agent-integration) steps to install the skill and CLAUDE.md snippet. Agents will use scope automatically.
+Follow the [agent integration](#agent-integration) steps, or use `scope setup` which does this automatically.
 
 ---
 
@@ -199,9 +211,10 @@ Follow the [agent integration](#agent-integration) steps to install the skill an
 |---|---|---|---|
 | `scope init` | `[--json]` | Initialise Scope for a project. Creates `.scope/` with default config, auto-detects languages. | Once per project, before first `scope index`. |
 | `scope index` | `[--full] [--watch] [--json]` | Build or refresh the code index. Incremental by default, `--full` forces rebuild, `--watch` auto re-indexes on file changes. | Once on setup, then `--watch` during development or manual `scope index` after edits. |
-| `scope map` | `[--limit N] [--json]` | Full repository overview: entry points, core symbols ranked by caller count, architecture summary. ~500-1000 tokens. | First thing in a new codebase. Replaces 5-17 sketch calls for orientation. |
+| `scope setup` | `[--preload]` | One-command setup: init + index + CLAUDE.md + skill install. `--preload` bakes architecture into CLAUDE.md for 32% agent cost savings. | First time setting up Scope in a project. |
+| `scope map` | `[--limit N] [--json] [--compact]` | Full repository overview: entry points, core symbols ranked by caller count, architecture summary. ~500-1000 tokens. `--compact` reduces JSON from 46KB to 5KB. | First thing in a new codebase. Replaces 5-17 sketch calls for orientation. |
 | `scope entrypoints` | `[--json]` | Lists API controllers, workers, and event handlers grouped by type. Symbols with zero incoming call edges. | Understanding the request flow starting points. |
-| `scope sketch` | `<symbol> [--json]` | Compressed structural overview: methods with caller counts, dependencies, type signatures, modifiers. ~200 tokens vs ~4,000 for full source. | Before reading source or editing any non-trivial symbol. |
+| `scope sketch` | `<symbol> [--json] [--compact] [--file]` | Compressed structural overview: methods with caller counts, dependencies, type signatures, modifiers. ~200 tokens vs ~4,000 for full source. `--compact` strips internal fields (57% smaller JSON). `--file` forces file-level sketch. | Before reading source or editing any non-trivial symbol. |
 | `scope refs` | `<symbol> [--kind calls\|imports\|extends] [--limit N] [--json]` | All references grouped by kind: call sites, imports, type annotations. Includes source line snippets. | Before changing a function signature or deleting a symbol. |
 | `scope callers` | `<symbol> [--depth N] [--context N] [--json]` | Direct callers (depth 1) or transitive callers (depth 2+). Depth 1 shows snippets; depth 2+ groups by level with test file separation. | Before any refactor that changes a public API surface. |
 | `scope deps` | `<symbol> [--depth 1-3] [--json]` | What does this symbol depend on? Direct imports, calls, extended classes. Transitive with `--depth`. | Understanding prerequisites before implementing something new. |
@@ -210,8 +223,10 @@ Follow the [agent integration](#agent-integration) steps to install the skill an
 | `scope trace` | `<symbol> [--limit N] [--json]` | Trace call paths from entry points to a symbol. Shows how API endpoints and workers reach a function. | Understanding how a bug is triggered or what code paths exercise a function. |
 | `scope flow` | `<start> <end> [--depth N] [--limit N] [--json]` | Find call paths between any two symbols. Unlike `trace` (entry points to target), this traces forward from start to end through the call graph. | Understanding how two arbitrary symbols are connected. |
 | `scope find` | `"<query>" [--kind function\|class] [--limit N] [--json]` | Full-text search with BM25 ranking, importance-boosted results. CamelCase and snake_case aware. | Navigating an unfamiliar codebase or finding code by intent. |
-| `scope similar` | `<symbol> [--kind function\|class] [--json]` | *Stub* -- find structurally similar symbols. Not yet implemented. | Future: discovering existing implementations. |
-| `scope source` | `<symbol> [--json]` | *Stub* -- fetch full source of a symbol. Not yet implemented. | Future: reading implementation after `scope sketch`. |
+| `scope similar` | `<symbol> [--kind function\|class] [--json]` | Find structurally similar symbols using FTS5 search seeded from the target's kind, name, and signature. | Before writing new code, to discover existing implementations. |
+| `scope source` | `<symbol> [--json]` | Fetch the full source code of a symbol (line_start to line_end). Path traversal protected. | Reading a specific implementation after `scope sketch`. |
+| `scope summary` | `<symbol> [--json]` | One-line overview: name, kind, location, signature, callers, deps. ~30 tokens. | Quick "what is this?" check without the full sketch. |
+| `scope diff` | `[--ref REF] [--json]` | Cross-reference `git diff` with the index to show which symbols live in changed files. Default ref: HEAD. | PR review, change triage, understanding what was touched. |
 | `scope status` | `[--json]` | Index health: symbol count, file count, last indexed time, stale files. | Checking whether the index is stale before making range-based edits. |
 | `scope workspace init` | `[--name NAME]` | Discover projects with `.scope/` in subdirectories and create `scope-workspace.toml`. | Once per workspace, after running `scope init` in each project. |
 | `scope workspace list` | `[--json]` | Show all workspace members with index status, symbol counts, and freshness. | Checking workspace health before cross-project queries. |
