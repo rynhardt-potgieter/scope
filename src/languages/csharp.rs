@@ -268,6 +268,10 @@ fn extract_parameters(params_node: &tree_sitter::Node, source: &str) -> Vec<CSha
 /// Groups symbols by class name, keeps the first as primary, and re-parents
 /// methods from secondary definitions to the primary class symbol.
 /// Returns the IDs of symbols that should be removed (secondary class definitions).
+///
+/// Not yet wired into the indexing pipeline — will be called from `indexer.rs`
+/// after C# files are parsed, once partial-class test fixtures are added.
+#[allow(dead_code)]
 pub fn merge_partial_classes(symbols: &mut [Symbol]) -> Vec<String> {
     use std::collections::HashMap;
 

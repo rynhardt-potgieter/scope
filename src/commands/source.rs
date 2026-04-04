@@ -41,7 +41,7 @@ pub fn run(args: &SourceArgs, project_root: &Path) -> Result<()> {
     let start = (sym.line_start as usize).saturating_sub(1);
     let end = (sym.line_end as usize).min(lines.len());
 
-    if start >= lines.len() {
+    if start >= lines.len() || start > end {
         bail!(
             "Symbol '{}' line range {}-{} is out of bounds for {}",
             args.symbol,
