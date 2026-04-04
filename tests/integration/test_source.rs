@@ -23,8 +23,18 @@ fn copy_dir_all(src: &Path, dest: &Path) {
 fn setup_indexed_fixture() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     copy_dir_all(Path::new(TS_FIXTURE), dir.path());
-    Command::cargo_bin("scope").unwrap().arg("init").current_dir(dir.path()).assert().success();
-    Command::cargo_bin("scope").unwrap().args(["index", "--full"]).current_dir(dir.path()).assert().success();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .arg("init")
+        .current_dir(dir.path())
+        .assert()
+        .success();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["index", "--full"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
     let root = dir.path().to_path_buf();
     (dir, root)
 }
@@ -32,7 +42,8 @@ fn setup_indexed_fixture() -> (TempDir, PathBuf) {
 #[test]
 fn test_source_prints_symbol_code() {
     let (_dir, root) = setup_indexed_fixture();
-    Command::cargo_bin("scope").unwrap()
+    Command::cargo_bin("scope")
+        .unwrap()
         .args(["source", "PaymentService"])
         .current_dir(&root)
         .assert()
@@ -44,12 +55,15 @@ fn test_source_prints_symbol_code() {
 #[test]
 fn test_source_json_has_standard_envelope() {
     let (_dir, root) = setup_indexed_fixture();
-    let output = Command::cargo_bin("scope").unwrap()
+    let output = Command::cargo_bin("scope")
+        .unwrap()
         .args(["source", "PaymentService", "--json"])
         .current_dir(&root)
         .assert()
         .success()
-        .get_output().stdout.clone();
+        .get_output()
+        .stdout
+        .clone();
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["command"], "source");
     assert!(json["data"]["source"].is_string());
@@ -59,7 +73,8 @@ fn test_source_json_has_standard_envelope() {
 #[test]
 fn test_source_unknown_symbol_fails() {
     let (_dir, root) = setup_indexed_fixture();
-    Command::cargo_bin("scope").unwrap()
+    Command::cargo_bin("scope")
+        .unwrap()
         .args(["source", "NoSuchSymbol"])
         .current_dir(&root)
         .assert()

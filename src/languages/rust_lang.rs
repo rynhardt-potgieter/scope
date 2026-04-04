@@ -275,20 +275,38 @@ fn extract_rust_edge(
         // Use declaration — aliased (use ... as ...)
         0 | 1 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(make_edge(module_fn(), imported_name, "imports", file_path, *line));
+                edges.push(make_edge(
+                    module_fn(),
+                    imported_name,
+                    "imports",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Direct call expression (e.g. process_payment(...))
         // Scoped call expression (e.g. PaymentService::new(...))
         2 | 3 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    callee,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Method call expression (e.g. self.client.charge(...))
         4 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    method,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Macro invocation (e.g. println!(...))
@@ -305,7 +323,7 @@ fn extract_rust_edge(
             }
         }
         // Field / parameter / return type reference
-        7 | 8 | 9 => {
+        7..=9 => {
             if let Some((type_ref, line)) = captures.get("type_ref") {
                 edges.push(make_edge(
                     from_fn.clone(),

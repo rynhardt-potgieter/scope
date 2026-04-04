@@ -341,7 +341,13 @@ fn extract_cs_edge(
         // Using directive with qualified name — always module-level
         0 | 1 => {
             if let Some((imported_name, line)) = captures.get("imported_name") {
-                edges.push(make_edge(module_fn(), imported_name, "imports", file_path, *line));
+                edges.push(make_edge(
+                    module_fn(),
+                    imported_name,
+                    "imports",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Member access call (e.g. _logger.Info(...))
@@ -361,7 +367,13 @@ fn extract_cs_edge(
         // Direct call (e.g. DoSomething(...))
         3 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    callee,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Object creation (new ...)
@@ -380,20 +392,38 @@ fn extract_cs_edge(
         // base.Method() call — captures method name only
         5 | 8 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    method,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Base list with identifier (implements/extends)
         // Base list with qualified name
         6 | 7 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(make_edge(from_cls.clone(), base_type, "implements", file_path, *line));
+                edges.push(make_edge(
+                    from_cls.clone(),
+                    base_type,
+                    "implements",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Switch case with member access variant ref (e.g. case PaymentStatus.Pending:)
         9 => {
             if let Some((variant_ref, line)) = captures.get("variant_ref") {
-                edges.push(make_edge(from_fn.clone(), variant_ref, "references", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    variant_ref,
+                    "references",
+                    file_path,
+                    *line,
+                ));
             }
         }
         _ => {}

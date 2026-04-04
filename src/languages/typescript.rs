@@ -239,7 +239,13 @@ fn extract_ts_edge(
         // Direct call expression
         1 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    callee,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Member call expression / chained member access call (patterns 2 and 3)
@@ -295,7 +301,13 @@ fn extract_ts_edge(
         // this.method() call — captures method name only
         7 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
+                edges.push(make_edge(
+                    from_fn.clone(),
+                    method,
+                    "calls",
+                    file_path,
+                    *line,
+                ));
             }
         }
         // Type reference

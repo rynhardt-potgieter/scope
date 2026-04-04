@@ -28,11 +28,13 @@ fn setup_indexed_fixture_with_git() -> (TempDir, PathBuf) {
     std::process::Command::new("git")
         .args(["init"])
         .current_dir(dir.path())
-        .output().unwrap();
+        .output()
+        .unwrap();
     std::process::Command::new("git")
         .args(["add", "-A"])
         .current_dir(dir.path())
-        .output().unwrap();
+        .output()
+        .unwrap();
     std::process::Command::new("git")
         .args(["commit", "-m", "initial"])
         .current_dir(dir.path())
@@ -40,10 +42,21 @@ fn setup_indexed_fixture_with_git() -> (TempDir, PathBuf) {
         .env("GIT_AUTHOR_EMAIL", "test@test.com")
         .env("GIT_COMMITTER_NAME", "test")
         .env("GIT_COMMITTER_EMAIL", "test@test.com")
-        .output().unwrap();
+        .output()
+        .unwrap();
 
-    Command::cargo_bin("scope").unwrap().arg("init").current_dir(dir.path()).assert().success();
-    Command::cargo_bin("scope").unwrap().args(["index", "--full"]).current_dir(dir.path()).assert().success();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .arg("init")
+        .current_dir(dir.path())
+        .assert()
+        .success();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["index", "--full"])
+        .current_dir(dir.path())
+        .assert()
+        .success();
 
     let root = dir.path().to_path_buf();
     (dir, root)
@@ -52,7 +65,8 @@ fn setup_indexed_fixture_with_git() -> (TempDir, PathBuf) {
 #[test]
 fn test_diff_no_changes() {
     let (_dir, root) = setup_indexed_fixture_with_git();
-    Command::cargo_bin("scope").unwrap()
+    Command::cargo_bin("scope")
+        .unwrap()
         .args(["diff"])
         .current_dir(&root)
         .assert()
@@ -69,7 +83,8 @@ fn test_diff_shows_changed_symbols() {
     let content = std::fs::read_to_string(&service_path).unwrap();
     std::fs::write(&service_path, format!("{content}\n// modified\n")).unwrap();
 
-    Command::cargo_bin("scope").unwrap()
+    Command::cargo_bin("scope")
+        .unwrap()
         .args(["diff"])
         .current_dir(&root)
         .assert()
@@ -86,12 +101,15 @@ fn test_diff_json_output() {
     let content = std::fs::read_to_string(&service_path).unwrap();
     std::fs::write(&service_path, format!("{content}\n// modified\n")).unwrap();
 
-    let output = Command::cargo_bin("scope").unwrap()
+    let output = Command::cargo_bin("scope")
+        .unwrap()
         .args(["diff", "--json"])
         .current_dir(&root)
         .assert()
         .success()
-        .get_output().stdout.clone();
+        .get_output()
+        .stdout
+        .clone();
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["command"], "diff");
     assert!(json["data"]["changed_files"].is_array());

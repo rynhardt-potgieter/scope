@@ -86,10 +86,7 @@ pub fn run(args: &SimilarArgs, project_root: &Path) -> Result<()> {
     let query = query_parts.join(" ");
 
     // Use kind filter: prefer the user's --kind flag, otherwise match the source symbol's kind
-    let kind_filter = args
-        .kind
-        .as_deref()
-        .or_else(|| Some(symbol.kind.as_str()));
+    let kind_filter = args.kind.as_deref().or(Some(symbol.kind.as_str()));
 
     // Load vendor patterns for de-ranking
     let vendor_patterns = ProjectConfig::load(&scope_dir)
@@ -97,8 +94,12 @@ pub fn run(args: &SimilarArgs, project_root: &Path) -> Result<()> {
         .unwrap_or_default();
 
     // Fetch one extra result to account for filtering out the source symbol
-    let mut results =
-        searcher.search_with_vendor_derank(&query, args.limit + 1, kind_filter, &vendor_patterns)?;
+    let mut results = searcher.search_with_vendor_derank(
+        &query,
+        args.limit + 1,
+        kind_filter,
+        &vendor_patterns,
+    )?;
 
     // Remove the source symbol itself from results
     results.retain(|r| r.id != symbol.id);
