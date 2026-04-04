@@ -297,7 +297,7 @@ impl Graph {
     pub fn find_symbol_by_id_prefix(&self, prefix: &str) -> Result<Option<Symbol>> {
         self.conn
             .query_row(
-                "SELECT * FROM symbols WHERE substr(id, 1, length(?1)) = ?1 LIMIT 1",
+                "SELECT * FROM symbols WHERE id LIKE ?1 || '%' LIMIT 1",
                 params![prefix],
                 Symbol::from_row,
             )

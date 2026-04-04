@@ -57,10 +57,10 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
                 ));
             }
             msg.push_str(&format!(
-                "\nUse a qualified name to disambiguate:\n  scope <cmd> {}::{}::{}",
+                "\nUse a qualified name to disambiguate:\n  scope <cmd> {}::{}::{}\n",
                 all[0].file_path, all[0].name, all[0].kind,
             ));
-            anyhow::bail!("{msg}");
+            eprintln!("{msg}");
         }
         return Ok(sym);
     }
