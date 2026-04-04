@@ -145,14 +145,6 @@ impl CodeParser {
             .any(|entry| entry.plugin.extensions().contains(&ext))
     }
 
-    /// Get the file extensions supported by a language.
-    #[allow(dead_code)]
-    pub fn extensions_for(&self, lang: SupportedLanguage) -> &[&str] {
-        self.find_plugin(lang)
-            .map(|e| e.plugin.extensions())
-            .unwrap_or(&[])
-    }
-
     /// Extract symbol definitions from a source file.
     pub fn extract_symbols(
         &mut self,

@@ -72,11 +72,6 @@ impl ChangedFiles {
         self.added.is_empty() && self.modified.is_empty() && self.deleted.is_empty()
     }
 
-    /// Total number of changed files.
-    #[allow(dead_code)]
-    pub fn total(&self) -> usize {
-        self.added.len() + self.modified.len() + self.deleted.len()
-    }
 }
 
 /// Relationships of a class symbol: inheritance, interfaces, and dependencies.
@@ -1962,24 +1957,6 @@ impl Graph {
         Ok(ts)
     }
 
-    /// Get the number of tracked files in the file_hashes table.
-    #[allow(dead_code)]
-    pub fn indexed_file_count(&self) -> Result<usize> {
-        let count: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM file_hashes", [], |row| row.get(0))?;
-        Ok(count as usize)
-    }
-
-    /// Delete a file hash entry.
-    #[allow(dead_code)]
-    pub fn delete_file_hash(&self, file_path: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM file_hashes WHERE file_path = ?1",
-            params![file_path],
-        )?;
-        Ok(())
-    }
 }
 
 /// Check if a file path belongs to a test file.

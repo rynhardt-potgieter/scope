@@ -209,7 +209,7 @@ impl WatchLock {
     }
 
     /// Get the path to the lock file (for testing).
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn lock_path(&self) -> &Path {
         &self.lock_path
     }

@@ -183,17 +183,6 @@ fn run_single(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Entrypoint info tagged with project name for workspace mode.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkspaceEntrypointInfo {
-    /// Project name.
-    pub project: String,
-    /// Entrypoint info.
-    #[serde(flatten)]
-    pub info: EntrypointInfo,
-}
-
 /// Run entrypoints across all workspace members.
 fn run_workspace(
     args: &EntrypointsArgs,

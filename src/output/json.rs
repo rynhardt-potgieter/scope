@@ -17,7 +17,6 @@ use serde::Serialize;
 /// }
 /// ```
 #[derive(Debug, Serialize)]
-#[allow(dead_code)]
 pub struct JsonOutput<T: Serialize> {
     /// The command that produced this output (e.g. "sketch", "refs").
     pub command: &'static str,
