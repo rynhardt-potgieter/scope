@@ -38,8 +38,11 @@ Scope is a CLI tool that gives you structural code intelligence without reading 
 - Search for code by what it does, not what it's named → `scope find`
 - Understand the repo architecture → `scope map`
 - Find entry points (API controllers, workers) → `scope entrypoints`
-- Check blast radius before a refactor → `scope callers --depth 2`
+- Check blast radius before a refactor → `scope callers --depth 2` or `scope rdeps`
 - Trace how requests reach a function → `scope trace`
+- Review what symbols changed in a PR → `scope diff`
+- Get just one symbol's source code → `scope source`
+- Find similar patterns or duplicates → `scope similar`
 
 **Do NOT use Scope when:**
 - You already know the exact file and line to edit — just read the file
@@ -69,6 +72,15 @@ New task arrives
     │
     ├─ Need to find how A connects to B?
     │      → scope flow <start> <end>     # call paths between any two symbols
+    │
+    ├─ Reviewing a PR or checking what changed?
+    │      → scope diff [--ref main]      # symbols in git-changed files
+    │
+    ├─ Need the actual source of a specific symbol?
+    │      → scope source <symbol>        # targeted read, just that symbol
+    │
+    ├─ Looking for similar implementations?
+    │      → scope similar <symbol>       # structurally similar symbols
     │
     └─ Simple known-location edit?
            → Just read the file directly
@@ -114,6 +126,18 @@ scope callers <method>         → Read each call site → EDIT each
 ```
 Total: 1 scope command gives you every file to change. No need for grep.
 
+### PR Review — "What changed and what's affected?"
+```
+scope diff --ref main          → scope sketch <changed class> → Review
+```
+Total: 1 diff + 1-2 sketches. Know what symbols are affected without reading every changed file.
+
+### Targeted source read — "I need the code for this one symbol"
+```
+scope source <symbol>          → EDIT
+```
+Use after navigating (via sketch, find, or trace) when you need the actual implementation. Reads just the symbol's lines, not the entire file.
+
 ## Command Reference
 
 | Command | What it returns | Tokens | When to use |
@@ -129,6 +153,10 @@ Total: 1 scope command gives you every file to change. No need for grep.
 | `scope entrypoints` | API controllers, workers, event handlers | varies | Understanding request flow |
 | `scope deps <symbol>` | What this depends on | varies | Understanding prerequisites |
 | `scope rdeps <symbol>` | What depends on this | varies | Before deleting/renaming |
+| `scope diff [--ref HEAD~1]` | Symbols in git-changed files | varies | PR triage, reviewing changes |
+| `scope source <symbol>` | Full source code of a symbol | varies | Targeted read after navigating |
+| `scope similar <symbol>` | Structurally similar symbols | varies | Finding patterns or duplicates |
+| `scope sketch <file> --file` | All symbols in a file | varies | When path doesn't contain `/` |
 | `scope status` | Index health, symbol count, freshness | small | Check before querying |
 | `scope index` | Refresh the index (incremental, < 1s) | — | After editing files |
 | `scope index --watch` | Auto re-index on file changes | — | During development |
