@@ -64,6 +64,7 @@ pub fn run(args: &TraceArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     let symbol = resolve_symbol(&graph, &args.symbol)?;
 

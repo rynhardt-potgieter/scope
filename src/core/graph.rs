@@ -1957,6 +1957,36 @@ impl Graph {
         Ok(ts)
     }
 
+    /// Quick staleness check: count files whose on-disk mtime is newer
+    /// than their `indexed_at` timestamp. Returns 0 if everything is fresh.
+    pub fn count_stale_files(&self, project_root: &Path) -> Result<usize> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path, indexed_at FROM file_hashes")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+
+        let mut stale = 0;
+        for row in rows {
+            let (file_path, indexed_at) = row?;
+            let full_path = project_root.join(&file_path);
+            if let Ok(meta) = std::fs::metadata(&full_path) {
+                if let Ok(mtime) = meta.modified() {
+                    let mtime_secs = mtime
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64;
+                    if mtime_secs > indexed_at {
+                        stale += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(stale)
+    }
+
 }
 
 /// Check if a file path belongs to a test file.

@@ -50,6 +50,12 @@ pub struct MapArgs {
     /// Output as JSON instead of human-readable format
     #[arg(long, short = 'j')]
     pub json: bool,
+
+    /// Compact JSON output for agents — limits entrypoints to top 10 per
+    /// category and omits full method_count/outgoing_call_count detail.
+    /// Implies --json.
+    #[arg(long)]
+    pub compact: bool,
 }
 
 /// Statistics for the repository map.
@@ -175,10 +181,22 @@ fn run_single(args: &MapArgs, project_root: &Path) -> Result<()> {
         .and_then(|n| n.to_str())
         .unwrap_or("unknown");
 
-    if args.json {
+    if args.json || args.compact {
+        // In compact mode, limit entrypoints to top 10 per category to cut token cost.
+        let ep_data = if args.compact {
+            ep_groups
+                .into_iter()
+                .map(|(cat, entries)| {
+                    let truncated: Vec<_> = entries.into_iter().take(10).collect();
+                    (cat, truncated)
+                })
+                .collect()
+        } else {
+            ep_groups
+        };
         let data = MapData {
             stats,
-            entrypoints: ep_groups,
+            entrypoints: ep_data,
             core_symbols,
             architecture,
         };

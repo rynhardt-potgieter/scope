@@ -11,6 +11,7 @@ use anyhow::{bail, Result};
 use clap::Args;
 use std::path::Path;
 
+use crate::commands::warn_if_stale;
 use crate::core::graph::{Graph, Symbol};
 use crate::output::formatter;
 use crate::output::json::JsonOutput;
@@ -90,6 +91,7 @@ pub fn run(args: &SketchArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    warn_if_stale(&graph, project_root);
 
     if args.file || looks_like_file_path(&args.symbol) {
         return run_file_sketch(args, &graph);

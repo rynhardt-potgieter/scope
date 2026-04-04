@@ -36,6 +36,7 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     if looks_like_file_path(&args.symbol) {
         return run_file_summary(args, &graph);

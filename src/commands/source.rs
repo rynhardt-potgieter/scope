@@ -29,6 +29,7 @@ pub fn run(args: &SourceArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
     let sym = graph
         .find_symbol(&args.symbol)?
         .ok_or_else(|| anyhow::anyhow!("Symbol '{}' not found in index.", args.symbol))?;

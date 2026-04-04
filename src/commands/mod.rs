@@ -14,6 +14,7 @@ pub mod rdeps;
 pub mod refs;
 pub mod similar;
 pub mod sketch;
+pub mod setup;
 pub mod source;
 pub mod status;
 pub mod summary;
@@ -72,6 +73,23 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
         name,
         name,
     );
+}
+
+/// Emit a stderr warning if the index has stale files.
+///
+/// Runs a quick mtime check against `file_hashes.indexed_at`. Costs one
+/// table scan (~1ms for 100 files) so it's cheap enough to run on every
+/// query command.
+pub fn warn_if_stale(graph: &Graph, project_root: &std::path::Path) {
+    match graph.count_stale_files(project_root) {
+        Ok(0) => {}
+        Ok(n) => {
+            eprintln!(
+                "Warning: {n} file(s) changed since last index. Run `scope index` for accurate results."
+            );
+        }
+        Err(_) => {} // silently skip if check fails
+    }
 }
 
 /// Check if an input string looks like a file path rather than a symbol name.

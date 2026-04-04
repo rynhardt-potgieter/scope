@@ -101,6 +101,7 @@ pub fn run(args: &FlowArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     // Resolve start symbol (with disambiguation)
     let start_sym = resolve_symbol(&graph, &args.start)?;

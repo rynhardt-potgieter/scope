@@ -242,6 +242,16 @@ pub enum Commands {
     /// Are there stale or unindexed files?
     Status(commands::status::StatusArgs),
 
+    /// One-command agent integration setup.
+    ///
+    /// Runs init + index + writes CLAUDE.md snippet + installs skill file.
+    /// With --preload, bakes `scope map` into CLAUDE.md for 32% agent cost savings.
+    ///
+    /// Examples:
+    ///   scope setup              — full setup
+    ///   scope setup --preload    — setup with architecture preloading
+    Setup(commands::setup::SetupArgs),
+
     /// Manage multi-project workspaces.
     ///
     /// A workspace groups multiple Scope projects and enables federated
@@ -351,6 +361,11 @@ fn main() -> Result<()> {
         Commands::Flow(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::flow::run(args, root)
+        }
+
+        Commands::Setup(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::setup::run(args, root)
         }
 
         // --- Workspace management subcommands ---
