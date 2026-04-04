@@ -180,6 +180,17 @@ pub enum Commands {
     ///   scope similar PaymentService --kind class — find similar classes
     Similar(commands::similar::SimilarArgs),
 
+    /// One-line summary of a symbol (~30 tokens).
+    ///
+    /// Returns name, kind, location, signature, caller count, and dependency
+    /// count on a single line. Use when an agent just needs "what is this?"
+    /// without the full sketch output.
+    ///
+    /// Examples:
+    ///   scope summary PaymentService
+    ///   scope summary Graph.find_symbol
+    Summary(commands::summary::SummaryArgs),
+
     /// Fetch full source of a specific symbol.
     ///
     /// Returns the exact source code of the symbol. Only call this when
@@ -320,6 +331,10 @@ fn main() -> Result<()> {
         Commands::Similar(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::similar::run(args, root)
+        }
+        Commands::Summary(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::summary::run(args, root)
         }
         Commands::Source(args) => {
             let root = project_root_from_context(&ctx)?;

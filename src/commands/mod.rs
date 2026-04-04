@@ -16,6 +16,7 @@ pub mod similar;
 pub mod sketch;
 pub mod source;
 pub mod status;
+pub mod summary;
 pub mod trace;
 pub mod workspace;
 
