@@ -626,7 +626,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
-- [x] 16 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `flow`, `entrypoints`, `map`, `status`, `similar` (stub), `source` (stub)
+- [x] 19 commands: `init`, `index`, `sketch`, `refs`, `callers`, `deps`, `rdeps`, `impact`, `find`, `trace`, `flow`, `entrypoints`, `map`, `status`, `similar`, `source`, `diff`, `summary`
 - [x] `scope index --watch` -- auto re-index on file changes with notify crate
 - [x] Multi-project workspaces -- `scope workspace init/list/index`, `--workspace` flag on 5 commands, `--project <name>` targeting, workspace-level `--watch`
 - [x] `WorkspaceGraph` federated query facade with symbol ID namespacing
@@ -648,7 +648,12 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Query context specificity boost for mixed specific/generic searches
 
 **Next**
-- [ ] `scope similar`, `scope source` commands (currently stubs)
+- [x] `scope similar`, `scope source` commands (implemented)
+- [x] `scope diff` — symbols in git-changed files for PR triage
+- [x] `scope summary` — one-line symbol overview (~30 tokens)
+- [x] `scope sketch --compact` — 57% smaller JSON for agents
+- [x] Symbol disambiguation — ambiguous names show numbered list with qualified syntax
+- [x] Parallel file parsing with rayon
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
 - [ ] Cross-project edge detection via `scope link`
 - [ ] MCP adapter (thin wrapper over the same binary)

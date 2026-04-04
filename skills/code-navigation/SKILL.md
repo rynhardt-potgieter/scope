@@ -34,15 +34,16 @@ Scope is a CLI tool that gives you structural code intelligence without reading 
 
 **Use Scope INSTEAD of grep/find when you need to:**
 - Understand a class or function before editing it → `scope sketch`
+- Quick "what is this?" check → `scope summary` (~30 tokens)
 - Find who calls a function before changing its signature → `scope callers`
 - Search for code by what it does, not what it's named → `scope find`
 - Understand the repo architecture → `scope map`
 - Find entry points (API controllers, workers) → `scope entrypoints`
-- Check blast radius before a refactor → `scope callers --depth 2` or `scope rdeps`
+- Check blast radius before a refactor → `scope callers --depth 2`
 - Trace how requests reach a function → `scope trace`
-- Review what symbols changed in a PR → `scope diff`
-- Get just one symbol's source code → `scope source`
-- Find similar patterns or duplicates → `scope similar`
+- See what changed in a PR/branch → `scope diff`
+- Find similar code before writing new code → `scope similar`
+- Read a symbol's source without opening the whole file → `scope source`
 
 **Do NOT use Scope when:**
 - You already know the exact file and line to edit — just read the file
@@ -73,14 +74,14 @@ New task arrives
     ├─ Need to find how A connects to B?
     │      → scope flow <start> <end>     # call paths between any two symbols
     │
-    ├─ Reviewing a PR or checking what changed?
-    │      → scope diff [--ref main]      # symbols in git-changed files
+    ├─ Reviewing a PR or recent changes?
+    │      → scope diff --ref main        # symbols in changed files
     │
-    ├─ Need the actual source of a specific symbol?
-    │      → scope source <symbol>        # targeted read, just that symbol
+    ├─ Quick check — "what is this symbol?"
+    │      → scope summary <symbol>       # ~30 tokens, one-liner
     │
-    ├─ Looking for similar implementations?
-    │      → scope similar <symbol>       # structurally similar symbols
+    ├─ Need to read a specific symbol's code?
+    │      → scope source <symbol>        # exact source, no file noise
     │
     └─ Simple known-location edit?
            → Just read the file directly
@@ -126,17 +127,12 @@ scope callers <method>         → Read each call site → EDIT each
 ```
 Total: 1 scope command gives you every file to change. No need for grep.
 
-### PR Review — "What changed and what's affected?"
+### PR Review — "Review these changes"
 ```
-scope diff --ref main          → scope sketch <changed class> → Review
+scope diff --ref main          → scope summary <changed_symbol>
+                               → scope source <symbol> (if needed)
 ```
-Total: 1 diff + 1-2 sketches. Know what symbols are affected without reading every changed file.
-
-### Targeted source read — "I need the code for this one symbol"
-```
-scope source <symbol>          → EDIT
-```
-Use after navigating (via sketch, find, or trace) when you need the actual implementation. Reads just the symbol's lines, not the entire file.
+Total: 1 diff + a few summaries. diff shows which symbols live in changed files; summary gives quick context; source reads just the symbol you care about.
 
 ## Command Reference
 
@@ -153,10 +149,12 @@ Use after navigating (via sketch, find, or trace) when you need the actual imple
 | `scope entrypoints` | API controllers, workers, event handlers | varies | Understanding request flow |
 | `scope deps <symbol>` | What this depends on | varies | Understanding prerequisites |
 | `scope rdeps <symbol>` | What depends on this | varies | Before deleting/renaming |
-| `scope diff [--ref HEAD~1]` | Symbols in git-changed files | varies | PR triage, reviewing changes |
-| `scope source <symbol>` | Full source code of a symbol | varies | Targeted read after navigating |
-| `scope similar <symbol>` | Structurally similar symbols | varies | Finding patterns or duplicates |
-| `scope sketch <file> --file` | All symbols in a file | varies | When path doesn't contain `/` |
+| `scope summary <symbol>` | Name, kind, location, callers, deps | ~30 | Quick "what is this?" |
+| `scope source <symbol>` | Full source code of one symbol | varies | Reading a specific implementation |
+| `scope similar <symbol>` | Structurally similar symbols | varies | Before writing new code |
+| `scope diff [--ref <ref>]` | Symbols in git-changed files | varies | PR review, change triage |
+| `scope sketch --compact` | Same as sketch, 57% smaller JSON | ~100 | Agent JSON consumption |
+| `scope sketch --file` | All symbols in a file | varies | File-level overview |
 | `scope status` | Index health, symbol count, freshness | small | Check before querying |
 | `scope index` | Refresh the index (incremental, < 1s) | — | After editing files |
 | `scope index --watch` | Auto re-index on file changes | — | During development |
@@ -167,11 +165,13 @@ If you've run 3 scope commands and haven't edited a file yet, **stop navigating 
 
 ## Anti-Patterns — What NOT to Do
 
-1. **Don't sketch what you'll immediately read** — sketch replaces reading, not precedes it
+1. **Don't sketch when summary suffices** — if you just need "what is this?", `scope summary` is ~30 tokens vs ~200 for sketch
+2. **Don't sketch what you'll immediately read** — sketch replaces reading, not precedes it
 2. **Don't run `callers` AND `refs`** for the same symbol — callers is a subset of refs
 3. **Don't run 5+ scope commands** on any task — you're over-navigating
 4. **Don't grep when `scope find` exists** — find searches names, signatures, callers, and file paths
 5. **Don't skip `scope map`** on complex tasks — one call replaces 5-17 file reads for orientation
+6. **Don't use `--json` when `--compact` exists** — compact strips internal IDs and metadata, cutting token cost by 57%
 6. **Don't ignore line numbers** in scope output — they point you exactly where to read/edit
 7. **Don't re-index unnecessarily** — `scope status` tells you if it's stale
 
