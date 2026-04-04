@@ -353,13 +353,7 @@ fn extract_go_edge(
         // Direct function call (e.g. processPayment(...))
         1 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(
-                    from_fn.clone(),
-                    callee,
-                    "calls",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Selector/method call (e.g. s.Handle(), fmt.Println())
@@ -379,13 +373,7 @@ fn extract_go_edge(
         // Struct embedding (e.g. type Server struct { Logger })
         3 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(make_edge(
-                    from_cls.clone(),
-                    base_type,
-                    "extends",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_cls.clone(), base_type, "extends", file_path, *line));
             }
         }
         _ => {}

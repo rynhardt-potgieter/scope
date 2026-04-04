@@ -417,13 +417,7 @@ fn extract_py_edge(
         // Direct function call (e.g. `foo()`)
         2 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(
-                    from_fn.clone(),
-                    callee,
-                    "calls",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // Attribute/method call (e.g. `self.foo()`, `obj.bar()`)

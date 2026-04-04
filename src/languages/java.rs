@@ -323,26 +323,14 @@ fn extract_java_edge(
         // Direct method invocation (e.g. processPayment())
         2 => {
             if let Some((callee, line)) = captures.get("callee") {
-                edges.push(make_edge(
-                    from_fn.clone(),
-                    callee,
-                    "calls",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_fn.clone(), callee, "calls", file_path, *line));
             }
         }
         // this.method() call — captures method name only
         // super.method() call — captures method name only
         3 | 10 => {
             if let Some((method, line)) = captures.get("method") {
-                edges.push(make_edge(
-                    from_fn.clone(),
-                    method,
-                    "calls",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_fn.clone(), method, "calls", file_path, *line));
             }
         }
         // Object creation (new Foo())
@@ -360,13 +348,7 @@ fn extract_java_edge(
         // Superclass (extends)
         5 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(make_edge(
-                    from_cls.clone(),
-                    base_type,
-                    "extends",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_cls.clone(), base_type, "extends", file_path, *line));
             }
         }
         // Class implements
@@ -384,13 +366,7 @@ fn extract_java_edge(
         // Interface extends
         7 => {
             if let Some((base_type, line)) = captures.get("base_type") {
-                edges.push(make_edge(
-                    from_cls.clone(),
-                    base_type,
-                    "extends",
-                    file_path,
-                    *line,
-                ));
+                edges.push(make_edge(from_cls.clone(), base_type, "extends", file_path, *line));
             }
         }
         // Field / parameter type reference
