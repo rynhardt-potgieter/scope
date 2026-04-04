@@ -111,12 +111,16 @@ impl ScopeMcp {
 
 #[tool_router]
 impl ScopeMcp {
-    #[tool(description = "Check scope index status — symbol count, file count, freshness. Run first to verify scope is available.")]
+    #[tool(
+        description = "Check scope index status — symbol count, file count, freshness. Run first to verify scope is available."
+    )]
     async fn scope_status(&self) -> Result<CallToolResult, rmcp::ErrorData> {
         self.run(&["status", "--json"]).await
     }
 
-    #[tool(description = "Repository overview — entry points, core symbols, architecture. Use at the start of complex tasks (~500 tokens).")]
+    #[tool(
+        description = "Repository overview — entry points, core symbols, architecture. Use at the start of complex tasks (~500 tokens)."
+    )]
     async fn scope_map(
         &self,
         Parameters(p): Parameters<MapParam>,
@@ -130,7 +134,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Structural overview of a symbol — methods, caller counts, deps, signatures (~200 tokens). Use before editing.")]
+    #[tool(
+        description = "Structural overview of a symbol — methods, caller counts, deps, signatures (~200 tokens). Use before editing."
+    )]
     async fn scope_sketch(
         &self,
         Parameters(p): Parameters<SymbolParam>,
@@ -138,7 +144,9 @@ impl ScopeMcp {
         self.run(&["sketch", &p.symbol, "--compact"]).await
     }
 
-    #[tool(description = "One-line symbol summary — name, kind, file:line, callers, deps (~30 tokens). Quick 'what is this?' check.")]
+    #[tool(
+        description = "One-line symbol summary — name, kind, file:line, callers, deps (~30 tokens). Quick 'what is this?' check."
+    )]
     async fn scope_summary(
         &self,
         Parameters(p): Parameters<SymbolParam>,
@@ -146,7 +154,9 @@ impl ScopeMcp {
         self.run(&["summary", &p.symbol, "--json"]).await
     }
 
-    #[tool(description = "Fetch full source code of a symbol. Use after scope_sketch when you need the actual implementation.")]
+    #[tool(
+        description = "Fetch full source code of a symbol. Use after scope_sketch when you need the actual implementation."
+    )]
     async fn scope_source(
         &self,
         Parameters(p): Parameters<SymbolParam>,
@@ -154,7 +164,9 @@ impl ScopeMcp {
         self.run(&["source", &p.symbol, "--json"]).await
     }
 
-    #[tool(description = "Search symbols by intent — finds code by what it does, not just what it's named. Returns ranked results.")]
+    #[tool(
+        description = "Search symbols by intent — finds code by what it does, not just what it's named. Returns ranked results."
+    )]
     async fn scope_find(
         &self,
         Parameters(p): Parameters<FindParam>,
@@ -173,7 +185,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Find all references to a symbol — call sites, imports, type annotations. Use before changing signatures.")]
+    #[tool(
+        description = "Find all references to a symbol — call sites, imports, type annotations. Use before changing signatures."
+    )]
     async fn scope_refs(
         &self,
         Parameters(p): Parameters<RefsParam>,
@@ -187,7 +201,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Show callers of a symbol. depth=1 for direct, depth=2+ for transitive blast radius analysis.")]
+    #[tool(
+        description = "Show callers of a symbol. depth=1 for direct, depth=2+ for transitive blast radius analysis."
+    )]
     async fn scope_callers(
         &self,
         Parameters(p): Parameters<CallersParam>,
@@ -201,7 +217,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Show what a symbol depends on — imports, calls, type references. Understand prerequisites.")]
+    #[tool(
+        description = "Show what a symbol depends on — imports, calls, type references. Understand prerequisites."
+    )]
     async fn scope_deps(
         &self,
         Parameters(p): Parameters<DepsParam>,
@@ -215,7 +233,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Show symbols in git-changed files — cross-references git diff with the index. Use for PR review.")]
+    #[tool(
+        description = "Show symbols in git-changed files — cross-references git diff with the index. Use for PR review."
+    )]
     async fn scope_diff(
         &self,
         Parameters(p): Parameters<DiffParam>,
@@ -229,7 +249,9 @@ impl ScopeMcp {
         self.run(&args).await
     }
 
-    #[tool(description = "Trace call paths from entry points to a symbol. Shows how requests reach a function. Use for debugging.")]
+    #[tool(
+        description = "Trace call paths from entry points to a symbol. Shows how requests reach a function. Use for debugging."
+    )]
     async fn scope_trace(
         &self,
         Parameters(p): Parameters<TraceParam>,
@@ -237,7 +259,9 @@ impl ScopeMcp {
         self.run(&["trace", &p.symbol, "--json"]).await
     }
 
-    #[tool(description = "Find call paths between two symbols. Use to understand how A connects to B through the call graph.")]
+    #[tool(
+        description = "Find call paths between two symbols. Use to understand how A connects to B through the call graph."
+    )]
     async fn scope_flow(
         &self,
         Parameters(p): Parameters<FlowParam>,

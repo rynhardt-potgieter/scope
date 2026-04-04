@@ -124,7 +124,9 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     }
 
     if args.preload {
-        println!("\nSetup complete with preloading. Benchmark data shows this saves ~32% on agent cost.");
+        println!(
+            "\nSetup complete with preloading. Benchmark data shows this saves ~32% on agent cost."
+        );
     } else {
         println!("\nSetup complete. Run with --preload to bake architecture into CLAUDE.md for 32% agent cost savings.");
     }

@@ -153,10 +153,7 @@ fn sketch_class(
                 serde_json::json!(compact_symbols(&actual_methods)),
             )
         } else {
-            (
-                serde_json::json!(symbol),
-                serde_json::json!(actual_methods),
-            )
+            (serde_json::json!(symbol), serde_json::json!(actual_methods))
         };
 
         let data = serde_json::json!({
@@ -198,7 +195,11 @@ fn sketch_method(
     let incoming_callers = graph.get_incoming_callers(&symbol.id)?;
 
     if args.json || args.compact {
-        let sym = if args.compact { compact_symbol(symbol) } else { serde_json::json!(symbol) };
+        let sym = if args.compact {
+            compact_symbol(symbol)
+        } else {
+            serde_json::json!(symbol)
+        };
         let data = serde_json::json!({
             "symbol": sym,
             "calls": outgoing_calls,
@@ -229,8 +230,16 @@ fn sketch_interface(
     let implementors = graph.get_implementors(&symbol.id)?;
 
     if args.json || args.compact {
-        let sym = if args.compact { compact_symbol(symbol) } else { serde_json::json!(symbol) };
-        let meths = if args.compact { serde_json::json!(compact_symbols(&methods.iter().collect::<Vec<_>>())) } else { serde_json::json!(methods) };
+        let sym = if args.compact {
+            compact_symbol(symbol)
+        } else {
+            serde_json::json!(symbol)
+        };
+        let meths = if args.compact {
+            serde_json::json!(compact_symbols(&methods.iter().collect::<Vec<_>>()))
+        } else {
+            serde_json::json!(methods)
+        };
         let data = serde_json::json!({
             "symbol": sym,
             "methods": meths,
@@ -275,7 +284,11 @@ fn sketch_enum(
                 })
             })
             .collect();
-        let sym = if args.compact { compact_symbol(symbol) } else { serde_json::json!(symbol) };
+        let sym = if args.compact {
+            compact_symbol(symbol)
+        } else {
+            serde_json::json!(symbol)
+        };
         let data = serde_json::json!({
             "symbol": sym,
             "variants": variant_data,
@@ -299,7 +312,11 @@ fn sketch_enum(
 /// Sketch a generic symbol (const, type).
 fn sketch_generic(args: &SketchArgs, symbol: &crate::core::graph::Symbol) -> Result<()> {
     if args.json || args.compact {
-        let sym = if args.compact { compact_symbol(symbol) } else { serde_json::json!(symbol) };
+        let sym = if args.compact {
+            compact_symbol(symbol)
+        } else {
+            serde_json::json!(symbol)
+        };
         let data = serde_json::json!({
             "symbol": sym,
         });
@@ -337,7 +354,7 @@ fn run_file_sketch(args: &SketchArgs, graph: &Graph) -> Result<()> {
 
     if args.json || args.compact {
         let sym_data = if args.compact {
-            serde_json::json!(symbols.iter().map(|s| compact_symbol(s)).collect::<Vec<_>>())
+            serde_json::json!(symbols.iter().map(compact_symbol).collect::<Vec<_>>())
         } else {
             serde_json::json!(symbols)
         };

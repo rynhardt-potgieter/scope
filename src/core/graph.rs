@@ -71,7 +71,6 @@ impl ChangedFiles {
     pub fn is_empty(&self) -> bool {
         self.added.is_empty() && self.modified.is_empty() && self.deleted.is_empty()
     }
-
 }
 
 /// Relationships of a class symbol: inheritance, interfaces, and dependencies.
@@ -1986,7 +1985,6 @@ impl Graph {
 
         Ok(stale)
     }
-
 }
 
 /// Check if a file path belongs to a test file.

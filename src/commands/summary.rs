@@ -119,7 +119,10 @@ fn run_file_summary(args: &SummaryArgs, graph: &Graph) -> Result<()> {
     }
 
     let top_level: Vec<_> = symbols.iter().filter(|s| s.parent_id.is_none()).collect();
-    let kinds: Vec<_> = top_level.iter().map(|s| format!("{} {}", s.kind, s.name)).collect();
+    let kinds: Vec<_> = top_level
+        .iter()
+        .map(|s| format!("{} {}", s.kind, s.name))
+        .collect();
 
     if args.json {
         let data = serde_json::json!({

@@ -160,10 +160,7 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
                             sig.lines().next().unwrap_or(sig)
                         })
                         .unwrap_or("");
-                    println!(
-                        "    {} {}  :{}  {}",
-                        s.kind, s.name, s.line_start, sig,
-                    );
+                    println!("    {} {}  :{}  {}", s.kind, s.name, s.line_start, sig,);
                 }
             }
         }
