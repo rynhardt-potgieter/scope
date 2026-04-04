@@ -7,6 +7,7 @@ use clap::Args;
 use std::path::Path;
 
 use crate::core::graph::Graph;
+use crate::output::json::JsonOutput;
 
 /// Arguments for the `scope source` command.
 #[derive(Args, Debug)]
@@ -71,7 +72,7 @@ pub fn run(args: &SourceArgs, project_root: &Path) -> Result<()> {
     let source_lines = &lines[start..end];
 
     if args.json {
-        let output = serde_json::json!({
+        let data = serde_json::json!({
             "symbol": sym.name,
             "kind": sym.kind,
             "file_path": sym.file_path,
@@ -80,7 +81,14 @@ pub fn run(args: &SourceArgs, project_root: &Path) -> Result<()> {
             "signature": sym.signature,
             "source": source_lines.join("\n"),
         });
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        let envelope = JsonOutput {
+            command: "source",
+            symbol: Some(sym.name.clone()),
+            data: &data,
+            truncated: false,
+            total: 1,
+        };
+        println!("{}", serde_json::to_string_pretty(&envelope)?);
     } else {
         println!(
             "// {}  {}:{}–{}",
