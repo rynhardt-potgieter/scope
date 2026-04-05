@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.9.2 (2026-04-05)
+
+### New Features
+- **MCP server (`scope-mcp`)** — standalone binary wrapping 12 scope commands as MCP tools over stdio. Agents get structured tool calls without needing `Bash(scope:*)` permissions. Works with Claude Desktop, Claude Code, Cursor, and any MCP-compatible client.
+- **`scope summary <symbol>`** — one-line overview (~30 tokens). Name, kind, location, signature, callers, deps. The fastest "what is this?" check.
+- **`scope setup [--preload]`** — one-command agent integration: init + index + CLAUDE.md snippet + skill install. `--preload` bakes `scope map` output into CLAUDE.md — benchmarks show 32% agent cost savings.
+- **`scope sketch --compact`** — strips internal IDs, metadata, and language from JSON output. 57% smaller (44KB → 19KB for Graph). Implies `--json`.
+- **`scope map --compact`** — caps entrypoints at 10 per category. 89% smaller (46KB → 5KB). Implies `--json`.
+- **Staleness detection** — all query commands warn on stderr when files have changed since the last index.
+
+### Performance
+- **`parent_id` index** — `get_methods` now uses index lookup instead of full table scan.
+
+### Security
+- **Path traversal guard** on `scope source` — `canonicalize()` + `starts_with(project_root)` prevents reading outside the project root.
+
+### Code Quality
+- Dead code cleanup — removed unused structs/functions, moved test-only items behind `#[cfg(test)]`.
+- Updated README with MCP server docs, `scope setup`, and staleness detection.
+- Updated landing page with MCP section and new commands.
+- 330 tests total (including MCP integration tests).
+
+*Community contribution by [Dawid Piaskowski](https://github.com/googlarz).*
+
+---
+
 ## v0.9.1 (2026-04-04)
 
 ### New Features

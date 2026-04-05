@@ -542,6 +542,7 @@
   <ul class="nav-links">
     <li><a href="#demo">demo</a></li>
     <li><a href="#commands">commands</a></li>
+    <li><a href="#mcp">mcp</a></li>
     <li><a href="#setup">setup</a></li>
     <li><a href="#workspaces">workspaces</a></li>
     <li><a href="#languages">languages</a></li>
@@ -561,7 +562,7 @@
         <span>·</span>
         <span>git:main</span>
         <span>·</span>
-        <span>open source · MIT · v0.9.1</span>
+        <span>open source · MIT · v0.9.2</span>
       </div>
 
       <h1 class="hero-title">
@@ -774,7 +775,38 @@
       <div class="cmd-card"><div class="cmd-name">scope diff</div><div class="cmd-sig">[--ref &lt;git-ref&gt;] [--json]</div><div class="cmd-desc">Cross-references git diff with the index. Shows which symbols live in changed files. Perfect for PR triage — know what was affected without reading diffs.</div><div class="cmd-when"><strong>use when:</strong> reviewing a PR or checking what changed.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope source</div><div class="cmd-sig">&lt;symbol&gt; [--json]</div><div class="cmd-desc">Print the full source of a symbol between its start and end lines. When you've found the right symbol via sketch or find and need the actual code.</div><div class="cmd-when"><strong>use when:</strong> you need the real code after navigating.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope similar</div><div class="cmd-sig">&lt;symbol&gt; [--limit N] [--json]</div><div class="cmd-desc">Find structurally similar symbols via FTS5. Seeded from the target's kind, name, and signature. Great for finding parallel implementations or duplicates.</div><div class="cmd-when"><strong>use when:</strong> looking for patterns or duplicates.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope summary</div><div class="cmd-sig">&lt;symbol&gt; [--json]</div><div class="cmd-desc">One-line overview: name, kind, location, signature, callers, deps. ~30 tokens. The fastest way to answer "what is this?" without a full sketch.</div><div class="cmd-when"><strong>use when:</strong> quick check before deciding to sketch.</div></div>
+      <div class="cmd-card"><div class="cmd-name">scope setup</div><div class="cmd-sig">[--preload] [--json]</div><div class="cmd-desc">One-command agent integration: init + index + CLAUDE.md + skill install. --preload bakes architecture into CLAUDE.md for 32% agent cost savings.</div><div class="cmd-when"><strong>use:</strong> first time setting up scope in a project.</div></div>
       <div class="cmd-card"><div class="cmd-name">scope status</div><div class="cmd-sig">[--json]</div><div class="cmd-desc">Index health check. Symbol count, file count, last indexed time, stale files. Know if your index is fresh before range-based edits.</div><div class="cmd-when"><strong>use when:</strong> checking if the index is stale.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MCP -->
+<section id="mcp" style="border-top: 1px solid var(--border);">
+  <div class="container">
+    <div class="reveal">
+      <div class="eyebrow">// mcp server</div>
+      <h2 class="sec-h">structured tools.<br>no bash required.</h2>
+      <p class="sec-p">
+        <code style="color:var(--amber)">scope-mcp</code> wraps all commands as MCP tools over stdio.
+        agents get typed parameters and JSON results — no <code style="color:var(--cyan)">Bash(scope:*)</code> permissions needed.
+        works with Claude Desktop, Claude Code, Cursor, and any MCP-compatible client.
+      </p>
+    </div>
+    <div class="reveal" style="transition-delay:0.15s">
+      <div class="codeblock" style="max-width:520px; margin-top:2rem;">
+        <span class="cm">// add to your MCP client config</span><br>
+        {<br>
+        &nbsp;&nbsp;<span class="kw">"mcpServers"</span>: {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="arg">"scope"</span>: { <span class="kw">"command"</span>: <span class="arg">"scope-mcp"</span> }<br>
+        &nbsp;&nbsp;}<br>
+        }
+      </div>
+      <p class="sec-p" style="margin-top:1.5rem;">
+        12 tools exposed — status, map, sketch, summary, source, find, refs, callers, deps, diff, trace, flow.
+        uses <code style="color:var(--cyan)">--compact</code> by default to minimize token cost.
+      </p>
     </div>
   </div>
 </section>

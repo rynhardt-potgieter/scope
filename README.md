@@ -16,7 +16,7 @@
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.9.1-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.2-blue.svg)](https://github.com/rynhardt-potgieter/scope/releases)
 [![Build](https://img.shields.io/badge/build-passing-22863a)](https://github.com/rynhardt-potgieter/scope/actions)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#installation)
 [![Stars](https://img.shields.io/github/stars/rynhardt-potgieter/scope?style=flat)](https://github.com/rynhardt-potgieter/scope/stargazers)
@@ -122,7 +122,7 @@ After installation, verify with:
 
 ```bash
 scope --version
-# scope 0.9.1
+# scope 0.9.2
 ```
 
 ---
@@ -570,6 +570,32 @@ That's it. No command lists, no workflows — all of that lives in the skill fil
 
 See [`skills/README.md`](skills/README.md) for more details. The snippet also works with Cursor, Aider, and any agent that reads project instructions.
 
+### MCP server
+
+Scope also ships an MCP server (`scope-mcp`) that exposes all commands as structured tools over stdio. Agents get typed parameters and JSON results without needing `Bash(scope:*)` permissions.
+
+```bash
+# Install
+cargo install --path mcp
+
+# Or build from workspace root
+cargo build --release -p scope-mcp
+```
+
+Add to your MCP client config (Claude Desktop, Claude Code, Cursor, etc.):
+
+```json
+{
+  "mcpServers": {
+    "scope": {
+      "command": "scope-mcp"
+    }
+  }
+}
+```
+
+The MCP server exposes 12 tools: `scope_status`, `scope_map`, `scope_sketch`, `scope_summary`, `scope_source`, `scope_find`, `scope_refs`, `scope_callers`, `scope_deps`, `scope_diff`, `scope_trace`, and `scope_flow`. It uses `--compact` where available to minimize token cost and strips the `JsonOutput` envelope since MCP provides its own.
+
 ---
 
 ## Building from source
@@ -637,7 +663,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 
 ## Roadmap
 
-**v0.1.0 -- v0.9.1 (current)**
+**v0.1.0 -- v0.9.2 (current)**
 - [x] TypeScript and C# symbol extraction with edge detection
 - [x] SQLite dependency graph with recursive impact traversal
 - [x] Full-text search with FTS5, BM25 ranking, and importance-tier boosting
@@ -671,7 +697,7 @@ Results are committed per release in `benchmarks/results/vX.Y.Z/`. See [`benchma
 - [x] Parallel file parsing with rayon
 - [ ] Vector embeddings via local ONNX model (replacing FTS5 for `scope find`)
 - [ ] Cross-project edge detection via `scope link`
-- [ ] MCP adapter (thin wrapper over the same binary)
+- [x] MCP server (`scope-mcp`) — structured tool access for any MCP client
 
 **Later**
 - [ ] Kotlin and Ruby language support

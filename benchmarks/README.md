@@ -38,7 +38,7 @@ cargo build
 # 2. Install scope globally (needed for with-scope and preloaded conditions)
 cd ../..
 cargo install --path .
-scope --version    # Should print scope 0.9.1+
+scope --version    # Should print scope 0.9.2+
 
 # 3. Set your API key
 ```
@@ -62,7 +62,7 @@ To persist the key across sessions (Windows):
 ```bash
 # 4. Verify everything
 claude --version   # Should print 2.x.x
-scope --version    # Should print scope 0.9.1+
+scope --version    # Should print scope 0.9.2+
 cd benchmarks/runner
 cargo run -- --version  # Should print benchmark 0.6.6+
 ```
