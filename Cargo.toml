@@ -164,3 +164,11 @@ path = "tests/integration/test_source.rs"
 [[test]]
 name = "test_diff"
 path = "tests/integration/test_diff.rs"
+
+[[test]]
+name = "test_summary"
+path = "tests/integration/test_summary.rs"
+
+[[test]]
+name = "test_setup"
+path = "tests/integration/test_setup.rs"

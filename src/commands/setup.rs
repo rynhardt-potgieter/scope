@@ -12,6 +12,8 @@ use anyhow::Result;
 use clap::Args;
 use std::path::Path;
 
+use crate::output::json::JsonOutput;
+
 /// Arguments for the `scope setup` command.
 #[derive(Args, Debug)]
 pub struct SetupArgs {
@@ -22,6 +24,10 @@ pub struct SetupArgs {
     /// architecture when the conversation starts.
     #[arg(long)]
     pub preload: bool,
+
+    /// Output as JSON instead of human-readable format
+    #[arg(long, short = 'j')]
+    pub json: bool,
 }
 
 /// Run the `scope setup` command.
@@ -30,18 +36,22 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
 
     // Step 1: Init (skip if already done)
     if !scope_dir.exists() {
-        println!("Initialising scope...");
-        let init_args = crate::commands::init::InitArgs { json: false };
+        if !args.json {
+            println!("Initialising scope...");
+        }
+        let init_args = crate::commands::init::InitArgs { json: args.json };
         crate::commands::init::run(&init_args, project_root)?;
-    } else {
+    } else if !args.json {
         println!("scope already initialised, skipping init.");
     }
 
     // Step 2: Full index
-    println!("Building index...");
+    if !args.json {
+        println!("Building index...");
+    }
     let index_args = crate::commands::index::IndexArgs {
         full: true,
-        json: false,
+        json: args.json,
         watch: false,
     };
     crate::commands::index::run(&index_args, project_root)?;
@@ -53,7 +63,9 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     // Check if CLAUDE.md already has the snippet
     let existing = std::fs::read_to_string(&claude_md_path).unwrap_or_default();
     if existing.contains(snippet_marker) {
-        println!("CLAUDE.md already has Code Navigation section, skipping.");
+        if !args.json {
+            println!("CLAUDE.md already has Code Navigation section, skipping.");
+        }
     } else {
         let mut snippet = format!(
             "\n\n{snippet_marker}\n\n\
@@ -107,7 +119,9 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
         let mut content = existing;
         content.push_str(&snippet);
         std::fs::write(&claude_md_path, content)?;
-        println!("Appended Code Navigation section to CLAUDE.md");
+        if !args.json {
+            println!("Appended Code Navigation section to CLAUDE.md");
+        }
     }
 
     // Step 5: Copy skill file
@@ -118,12 +132,29 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
         // For installed scope, we generate a minimal skill pointer.
         let skill_content = include_str!("../../skills/code-navigation/SKILL.md");
         std::fs::write(skill_dir.join("SKILL.md"), skill_content)?;
-        println!("Installed code-navigation skill to .claude/skills/");
-    } else {
+        if !args.json {
+            println!("Installed code-navigation skill to .claude/skills/");
+        }
+    } else if !args.json {
         println!("code-navigation skill already installed, skipping.");
     }
 
-    if args.preload {
+    if args.json {
+        let data = serde_json::json!({
+            "preloaded": args.preload,
+            "scope_dir": ".scope/",
+            "claude_md_updated": true,
+            "skill_installed": true,
+        });
+        let envelope = JsonOutput {
+            command: "setup",
+            symbol: None,
+            data: &data,
+            truncated: false,
+            total: 1,
+        };
+        println!("{}", serde_json::to_string_pretty(&envelope)?);
+    } else if args.preload {
         println!(
             "\nSetup complete with preloading. Benchmark data shows this saves ~32% on agent cost."
         );

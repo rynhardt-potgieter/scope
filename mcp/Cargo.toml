@@ -11,11 +11,15 @@ path = "src/main.rs"
 
 [dependencies]
 rmcp = { version = "0.16", features = ["server", "transport-io"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-schemars = "0.8"
+schemars = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 which = "7"
+dirs = "6"
 anyhow = "1"
+
+[dev-dependencies]
+assert_cmd = "2"

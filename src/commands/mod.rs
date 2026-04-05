@@ -59,10 +59,10 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
                 ));
             }
             msg.push_str(&format!(
-                "\nUse a qualified name to disambiguate:\n  scope <cmd> {}::{}::{}\n",
+                "\nUse a qualified name to disambiguate:\n  scope <cmd> {}::{}::{}",
                 all[0].file_path, all[0].name, all[0].kind,
             ));
-            eprintln!("{msg}");
+            anyhow::bail!("{msg}");
         }
         return Ok(sym);
     }
@@ -81,14 +81,10 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
 /// table scan (~1ms for 100 files) so it's cheap enough to run on every
 /// query command.
 pub fn warn_if_stale(graph: &Graph, project_root: &std::path::Path) {
-    match graph.count_stale_files(project_root) {
-        Ok(0) => {}
-        Ok(n) => {
-            eprintln!(
-                "Warning: {n} file(s) changed since last index. Run `scope index` for accurate results."
-            );
-        }
-        Err(_) => {} // silently skip if check fails
+    if let Ok(true) = graph.has_stale_files(project_root) {
+        eprintln!(
+            "Warning: file(s) changed since last index. Run `scope index` for accurate results."
+        );
     }
 }
 

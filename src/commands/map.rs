@@ -137,6 +137,7 @@ fn run_single(args: &MapArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     // 1. Gather statistics.
     let stats = MapStats {

@@ -291,7 +291,7 @@ impl Graph {
     pub fn find_symbol_by_id_prefix(&self, prefix: &str) -> Result<Option<Symbol>> {
         self.conn
             .query_row(
-                "SELECT * FROM symbols WHERE id LIKE ?1 || '%' LIMIT 1",
+                "SELECT * FROM symbols WHERE substr(id, 1, length(?1)) = ?1 LIMIT 1",
                 params![prefix],
                 Symbol::from_row,
             )
@@ -1956,9 +1956,10 @@ impl Graph {
         Ok(ts)
     }
 
-    /// Quick staleness check: count files whose on-disk mtime is newer
-    /// than their `indexed_at` timestamp. Returns 0 if everything is fresh.
-    pub fn count_stale_files(&self, project_root: &Path) -> Result<usize> {
+    /// Quick staleness check: returns `true` if any indexed file has been
+    /// modified since its `indexed_at` timestamp. Short-circuits on first
+    /// stale file found — O(1) best case for large repos.
+    pub fn has_stale_files(&self, project_root: &Path) -> Result<bool> {
         let mut stmt = self
             .conn
             .prepare("SELECT file_path, indexed_at FROM file_hashes")?;
@@ -1966,7 +1967,6 @@ impl Graph {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })?;
 
-        let mut stale = 0;
         for row in rows {
             let (file_path, indexed_at) = row?;
             let full_path = project_root.join(&file_path);
@@ -1977,13 +1977,13 @@ impl Graph {
                         .unwrap_or_default()
                         .as_secs() as i64;
                     if mtime_secs > indexed_at {
-                        stale += 1;
+                        return Ok(true);
                     }
                 }
             }
         }
 
-        Ok(stale)
+        Ok(false)
     }
 }
 

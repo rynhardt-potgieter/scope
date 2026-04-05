@@ -51,6 +51,7 @@ pub fn run(args: &SimilarArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
     let searcher = Searcher::open(&db_path)?;
 
     // Look up the source symbol

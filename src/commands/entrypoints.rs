@@ -164,6 +164,7 @@ fn run_single(args: &EntrypointsArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
     let raw_entrypoints = graph.get_entrypoints()?;
     let (groups, total, file_count) = collapse_and_group(&raw_entrypoints, &graph);
 

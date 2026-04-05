@@ -42,6 +42,7 @@ pub fn run(args: &RdepsArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     let result = if looks_like_file_path(&args.symbol) {
         let file_path = formatter::normalize_path(&args.symbol);
