@@ -3,7 +3,6 @@
 /// These tests drive the MCP server over stdin/stdout using JSON-RPC
 /// messages, verifying the protocol handshake, tool listing, and tool
 /// execution.
-use assert_cmd::Command;
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{ChildStdin, Stdio};

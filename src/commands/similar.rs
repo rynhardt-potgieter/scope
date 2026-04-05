@@ -54,15 +54,8 @@ pub fn run(args: &SimilarArgs, project_root: &Path) -> Result<()> {
     crate::commands::warn_if_stale(&graph, project_root);
     let searcher = Searcher::open(&db_path)?;
 
-    // Look up the source symbol
-    let symbol = graph.find_symbol(&args.symbol)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Symbol '{}' not found in index.\n\
-             Tip: Check spelling, or use 'scope find \"{}\"' for semantic search.",
-            args.symbol,
-            args.symbol
-        )
-    })?;
+    // Look up the source symbol (resolve handles ambiguity + qualified names)
+    let symbol = crate::commands::resolve_symbol(&graph, &args.symbol)?;
 
     // Build a search query from the symbol's structural properties.
     // Include kind, name parts, signature, and parent context so FTS5
