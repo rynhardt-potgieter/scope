@@ -70,19 +70,17 @@ pub async fn run_scope(
         .spawn()
         .map_err(|e| format!("Failed to spawn scope: {e}"))?;
 
-    let output = match tokio::time::timeout(
-        Duration::from_secs(TIMEOUT_SECS),
-        child.wait_with_output(),
-    )
-    .await
-    {
-        Ok(result) => result.map_err(|e| format!("Failed to wait for scope: {e}"))?,
-        Err(_) => {
-            // Timeout expired. The child future is dropped here which
-            // sends SIGKILL on Unix and reaps the process.
-            return Err(format!("scope command timed out after {TIMEOUT_SECS}s"));
-        }
-    };
+    let output =
+        match tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), child.wait_with_output())
+            .await
+        {
+            Ok(result) => result.map_err(|e| format!("Failed to wait for scope: {e}"))?,
+            Err(_) => {
+                // Timeout expired. The child future is dropped here which
+                // sends SIGKILL on Unix and reaps the process.
+                return Err(format!("scope command timed out after {TIMEOUT_SECS}s"));
+            }
+        };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
