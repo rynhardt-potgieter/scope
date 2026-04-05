@@ -15,11 +15,27 @@ use std::path::Path;
 
 use crate::output::json::JsonOutput;
 
+/// Locate the scope binary for subprocess invocation.
+///
+/// Prefers `current_exe()` but falls back to bare `"scope"` (resolved
+/// via PATH) when the current binary path is invalid — which happens
+/// with wrapper scripts, `cargo run`, or in-place upgrades on Linux.
+fn find_scope_bin() -> std::path::PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        // On Linux, in-place upgrades append " (deleted)" to /proc/self/exe.
+        let s = exe.to_string_lossy();
+        if !s.contains(" (deleted)") && exe.exists() {
+            return exe;
+        }
+    }
+    std::path::PathBuf::from("scope")
+}
+
 /// Run a scope subcommand as a subprocess, suppressing its stdout.
 /// Used by --json mode to prevent child commands from polluting the
 /// JSON output stream. Stderr is inherited so warnings still appear.
 fn run_subprocess(project_root: &Path, args: &[&str]) -> Result<()> {
-    let scope_bin = std::env::current_exe()?;
+    let scope_bin = find_scope_bin();
     let status = std::process::Command::new(scope_bin)
         .args(args)
         .current_dir(project_root)

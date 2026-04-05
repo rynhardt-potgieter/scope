@@ -1977,15 +1977,19 @@ impl Graph {
     /// modified or deleted since its `indexed_at` timestamp. Short-circuits
     /// on first stale file found — O(1) best case for large repos.
     pub fn has_stale_files(&self, project_root: &Path) -> Result<bool> {
-        let mut stmt = self
+        // Quick check: compare the most-recently-indexed file's mtime first.
+        // This catches the common case (active development on recent files)
+        // with a single stat() call instead of scanning every row.
+        let newest: Option<(String, i64)> = self
             .conn
-            .prepare("SELECT file_path, indexed_at FROM file_hashes")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })?;
+            .query_row(
+                "SELECT file_path, indexed_at FROM file_hashes ORDER BY indexed_at DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
 
-        for row in rows {
-            let (file_path, indexed_at) = row?;
+        if let Some((file_path, indexed_at)) = newest {
             let full_path = project_root.join(&file_path);
             match std::fs::metadata(&full_path) {
                 Ok(meta) => {
@@ -1999,10 +2003,33 @@ impl Graph {
                         }
                     }
                 }
-                Err(_) => {
-                    // File was deleted since last index
-                    return Ok(true);
+                Err(_) => return Ok(true),
+            }
+        }
+
+        // Full scan: iterate remaining rows but return on first stale hit.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path, indexed_at FROM file_hashes")?;
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            let file_path: String = row.get(0)?;
+            let indexed_at: i64 = row.get(1)?;
+            let full_path = project_root.join(&file_path);
+            match std::fs::metadata(&full_path) {
+                Ok(meta) => {
+                    if let Ok(mtime) = meta.modified() {
+                        let mtime_secs = mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if mtime_secs > indexed_at {
+                            return Ok(true);
+                        }
+                    }
                 }
+                Err(_) => return Ok(true),
             }
         }
 

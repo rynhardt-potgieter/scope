@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 
 const TIMEOUT_SECS: u64 = 30;
 
@@ -62,7 +62,7 @@ pub async fn run_scope(
     args: &[&str],
     cwd: &Path,
 ) -> Result<serde_json::Value, String> {
-    let child: Child = Command::new(scope_bin)
+    let child = Command::new(scope_bin)
         .args(args)
         .current_dir(cwd)
         .stdout(Stdio::piped())
@@ -70,17 +70,16 @@ pub async fn run_scope(
         .spawn()
         .map_err(|e| format!("Failed to spawn scope: {e}"))?;
 
-    // wait_with_output takes ownership, so wrap in an Option for the timeout branch.
-    let mut child_opt = Some(child);
-    let output = tokio::select! {
-        result = async { child_opt.take().unwrap().wait_with_output().await } => {
-            result.map_err(|e| format!("Failed to wait for scope: {e}"))?
-        }
-        _ = tokio::time::sleep(Duration::from_secs(TIMEOUT_SECS)) => {
-            if let Some(mut c) = child_opt.take() {
-                c.kill().await.ok();
-                c.wait().await.ok(); // reap to avoid zombie
-            }
+    let output = match tokio::time::timeout(
+        Duration::from_secs(TIMEOUT_SECS),
+        child.wait_with_output(),
+    )
+    .await
+    {
+        Ok(result) => result.map_err(|e| format!("Failed to wait for scope: {e}"))?,
+        Err(_) => {
+            // Timeout expired. The child future is dropped here which
+            // sends SIGKILL on Unix and reaps the process.
             return Err(format!("scope command timed out after {TIMEOUT_SECS}s"));
         }
     };

@@ -38,11 +38,12 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
         }
     }
 
-    // Try normal resolution first
-    if let Some(sym) = graph.find_symbol(name)? {
-        // Check if ambiguous
-        let all = graph.find_all_matching_symbols(name)?;
-        if all.len() > 1 {
+    // Single query: fetch all matches and decide based on count.
+    let all = graph.find_all_matching_symbols(name)?;
+    match all.len() {
+        0 => {}
+        1 => return Ok(all.into_iter().next().unwrap()),
+        _ => {
             let mut msg = format!(
                 "Ambiguous symbol '{}' matches {} definitions:\n",
                 name,
@@ -64,6 +65,10 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
             ));
             anyhow::bail!("{msg}");
         }
+    }
+
+    // No exact match — try qualified name (ClassName.methodName)
+    if let Some(sym) = graph.find_symbol(name)? {
         return Ok(sym);
     }
 

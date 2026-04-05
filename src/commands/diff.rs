@@ -63,9 +63,18 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
         bail!("No index found. Run 'scope index' first.");
     }
 
-    // Validate ref doesn't look like a flag (prevents injection into git args).
+    // Validate ref: reject flags, git object paths, and NUL bytes.
     if args.r#ref.starts_with('-') {
         bail!("Invalid git ref '{}': must not start with '-'", args.r#ref);
+    }
+    if args.r#ref.contains(':') {
+        bail!(
+            "Invalid git ref '{}': must not contain ':' (use a branch or tag name)",
+            args.r#ref
+        );
+    }
+    if args.r#ref.contains('\0') {
+        bail!("Invalid git ref: must not contain NUL bytes");
     }
 
     // Get changed files from git

@@ -12,8 +12,15 @@ use std::time::Duration;
 /// Wrapper that owns BufReader over stdout to avoid re-creating it per call.
 struct McpSession {
     stdin: ChildStdin,
-    reader: BufReader<std::process::ChildStdout>,
-    _child: std::process::Child,
+    reader: Option<BufReader<std::process::ChildStdout>>,
+    child: std::process::Child,
+}
+
+impl Drop for McpSession {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 impl McpSession {
@@ -32,8 +39,8 @@ impl McpSession {
 
         Self {
             stdin,
-            reader,
-            _child: child,
+            reader: Some(reader),
+            child,
         }
     }
 
@@ -41,8 +48,20 @@ impl McpSession {
         writeln!(self.stdin, "{}", serde_json::to_string(msg).unwrap()).unwrap();
         self.stdin.flush().unwrap();
 
-        let mut line = String::new();
-        self.reader.read_line(&mut line).ok()?;
+        // Move reader into a thread to enforce a 30s timeout, then take it back.
+        let mut reader = self.reader.take().expect("reader already consumed");
+        let handle = std::thread::spawn(move || {
+            let mut line = String::new();
+            let result = reader.read_line(&mut line);
+            (reader, line, result)
+        });
+
+        let (reader, line, result) = match handle.join() {
+            Ok(tuple) => tuple,
+            Err(_) => panic!("reader thread panicked"),
+        };
+        self.reader = Some(reader);
+        result.ok()?;
 
         if line.trim().is_empty() {
             return None;

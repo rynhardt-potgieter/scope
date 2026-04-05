@@ -298,7 +298,9 @@ impl ScopeMcp {
     async fn run(&self, args: &[&str]) -> Result<CallToolResult, rmcp::ErrorData> {
         match runner::run_scope(&self.scope_bin, args, &self.project_root).await {
             Ok(data) => {
-                let text = serde_json::to_string_pretty(&data).unwrap_or_default();
+                // Value serialization is infallible (no non-string map keys possible).
+                let text = serde_json::to_string_pretty(&data)
+                    .expect("serde_json::Value serialization is infallible");
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
             Err(msg) => Ok(CallToolResult::error(vec![Content::text(msg)])),
