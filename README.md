@@ -187,7 +187,7 @@ scope status                             # is my index fresh?
 Scope warns you automatically when querying a stale index:
 
 ```
-Warning: 3 file(s) changed since last index. Run `scope index` for accurate results.
+Warning: file(s) changed since last index. Run `scope index` for accurate results.
 ```
 
 To refresh:

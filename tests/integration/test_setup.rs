@@ -57,13 +57,20 @@ fn test_setup_json_output() {
         .stdout
         .clone();
 
-    // JSON output may contain multiple JSON objects (init + index + setup envelope).
-    // The last valid JSON line should be the setup envelope.
+    // --json emits a pretty-printed JSON envelope. Child commands (init,
+    // index) may print human-readable lines before it. Extract the JSON
+    // block that starts with the last top-level '{'.
     let text = String::from_utf8_lossy(&output);
     let lines: Vec<&str> = text.lines().collect();
-    // Find the line containing "setup" command
-    let has_setup = lines.iter().any(|l| l.contains("\"setup\""));
-    assert!(has_setup, "No setup JSON in output: {text}");
+    let json_start = lines
+        .iter()
+        .rposition(|l| *l == "{")
+        .expect("should contain a JSON object");
+    let json_text = lines[json_start..].join("\n");
+    let json: serde_json::Value =
+        serde_json::from_str(&json_text).expect("JSON block should parse");
+    assert_eq!(json["command"], "setup");
+    assert!(json["data"]["indexed"].as_bool().unwrap_or(false));
 }
 
 #[test]

@@ -1957,8 +1957,8 @@ impl Graph {
     }
 
     /// Quick staleness check: returns `true` if any indexed file has been
-    /// modified since its `indexed_at` timestamp. Short-circuits on first
-    /// stale file found — O(1) best case for large repos.
+    /// modified or deleted since its `indexed_at` timestamp. Short-circuits
+    /// on first stale file found — O(1) best case for large repos.
     pub fn has_stale_files(&self, project_root: &Path) -> Result<bool> {
         let mut stmt = self
             .conn
@@ -1970,15 +1970,21 @@ impl Graph {
         for row in rows {
             let (file_path, indexed_at) = row?;
             let full_path = project_root.join(&file_path);
-            if let Ok(meta) = std::fs::metadata(&full_path) {
-                if let Ok(mtime) = meta.modified() {
-                    let mtime_secs = mtime
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs() as i64;
-                    if mtime_secs > indexed_at {
-                        return Ok(true);
+            match std::fs::metadata(&full_path) {
+                Ok(meta) => {
+                    if let Ok(mtime) = meta.modified() {
+                        let mtime_secs = mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if mtime_secs > indexed_at {
+                            return Ok(true);
+                        }
                     }
+                }
+                Err(_) => {
+                    // File was deleted since last index
+                    return Ok(true);
                 }
             }
         }

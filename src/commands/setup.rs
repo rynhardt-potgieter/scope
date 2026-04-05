@@ -8,6 +8,7 @@
 /// Examples:
 ///   scope setup              — init + index + write CLAUDE.md snippet
 ///   scope setup --preload    — same, plus bake scope map into CLAUDE.md
+///   scope setup --json       — machine-readable single JSON envelope
 use anyhow::Result;
 use clap::Args;
 use std::path::Path;
@@ -34,24 +35,31 @@ pub struct SetupArgs {
 pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
 
-    // Step 1: Init (skip if already done)
+    // Track what actually happened for accurate JSON output.
+    let mut did_init = false;
+    let mut did_claude_md = false;
+    let mut did_skill = false;
+
+    // Step 1: Init (skip if already done).
+    // Always pass json: false to children — setup emits one envelope at the end.
     if !scope_dir.exists() {
         if !args.json {
             println!("Initialising scope...");
         }
-        let init_args = crate::commands::init::InitArgs { json: args.json };
+        let init_args = crate::commands::init::InitArgs { json: false };
         crate::commands::init::run(&init_args, project_root)?;
+        did_init = true;
     } else if !args.json {
         println!("scope already initialised, skipping init.");
     }
 
-    // Step 2: Full index
+    // Step 2: Full index (always json: false — we emit our own envelope).
     if !args.json {
         println!("Building index...");
     }
     let index_args = crate::commands::index::IndexArgs {
         full: true,
-        json: args.json,
+        json: false,
         watch: false,
     };
     crate::commands::index::run(&index_args, project_root)?;
@@ -60,7 +68,6 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let claude_md_path = project_root.join("CLAUDE.md");
     let snippet_marker = "## Code Navigation";
 
-    // Check if CLAUDE.md already has the snippet
     let existing = std::fs::read_to_string(&claude_md_path).unwrap_or_default();
     if existing.contains(snippet_marker) {
         if !args.json {
@@ -88,7 +95,6 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
                     graph.edge_count()?,
                 );
 
-                // Get core symbols
                 let core = graph.get_symbols_by_importance(10)?;
                 let core_lines: Vec<String> = core
                     .iter()
@@ -97,7 +103,6 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
                     })
                     .collect();
 
-                // Get architecture
                 let dirs = graph.get_directory_stats()?;
                 let arch_lines: Vec<String> = dirs
                     .iter()
@@ -115,10 +120,10 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
             }
         }
 
-        // Append to CLAUDE.md
         let mut content = existing;
         content.push_str(&snippet);
         std::fs::write(&claude_md_path, content)?;
+        did_claude_md = true;
         if !args.json {
             println!("Appended Code Navigation section to CLAUDE.md");
         }
@@ -128,10 +133,9 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let skill_dir = project_root.join(".claude/skills/code-navigation");
     if !skill_dir.exists() {
         std::fs::create_dir_all(&skill_dir)?;
-        // The skill file is in skills/code-navigation/SKILL.md relative to scope's own repo.
-        // For installed scope, we generate a minimal skill pointer.
         let skill_content = include_str!("../../skills/code-navigation/SKILL.md");
         std::fs::write(skill_dir.join("SKILL.md"), skill_content)?;
+        did_skill = true;
         if !args.json {
             println!("Installed code-navigation skill to .claude/skills/");
         }
@@ -141,10 +145,12 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
 
     if args.json {
         let data = serde_json::json!({
+            "initialized": did_init,
+            "indexed": true,
             "preloaded": args.preload,
+            "claude_md_updated": did_claude_md,
+            "skill_installed": did_skill,
             "scope_dir": ".scope/",
-            "claude_md_updated": true,
-            "skill_installed": true,
         });
         let envelope = JsonOutput {
             command: "setup",

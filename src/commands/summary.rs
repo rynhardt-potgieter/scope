@@ -42,13 +42,11 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
         return run_file_summary(args, &graph);
     }
 
-    let sym = graph
-        .find_symbol(&args.symbol)?
-        .ok_or_else(|| anyhow::anyhow!("Symbol '{}' not found in index.", args.symbol))?;
+    let sym = crate::commands::resolve_symbol(&graph, &args.symbol)?;
 
     let callers = graph.get_caller_count(&sym.id)?;
 
-    // Count outgoing deps (calls + imports)
+    // Count outgoing calls
     let outgoing = graph.get_outgoing_calls(&sym.id)?;
     let dep_count = outgoing.len();
 
@@ -68,7 +66,7 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
             "line_end": sym.line_end,
             "signature": sym.signature,
             "callers": callers,
-            "deps": dep_count,
+            "outgoing_calls": dep_count,
             "methods": method_count,
         });
         let envelope = JsonOutput {
@@ -95,7 +93,7 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
             stats.push(format!("{callers} callers"));
         }
         if dep_count > 0 {
-            stats.push(format!("{dep_count} deps"));
+            stats.push(format!("{dep_count} calls"));
         }
         if method_count > 0 {
             stats.push(format!("{method_count} methods"));

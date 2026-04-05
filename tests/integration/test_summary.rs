@@ -81,3 +81,27 @@ fn test_summary_unknown_symbol_fails() {
         .failure()
         .stderr(contains("not found"));
 }
+
+#[test]
+fn test_summary_file_path() {
+    let (_dir, root) = setup_indexed_fixture();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["summary", "src/payments/service.ts"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .stdout(contains("symbols"));
+}
+
+#[test]
+fn test_summary_qualified_name() {
+    let (_dir, root) = setup_indexed_fixture();
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["summary", "PaymentService.processPayment"])
+        .current_dir(&root)
+        .assert()
+        .success()
+        .stdout(contains("processPayment"));
+}
