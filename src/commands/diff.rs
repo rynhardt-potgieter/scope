@@ -63,6 +63,11 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
         bail!("No index found. Run 'scope index' first.");
     }
 
+    // Validate ref doesn't look like a flag (prevents injection into git args).
+    if args.r#ref.starts_with('-') {
+        bail!("Invalid git ref '{}': must not start with '-'", args.r#ref);
+    }
+
     // Get changed files from git
     let output = Command::new("git")
         .args(["diff", "--name-only", &args.r#ref, "--"])

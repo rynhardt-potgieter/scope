@@ -141,7 +141,7 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<SymbolParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.run(&["sketch", &p.symbol, "--compact"]).await
+        self.run(&["sketch", "--compact", "--", &p.symbol]).await
     }
 
     #[tool(
@@ -151,7 +151,7 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<SymbolParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.run(&["summary", &p.symbol, "--json"]).await
+        self.run(&["summary", "--json", "--", &p.symbol]).await
     }
 
     #[tool(
@@ -161,7 +161,7 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<SymbolParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.run(&["source", &p.symbol, "--json"]).await
+        self.run(&["source", "--json", "--", &p.symbol]).await
     }
 
     #[tool(
@@ -171,7 +171,7 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<FindParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let mut args = vec!["find", &p.query, "--json"];
+        let mut args = vec!["find", "--json"];
         let kind_str;
         let limit_str;
         if let Some(ref kind) = p.kind {
@@ -182,6 +182,7 @@ impl ScopeMcp {
             limit_str = limit.to_string();
             args.extend(["--limit", &limit_str]);
         }
+        args.extend(["--", &p.query]);
         self.run(&args).await
     }
 
@@ -192,12 +193,13 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<RefsParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let mut args = vec!["refs", &p.symbol, "--json"];
+        let mut args = vec!["refs", "--json"];
         let kind_str;
         if let Some(ref kind) = p.kind {
             kind_str = kind.clone();
             args.extend(["--kind", &kind_str]);
         }
+        args.extend(["--", &p.symbol]);
         self.run(&args).await
     }
 
@@ -208,12 +210,13 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<CallersParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let mut args = vec!["callers", &p.symbol, "--json"];
+        let mut args = vec!["callers", "--json"];
         let depth_str;
         if let Some(depth) = p.depth {
             depth_str = depth.to_string();
             args.extend(["--depth", &depth_str]);
         }
+        args.extend(["--", &p.symbol]);
         self.run(&args).await
     }
 
@@ -224,12 +227,13 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<DepsParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let mut args = vec!["deps", &p.symbol, "--json"];
+        let mut args = vec!["deps", "--json"];
         let depth_str;
         if let Some(depth) = p.depth {
             depth_str = depth.to_string();
             args.extend(["--depth", &depth_str]);
         }
+        args.extend(["--", &p.symbol]);
         self.run(&args).await
     }
 
@@ -256,7 +260,7 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<TraceParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        self.run(&["trace", &p.symbol, "--json"]).await
+        self.run(&["trace", "--json", "--", &p.symbol]).await
     }
 
     #[tool(
@@ -266,12 +270,13 @@ impl ScopeMcp {
         &self,
         Parameters(p): Parameters<FlowParam>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let mut args = vec!["flow", &p.start, &p.end, "--json"];
+        let mut args = vec!["flow", "--json"];
         let depth_str;
         if let Some(depth) = p.depth {
             depth_str = depth.to_string();
             args.extend(["--depth", &depth_str]);
         }
+        args.extend(["--", &p.start, &p.end]);
         self.run(&args).await
     }
 }

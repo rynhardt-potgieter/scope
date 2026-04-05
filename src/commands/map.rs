@@ -336,7 +336,7 @@ fn run_workspace(args: &MapArgs, workspace_root: &Path, config: &WorkspaceConfig
     }
     architecture.sort_by(|a, b| b.symbol_count.cmp(&a.symbol_count));
 
-    if args.json {
+    if args.json || args.compact {
         let data = MapData {
             stats,
             entrypoints: ep_groups,

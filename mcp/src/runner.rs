@@ -5,8 +5,9 @@
 //! or by searching `PATH` with `which`.
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 
 const TIMEOUT_SECS: u64 = 30;
 
@@ -61,22 +62,37 @@ pub async fn run_scope(
     args: &[&str],
     cwd: &Path,
 ) -> Result<serde_json::Value, String> {
-    let fut = Command::new(scope_bin).args(args).current_dir(cwd).output();
-
-    let output = tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), fut)
-        .await
-        .map_err(|_| format!("scope command timed out after {TIMEOUT_SECS}s"))?
+    let child: Child = Command::new(scope_bin)
+        .args(args)
+        .current_dir(cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("Failed to spawn scope: {e}"))?;
+
+    // wait_with_output takes ownership, so wrap in an Option for the timeout branch.
+    let mut child_opt = Some(child);
+    let output = tokio::select! {
+        result = async { child_opt.take().unwrap().wait_with_output().await } => {
+            result.map_err(|e| format!("Failed to wait for scope: {e}"))?
+        }
+        _ = tokio::time::sleep(Duration::from_secs(TIMEOUT_SECS)) => {
+            if let Some(mut c) = child_opt.take() {
+                c.kill().await.ok();
+            }
+            return Err(format!("scope command timed out after {TIMEOUT_SECS}s"));
+        }
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let msg = stderr.trim();
-        // Strip the "Error: " prefix that anyhow adds
         let clean = msg.strip_prefix("Error: ").unwrap_or(msg);
         return Err(clean.to_string());
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|e| format!("Invalid UTF-8 in scope output: {e}"))?;
     let json: serde_json::Value =
         serde_json::from_str(&stdout).map_err(|e| format!("Invalid JSON from scope: {e}"))?;
 
@@ -92,10 +108,14 @@ pub async fn run_scope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Serialize tests that mutate SCOPE_BIN env var to avoid races.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_find_scope_bin_from_env() {
-        // Point SCOPE_BIN at any existing binary (use `which` itself)
+        let _guard = ENV_LOCK.lock().unwrap();
         let which_path = which::which("which")
             .or_else(|_| which::which("ls"))
             .expect("need some binary on PATH for this test");
@@ -107,11 +127,10 @@ mod tests {
 
     #[test]
     fn test_find_scope_bin_nonexistent_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("SCOPE_BIN", "/nonexistent/path/scope");
         let result = find_scope_bin();
         std::env::remove_var("SCOPE_BIN");
-        // Should fall through to which/home checks, may or may not find scope
-        // but at least shouldn't use the bad env path
         if let Ok(path) = &result {
             assert_ne!(path.to_str().unwrap(), "/nonexistent/path/scope");
         }
