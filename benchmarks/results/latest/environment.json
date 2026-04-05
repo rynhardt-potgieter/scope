@@ -1,0 +1,9 @@
+{
+  "benchmark_version": "1",
+  "machine": {
+    "arch": "aarch64",
+    "os": "macos"
+  },
+  "run_date": "2026-04-05T09:02:59.328049+00:00",
+  "scope_version": "scope 0.9.1"
+}

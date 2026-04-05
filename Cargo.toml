@@ -1,5 +1,6 @@
 [workspace]
 members = [".", "mcp"]
+exclude = ["benchmarks/runner"]
 
 [package]
 name = "scope-cli"

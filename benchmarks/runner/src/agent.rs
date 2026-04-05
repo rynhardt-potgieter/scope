@@ -274,6 +274,40 @@ fn setup_temp_corpus(
         }
     }
 
+    // Handle MCP condition: install CLAUDE.md.with-mcp and write MCP config
+    if condition == "with-mcp" {
+        let mcp_src = dest.join("CLAUDE.md.with-mcp");
+        if mcp_src.is_file() {
+            std::fs::copy(&mcp_src, dest.join("CLAUDE.md"))?;
+        }
+
+        // Find scope-mcp binary
+        let scope_mcp_bin = which::which("scope-mcp")
+            .or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_default();
+                let path = std::path::PathBuf::from(format!("{home}/bin/scope-mcp"));
+                if path.exists() {
+                    Ok(path)
+                } else {
+                    Err(which::Error::CannotFindBinaryPath)
+                }
+            })
+            .unwrap_or_else(|_| std::path::PathBuf::from("scope-mcp"));
+
+        // Write MCP server config for the claude CLI
+        let mcp_config = serde_json::json!({
+            "mcpServers": {
+                "scope": {
+                    "command": scope_mcp_bin.to_string_lossy(),
+                    "args": [],
+                    "cwd": dest.to_string_lossy()
+                }
+            }
+        });
+        let config_path = dest.join(".mcp-config.json");
+        std::fs::write(&config_path, serde_json::to_string_pretty(&mcp_config)?)?;
+    }
+
     // Handle preloaded scope map variant
     if condition == "with-scope-preloaded" {
         let preloaded_src = dest.join("CLAUDE.md.with-scope-preloaded");
@@ -367,6 +401,16 @@ pub fn run_agent(
 
     if !scope_enabled {
         cmd.arg("--disallowedTools").arg("Bash(scope:*)");
+    }
+
+    // MCP condition: scope via MCP tools, not Bash. Disallow Bash(scope:*)
+    // to force the agent to use MCP tool calls instead.
+    if condition == "with-mcp" {
+        cmd.arg("--disallowedTools").arg("Bash(scope:*)");
+        let mcp_config_path = work_dir.join(".mcp-config.json");
+        if mcp_config_path.exists() {
+            cmd.arg("--mcp-config").arg(&mcp_config_path);
+        }
     }
 
     cmd.current_dir(work_dir)

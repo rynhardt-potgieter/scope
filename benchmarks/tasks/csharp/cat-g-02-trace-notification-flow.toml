@@ -1,0 +1,31 @@
+[task]
+id = "cs-cat-g-02"
+category = "pr-review"
+language = "csharp"
+corpus = "fixture"
+description = "Trace notification delivery path and document for review"
+
+[prompt]
+text = """
+As part of a PR review, you need to understand how notifications are delivered \
+in this codebase. Trace the call path from the entry point that triggers \
+notifications through to the actual delivery mechanism. Document the full flow \
+in docs/notification-flow.md with: (1) entry points that trigger notifications, \
+(2) intermediate service calls, (3) the delivery endpoint or channel, and \
+(4) error handling at each layer. Use structural navigation to map the path \
+before reading source files.
+"""
+
+[target]
+symbol = "NotificationDeliveryWorker.ExecuteAsync"
+file = "docs/notification-flow.md"
+
+[correctness]
+require_compilation = false
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope trace", "scope flow"]

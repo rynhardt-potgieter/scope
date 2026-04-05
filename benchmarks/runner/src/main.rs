@@ -132,7 +132,8 @@ pub struct RunArgs {
     pub model: Option<String>,
 
     /// Number of experimental conditions: 1 = with-scope only (default),
-    /// 2 = with --compare, 3 = without-scope + with-scope + with-scope-preloaded
+    /// 2 = with --compare, 3 = without + with + preloaded,
+    /// 4 = all 3 + with-mcp (scope via MCP tools instead of Bash)
     #[arg(long, default_value = "1")]
     pub conditions: u32,
 
@@ -330,7 +331,14 @@ fn run_benchmarks(args: &RunArgs) -> Result<()> {
     );
 
     // Determine which conditions to run (same tuple approach as prepare_benchmarks)
-    let conditions: Vec<(&str, bool)> = if args.conditions >= 3 {
+    let conditions: Vec<(&str, bool)> = if args.conditions >= 4 {
+        vec![
+            ("without-scope", false),
+            ("with-scope", true),
+            ("with-scope-preloaded", true),
+            ("with-mcp", true),
+        ]
+    } else if args.conditions >= 3 {
         vec![
             ("without-scope", false),
             ("with-scope", true),
@@ -782,7 +790,14 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
     let ndjson_dir = std::path::PathBuf::from(output_base).join("ndjson");
     std::fs::create_dir_all(&ndjson_dir)?;
 
-    let conditions: Vec<(&str, bool)> = if args.conditions >= 3 {
+    let conditions: Vec<(&str, bool)> = if args.conditions >= 4 {
+        vec![
+            ("without-scope", false),
+            ("with-scope", true),
+            ("with-scope-preloaded", true),
+            ("with-mcp", true),
+        ]
+    } else if args.conditions >= 3 {
         vec![
             ("without-scope", false),
             ("with-scope", true),

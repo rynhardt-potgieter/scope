@@ -1,0 +1,29 @@
+## Code Navigation — Scope MCP
+
+This project is indexed with Scope for structural code intelligence, accessible via MCP tools.
+Use the scope_* tools directly — do NOT use Bash to run scope commands.
+
+### Available tools
+
+| Tool | Purpose | When to use |
+|------|---------|-------------|
+| `scope_status` | Check index health | First, to verify scope is available |
+| `scope_map` | Repo overview (~500 tokens) | Start of complex tasks |
+| `scope_sketch` | Symbol structure, methods, deps | Before editing any class/function |
+| `scope_summary` | One-line overview (~30 tokens) | Quick "what is this?" check |
+| `scope_source` | Full source of a symbol | After sketch, when ready to read |
+| `scope_find` | Search by intent | Finding code you can't name |
+| `scope_refs` | All references to a symbol | Before changing signatures |
+| `scope_callers` | Callers (transitive with depth) | Blast radius analysis |
+| `scope_deps` | What a symbol depends on | Understanding prerequisites |
+| `scope_trace` | Entry points → symbol paths | Bug tracing |
+| `scope_flow` | Paths between any two symbols | Understanding connections |
+| `scope_diff` | Symbols in git-changed files | PR review |
+
+### Workflow
+
+1. `scope_status` — verify index is fresh
+2. `scope_map` — understand architecture
+3. `scope_sketch` — drill into specific symbols
+4. Read source only for files you'll edit
+5. **3-tool rule**: if you've called 3 scope tools without editing, start editing

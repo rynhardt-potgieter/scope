@@ -1,0 +1,31 @@
+[task]
+id = "cs-cat-g-01"
+category = "pr-review"
+language = "csharp"
+corpus = "fixture"
+description = "Structural review: assess blast radius of PaymentService changes"
+
+[prompt]
+text = """
+You're reviewing a proposed change to PaymentService. Before looking at the \
+code, use structural analysis to understand the blast radius: what calls \
+PaymentService.ProcessPayment, what depends on it, and what entry points \
+reach it. Then read the actual implementation and write a risk assessment \
+in docs/risk-assessment.md covering: (1) callers that would break if the \
+interface changes, (2) test coverage gaps you can infer from the structure, \
+(3) the dependency chain depth. Focus on structural risk, not code style.
+"""
+
+[target]
+symbol = "PaymentService.ProcessPayment"
+file = "docs/risk-assessment.md"
+
+[correctness]
+require_compilation = false
+require_tests_pass = false
+require_caller_coverage = false
+caller_coverage_threshold = 0.0
+pattern_match_threshold = 0.0
+
+[scope]
+expected_commands = ["scope callers", "scope deps"]
