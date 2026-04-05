@@ -1,4 +1,3 @@
-#![allow(dead_code)] // Workspace feature is scaffolded but not yet fully wired
 //! Workspace-level query facade over multiple independent project graphs.
 //!
 //! `WorkspaceGraph` opens N `Graph` instances (one per workspace member)
@@ -26,6 +25,7 @@ pub struct WorkspaceMember {
     /// Human-readable project name from the manifest.
     pub name: String,
     /// Absolute path to the project root.
+    #[allow(dead_code)]
     pub root: PathBuf,
     /// Open graph connection.
     pub graph: Graph,
@@ -33,6 +33,7 @@ pub struct WorkspaceMember {
 
 /// A symbol result tagged with its source project.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)] // Part of workspace facade, not yet wired to commands
 pub struct WorkspaceSymbol {
     /// The workspace member name this symbol belongs to.
     pub project: String,
@@ -58,15 +59,6 @@ pub struct WorkspaceRef {
     /// The underlying reference.
     #[serde(flatten)]
     pub reference: Reference,
-}
-
-/// An entrypoint group tagged with its source project.
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkspaceEntrypointGroup {
-    /// The workspace member name.
-    pub project: String,
-    /// Entrypoint symbol and its fan-out count.
-    pub entries: Vec<(Symbol, usize)>,
 }
 
 impl WorkspaceGraph {
@@ -126,11 +118,13 @@ impl WorkspaceGraph {
     }
 
     /// Number of successfully opened members.
+    #[cfg(test)]
     pub fn member_count(&self) -> usize {
         self.members.len()
     }
 
     /// List member names.
+    #[allow(dead_code)] // Part of workspace facade
     pub fn member_names(&self) -> Vec<&str> {
         self.members.iter().map(|m| m.name.as_str()).collect()
     }
@@ -165,6 +159,7 @@ impl WorkspaceGraph {
     ///
     /// Returns all matches tagged with their project name. The caller
     /// decides how to disambiguate (e.g. prompt user or use `--project`).
+    #[allow(dead_code)] // Part of workspace facade
     pub fn find_symbol(&self, name: &str) -> Vec<WorkspaceSymbol> {
         let mut results = Vec::new();
 
@@ -244,6 +239,7 @@ impl WorkspaceGraph {
     /// Get entry points from all workspace members.
     ///
     /// Returns a vec of `(project_name, entrypoints)` for each member.
+    #[allow(dead_code)] // Part of workspace facade
     pub fn get_entrypoints(&self) -> Vec<(String, Vec<(Symbol, usize)>)> {
         let mut results = Vec::new();
 
@@ -293,9 +289,7 @@ impl WorkspaceGraph {
 }
 
 /// Prefix a symbol ID with the project name for workspace display.
-///
-/// Never stored — used only at the output boundary.
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn workspace_display_id(project: &str, id: &str) -> String {
     format!("{project}::{id}")
 }

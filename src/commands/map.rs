@@ -50,6 +50,12 @@ pub struct MapArgs {
     /// Output as JSON instead of human-readable format
     #[arg(long, short = 'j')]
     pub json: bool,
+
+    /// Compact JSON output for agents — limits entrypoints to top 10 per
+    /// category and omits full method_count/outgoing_call_count detail.
+    /// Implies --json.
+    #[arg(long)]
+    pub compact: bool,
 }
 
 /// Statistics for the repository map.
@@ -131,6 +137,7 @@ fn run_single(args: &MapArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     // 1. Gather statistics.
     let stats = MapStats {
@@ -175,10 +182,22 @@ fn run_single(args: &MapArgs, project_root: &Path) -> Result<()> {
         .and_then(|n| n.to_str())
         .unwrap_or("unknown");
 
-    if args.json {
+    if args.json || args.compact {
+        // In compact mode, limit entrypoints to top 10 per category to cut token cost.
+        let ep_data = if args.compact {
+            ep_groups
+                .into_iter()
+                .map(|(cat, entries)| {
+                    let truncated: Vec<_> = entries.into_iter().take(10).collect();
+                    (cat, truncated)
+                })
+                .collect()
+        } else {
+            ep_groups
+        };
         let data = MapData {
             stats,
-            entrypoints: ep_groups,
+            entrypoints: ep_data,
             core_symbols,
             architecture,
         };
@@ -226,47 +245,23 @@ fn run_workspace(args: &MapArgs, workspace_root: &Path, config: &WorkspaceConfig
         languages: wg.get_languages(),
     };
 
-    // 2. Get entry points per project.
-    let ws_entrypoints = wg.get_entrypoints();
-
-    // Flatten into grouped format: merge all members' entrypoints then group by type.
-    let mut all_ep_infos: Vec<(EntrypointInfo, String)> = Vec::new();
-    for (project_name, entries) in &ws_entrypoints {
-        for (sym, outgoing) in entries {
-            all_ep_infos.push((
-                EntrypointInfo {
-                    name: format!("{project_name}::{}", sym.name),
-                    file_path: sym.file_path.clone(),
-                    method_count: 0,
-                    outgoing_call_count: *outgoing,
-                    kind: sym.kind.clone(),
-                },
-                project_name.clone(),
-            ));
-        }
-    }
-
-    // Group by type for display.
-    let group_order = [
-        "API Controllers",
-        "Background Workers",
-        "Event Handlers",
-        "Other",
-    ];
+    // 2. Get entry points per project, using collapse_and_group for consistency.
     let mut ep_groups: Vec<(String, Vec<EntrypointInfo>)> = Vec::new();
-    for &group_name in &group_order {
-        let members: Vec<EntrypointInfo> = all_ep_infos
-            .iter()
-            .filter(|(e, _)| {
-                crate::commands::entrypoints::classify_group(&e.file_path) == group_name
-            })
-            .map(|(e, _)| e.clone())
-            .collect();
-        if !members.is_empty() {
-            ep_groups.push((group_name.to_string(), members));
+    let mut ep_total = 0usize;
+
+    for member in wg.members() {
+        let raw = member.graph.get_entrypoints().unwrap_or_default();
+        let (member_groups, member_total, _) =
+            crate::commands::entrypoints::collapse_and_group(&raw, &member.graph);
+        ep_total += member_total;
+
+        for (group_name, mut entries) in member_groups {
+            for info in &mut entries {
+                info.name = format!("{}::{}", member.name, info.name);
+            }
+            ep_groups.push((group_name, entries));
         }
     }
-    let ep_total = all_ep_infos.len();
 
     // 3. Core symbols from each member, merged and re-sorted.
     let per_member_limit = args.limit.saturating_mul(2);
@@ -317,7 +312,7 @@ fn run_workspace(args: &MapArgs, workspace_root: &Path, config: &WorkspaceConfig
     }
     architecture.sort_by(|a, b| b.symbol_count.cmp(&a.symbol_count));
 
-    if args.json {
+    if args.json || args.compact {
         let data = MapData {
             stats,
             entrypoints: ep_groups,

@@ -180,6 +180,17 @@ pub enum Commands {
     ///   scope similar PaymentService --kind class — find similar classes
     Similar(commands::similar::SimilarArgs),
 
+    /// One-line summary of a symbol (~30 tokens).
+    ///
+    /// Returns name, kind, location, signature, caller count, and dependency
+    /// count on a single line. Use when an agent just needs "what is this?"
+    /// without the full sketch output.
+    ///
+    /// Examples:
+    ///   scope summary PaymentService
+    ///   scope summary Graph.find_symbol
+    Summary(commands::summary::SummaryArgs),
+
     /// Fetch full source of a specific symbol.
     ///
     /// Returns the exact source code of the symbol. Only call this when
@@ -230,6 +241,16 @@ pub enum Commands {
     /// Quick health check: is the index built? How many symbols and files?
     /// Are there stale or unindexed files?
     Status(commands::status::StatusArgs),
+
+    /// One-command agent integration setup.
+    ///
+    /// Runs init + index + writes CLAUDE.md snippet + installs skill file.
+    /// With --preload, bakes `scope map` into CLAUDE.md for 32% agent cost savings.
+    ///
+    /// Examples:
+    ///   scope setup              — full setup
+    ///   scope setup --preload    — setup with architecture preloading
+    Setup(commands::setup::SetupArgs),
 
     /// Manage multi-project workspaces.
     ///
@@ -321,6 +342,10 @@ fn main() -> Result<()> {
             let root = project_root_from_context(&ctx)?;
             commands::similar::run(args, root)
         }
+        Commands::Summary(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::summary::run(args, root)
+        }
         Commands::Source(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::source::run(args, root)
@@ -336,6 +361,11 @@ fn main() -> Result<()> {
         Commands::Flow(args) => {
             let root = project_root_from_context(&ctx)?;
             commands::flow::run(args, root)
+        }
+
+        Commands::Setup(args) => {
+            let root = project_root_from_context(&ctx)?;
+            commands::setup::run(args, root)
         }
 
         // --- Workspace management subcommands ---

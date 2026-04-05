@@ -35,3 +35,5 @@ This project is indexed with Scope for structural code intelligence.
 2. **Don't sketch what you'll read** — sketch is for understanding without opening the file.
 3. **Don't run find + grep** for the same thing — pick one.
 4. **Use `scope map` instead of 3+ sketches** — it's one command for the full picture.
+
+When using --json output, prefer --compact for sketch and map to reduce token cost.

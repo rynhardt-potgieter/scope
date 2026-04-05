@@ -30,11 +30,26 @@ pub fn run(args: &SourceArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
-    let sym = graph
-        .find_symbol(&args.symbol)?
-        .ok_or_else(|| anyhow::anyhow!("Symbol '{}' not found in index.", args.symbol))?;
+    crate::commands::warn_if_stale(&graph, project_root);
+    let sym = crate::commands::resolve_symbol(&graph, &args.symbol)?;
 
     let full_path = project_root.join(&sym.file_path);
+
+    // Defense-in-depth: ensure the resolved path stays inside the project root.
+    // A corrupted index could contain path traversal (e.g. "../../etc/passwd").
+    let canonical = full_path
+        .canonicalize()
+        .with_context(|| format!("Could not resolve {}", full_path.display()))?;
+    let canonical_root = project_root
+        .canonicalize()
+        .with_context(|| "Could not resolve project root")?;
+    if !canonical.starts_with(&canonical_root) {
+        bail!(
+            "Path '{}' resolves outside the project root — refusing to read.",
+            sym.file_path
+        );
+    }
+
     let content = std::fs::read_to_string(&full_path)
         .with_context(|| format!("Could not read {}", full_path.display()))?;
 

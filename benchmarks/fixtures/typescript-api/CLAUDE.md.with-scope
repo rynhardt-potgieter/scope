@@ -2,3 +2,5 @@
 This project uses Scope for structural code navigation.
 Before editing: `scope sketch <symbol>`, `scope refs <symbol>`, `scope impact <symbol>`
 Finding code: `scope find "<description>"`
+
+When using --json output, prefer --compact for sketch and map to reduce token cost.

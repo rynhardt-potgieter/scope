@@ -183,6 +183,14 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
                         }
                     }
                 }
+                // MCP tool calls: scope_status, scope_map, scope_sketch, etc.
+                other if other.starts_with("scope_") => {
+                    is_scope_cmd = true;
+                    let scope_cmd = format!("scope {}", other.strip_prefix("scope_").unwrap_or(other));
+                    if !scope_commands_called.contains(&scope_cmd) {
+                        scope_commands_called.push(scope_cmd);
+                    }
+                }
                 _ => {}
             }
 
@@ -272,6 +280,40 @@ fn setup_temp_corpus(
             std::fs::remove_dir_all(&scope_dir)
                 .context("Failed to remove .scope/ from temp dir for no-scope run")?;
         }
+    }
+
+    // Handle MCP condition: install CLAUDE.md.with-mcp and write MCP config
+    if condition == "with-mcp" {
+        let mcp_src = dest.join("CLAUDE.md.with-mcp");
+        if mcp_src.is_file() {
+            std::fs::copy(&mcp_src, dest.join("CLAUDE.md"))?;
+        }
+
+        // Find scope-mcp binary
+        let scope_mcp_bin = which::which("scope-mcp")
+            .or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_default();
+                let path = std::path::PathBuf::from(format!("{home}/bin/scope-mcp"));
+                if path.exists() {
+                    Ok(path)
+                } else {
+                    Err(which::Error::CannotFindBinaryPath)
+                }
+            })
+            .unwrap_or_else(|_| std::path::PathBuf::from("scope-mcp"));
+
+        // Write MCP server config for the claude CLI
+        let mcp_config = serde_json::json!({
+            "mcpServers": {
+                "scope": {
+                    "command": scope_mcp_bin.to_string_lossy(),
+                    "args": [],
+                    "cwd": dest.to_string_lossy()
+                }
+            }
+        });
+        let config_path = dest.join(".mcp-config.json");
+        std::fs::write(&config_path, serde_json::to_string_pretty(&mcp_config)?)?;
     }
 
     // Handle preloaded scope map variant
@@ -367,6 +409,16 @@ pub fn run_agent(
 
     if !scope_enabled {
         cmd.arg("--disallowedTools").arg("Bash(scope:*)");
+    }
+
+    // MCP condition: scope via MCP tools, not Bash. Disallow Bash(scope:*)
+    // to force the agent to use MCP tool calls instead.
+    if condition == "with-mcp" {
+        cmd.arg("--disallowedTools").arg("Bash(scope:*)");
+        let mcp_config_path = work_dir.join(".mcp-config.json");
+        if mcp_config_path.exists() {
+            cmd.arg("--mcp-config").arg(&mcp_config_path);
+        }
     }
 
     cmd.current_dir(work_dir)
@@ -496,6 +548,14 @@ pub fn run_agent(
                                 scope_commands_called.push(scope_cmd);
                             }
                         }
+                    }
+                }
+                // MCP tool calls: scope_status, scope_map, etc.
+                other if other.starts_with("scope_") => {
+                    is_scope_cmd = true;
+                    let scope_cmd = format!("scope {}", other.strip_prefix("scope_").unwrap_or(other));
+                    if !scope_commands_called.contains(&scope_cmd) {
+                        scope_commands_called.push(scope_cmd);
                     }
                 }
                 _ => {}
@@ -666,7 +726,7 @@ pub(crate) fn extract_argument_summary(
 
 /// Check if a tool name is a navigation/exploration tool.
 pub(crate) fn is_navigation_tool(name: &str) -> bool {
-    matches!(name, "Read" | "Grep" | "Glob" | "Bash")
+    matches!(name, "Read" | "Grep" | "Glob" | "Bash") || name.starts_with("scope_")
 }
 
 /// Check if a tool name is a file-editing tool.

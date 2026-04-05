@@ -71,12 +71,6 @@ impl ChangedFiles {
     pub fn is_empty(&self) -> bool {
         self.added.is_empty() && self.modified.is_empty() && self.deleted.is_empty()
     }
-
-    /// Total number of changed files.
-    #[allow(dead_code)]
-    pub fn total(&self) -> usize {
-        self.added.len() + self.modified.len() + self.deleted.len()
-    }
 }
 
 /// Relationships of a class symbol: inheritance, interfaces, and dependencies.
@@ -297,7 +291,9 @@ impl Graph {
     pub fn find_symbol_by_id_prefix(&self, prefix: &str) -> Result<Option<Symbol>> {
         self.conn
             .query_row(
-                "SELECT * FROM symbols WHERE substr(id, 1, length(?1)) = ?1 LIMIT 1",
+                // Require prefix matches at a :: boundary to avoid
+                // "find_symbol" matching "find_symbol_by_id_prefix".
+                "SELECT * FROM symbols WHERE (id = ?1 OR substr(id, 1, length(?1) + 2) = ?1 || '::') LIMIT 1",
                 params![prefix],
                 Symbol::from_row,
             )
@@ -1508,6 +1504,7 @@ impl Graph {
         target_id: &str,
         target_name: &str,
         max_depth: usize,
+        max_paths: usize,
     ) -> Result<TraceResult> {
         // Extract bare name for flexible matching
         let bare_name = self.symbol_name_from_id(target_id);
@@ -1527,22 +1524,35 @@ impl Graph {
 
                 UNION ALL
 
-                -- Walk backward: find who calls the current head of the path
+                -- Walk backward: find who calls the current head of the path.
+                -- Use fuzzy matching on e.to_id since edges may store bare names,
+                -- qualified names (::Name), or member names (.Name) instead of full IDs.
                 SELECT e.from_id, t.depth + 1, e.from_id || '>' || t.path
                 FROM edges e
-                JOIN trace t ON e.to_id = t.id
+                JOIN trace t ON (
+                    e.to_id = t.id
+                    OR e.to_id = REPLACE(REPLACE(t.id, RTRIM(t.id, REPLACE(t.id, '::', '')), ''), '::', '')
+                    OR t.id LIKE '%::' || e.to_id || '::%'
+                    OR t.id LIKE '%.' || e.to_id
+                )
                 WHERE e.kind = 'calls'
                   AND t.depth < ?5
                   AND INSTR('>' || t.path || '>', '>' || e.from_id || '>') = 0
             )
-            -- Return paths that terminate at entry points (no incoming calls)
+            -- Return paths that terminate at entry points (no incoming calls).
+            -- Check both exact and bare-name matches for incoming edges.
             SELECT t.path, t.depth
             FROM trace t
             WHERE NOT EXISTS (
                 SELECT 1 FROM edges e2
-                WHERE e2.to_id = t.id AND e2.kind = 'calls'
+                WHERE (e2.to_id = t.id
+                    OR e2.to_id = REPLACE(REPLACE(t.id, RTRIM(t.id, REPLACE(t.id, '::', '')), ''), '::', '')
+                    OR t.id LIKE '%::' || e2.to_id || '::%'
+                    OR t.id LIKE '%.' || e2.to_id)
+                  AND e2.kind = 'calls'
             )
             ORDER BY t.depth, t.path
+            LIMIT ?6
         ";
 
         let mut stmt = self.conn.prepare(sql)?;
@@ -1552,7 +1562,8 @@ impl Graph {
                 bare_name,
                 like_qualified,
                 like_member,
-                max_depth as i64
+                max_depth as i64,
+                max_paths as i64,
             ],
             |row| {
                 let path: String = row.get(0)?;
@@ -1962,23 +1973,67 @@ impl Graph {
         Ok(ts)
     }
 
-    /// Get the number of tracked files in the file_hashes table.
-    #[allow(dead_code)]
-    pub fn indexed_file_count(&self) -> Result<usize> {
-        let count: i64 = self
+    /// Quick staleness check: returns `true` if any indexed file has been
+    /// modified or deleted since its `indexed_at` timestamp. Short-circuits
+    /// on first stale file found — O(1) best case for large repos.
+    pub fn has_stale_files(&self, project_root: &Path) -> Result<bool> {
+        // Quick check: compare the most-recently-indexed file's mtime first.
+        // This catches the common case (active development on recent files)
+        // with a single stat() call instead of scanning every row.
+        let newest: Option<(String, i64)> = self
             .conn
-            .query_row("SELECT COUNT(*) FROM file_hashes", [], |row| row.get(0))?;
-        Ok(count as usize)
-    }
+            .query_row(
+                "SELECT file_path, indexed_at FROM file_hashes ORDER BY indexed_at DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
 
-    /// Delete a file hash entry.
-    #[allow(dead_code)]
-    pub fn delete_file_hash(&self, file_path: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM file_hashes WHERE file_path = ?1",
-            params![file_path],
-        )?;
-        Ok(())
+        if let Some((file_path, indexed_at)) = newest {
+            let full_path = project_root.join(&file_path);
+            match std::fs::metadata(&full_path) {
+                Ok(meta) => {
+                    if let Ok(mtime) = meta.modified() {
+                        let mtime_secs = mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if mtime_secs > indexed_at {
+                            return Ok(true);
+                        }
+                    }
+                }
+                Err(_) => return Ok(true),
+            }
+        }
+
+        // Full scan: iterate remaining rows but return on first stale hit.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path, indexed_at FROM file_hashes")?;
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            let file_path: String = row.get(0)?;
+            let indexed_at: i64 = row.get(1)?;
+            let full_path = project_root.join(&file_path);
+            match std::fs::metadata(&full_path) {
+                Ok(meta) => {
+                    if let Ok(mtime) = meta.modified() {
+                        let mtime_secs = mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64;
+                        if mtime_secs > indexed_at {
+                            return Ok(true);
+                        }
+                    }
+                }
+                Err(_) => return Ok(true),
+            }
+        }
+
+        Ok(false)
     }
 }
 

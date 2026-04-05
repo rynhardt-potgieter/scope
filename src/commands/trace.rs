@@ -64,10 +64,13 @@ pub fn run(args: &TraceArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     let symbol = resolve_symbol(&graph, &args.symbol)?;
 
-    let mut result = graph.find_call_paths(&symbol.id, &symbol.name, args.max_depth)?;
+    // Fetch limit+1 to detect truncation, with SQL-level cap to prevent OOM.
+    let mut result =
+        graph.find_call_paths(&symbol.id, &symbol.name, args.max_depth, args.limit + 1)?;
     let total = result.paths.len();
     let truncated = total > args.limit;
 

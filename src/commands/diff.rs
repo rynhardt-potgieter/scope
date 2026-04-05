@@ -63,6 +63,20 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
         bail!("No index found. Run 'scope index' first.");
     }
 
+    // Validate ref: reject flags, git object paths, and NUL bytes.
+    if args.r#ref.starts_with('-') {
+        bail!("Invalid git ref '{}': must not start with '-'", args.r#ref);
+    }
+    if args.r#ref.contains(':') {
+        bail!(
+            "Invalid git ref '{}': must not contain ':' (use a branch or tag name)",
+            args.r#ref
+        );
+    }
+    if args.r#ref.contains('\0') {
+        bail!("Invalid git ref: must not contain NUL bytes");
+    }
+
     // Get changed files from git
     let output = Command::new("git")
         .args(["diff", "--name-only", &args.r#ref, "--"])
@@ -71,7 +85,29 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("git diff failed: {}", stderr.trim());
+        let msg = stderr.trim();
+        // Handle repos with no commits gracefully
+        if msg.contains("bad revision") {
+            if args.json {
+                let out = DiffOutput {
+                    git_ref: args.r#ref.clone(),
+                    changed_files: vec![],
+                    symbols: vec![],
+                };
+                let envelope = JsonOutput {
+                    command: "diff",
+                    symbol: None,
+                    data: &out,
+                    truncated: false,
+                    total: 0,
+                };
+                println!("{}", serde_json::to_string_pretty(&envelope)?);
+            } else {
+                println!("No commits yet — nothing to diff.");
+            }
+            return Ok(());
+        }
+        bail!("git diff failed: {}", msg);
     }
 
     let changed_files: Vec<String> = String::from_utf8_lossy(&output.stdout)
@@ -103,6 +139,7 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
 
     // Look up symbols in changed files
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
     let mut symbols: Vec<ChangedSymbol> = Vec::new();
 
     for file in &changed_files {

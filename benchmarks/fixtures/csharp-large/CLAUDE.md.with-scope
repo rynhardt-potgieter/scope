@@ -40,3 +40,5 @@ This project is indexed with Scope for structural code intelligence.
 - Clean Architecture: Domain → Application → Infrastructure → Api
 - Interface-based DI: `IPaymentService`, `IUserService`, etc.
 - CQRS: Commands/Queries via MediatR pattern
+
+When using --json output, prefer --compact for sketch and map to reduce token cost.

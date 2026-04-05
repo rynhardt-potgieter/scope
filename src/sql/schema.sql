@@ -62,6 +62,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
 CREATE INDEX IF NOT EXISTS idx_symbols_name     ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_symbols_file     ON symbols(file_path);
 CREATE INDEX IF NOT EXISTS idx_symbols_kind     ON symbols(kind);
+CREATE INDEX IF NOT EXISTS idx_symbols_parent   ON symbols(parent_id);
 CREATE INDEX IF NOT EXISTS idx_edges_from       ON edges(from_id, kind);
 CREATE INDEX IF NOT EXISTS idx_edges_to         ON edges(to_id, kind);
 CREATE INDEX IF NOT EXISTS idx_edges_file       ON edges(file_path);

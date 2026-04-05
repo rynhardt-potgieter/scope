@@ -101,6 +101,7 @@ pub fn run(args: &FlowArgs, project_root: &Path) -> Result<()> {
     }
 
     let graph = Graph::open(&db_path)?;
+    crate::commands::warn_if_stale(&graph, project_root);
 
     // Resolve start symbol (with disambiguation)
     let start_sym = resolve_symbol(&graph, &args.start)?;
@@ -112,6 +113,8 @@ pub fn run(args: &FlowArgs, project_root: &Path) -> Result<()> {
     let raw_paths =
         graph.find_flow_paths(&start_sym.id, &end_sym.id, args.depth, args.limit + 1)?;
     let truncated = raw_paths.len() > args.limit;
+    // total reflects the fetched count (limit+1 when truncated).
+    // The formatter uses total - displayed to show "N more paths".
     let total = raw_paths.len();
     let raw_paths: Vec<_> = raw_paths.into_iter().take(args.limit).collect();
 

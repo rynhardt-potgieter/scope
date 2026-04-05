@@ -12,10 +12,12 @@ pub mod init;
 pub mod map;
 pub mod rdeps;
 pub mod refs;
+pub mod setup;
 pub mod similar;
 pub mod sketch;
 pub mod source;
 pub mod status;
+pub mod summary;
 pub mod trace;
 pub mod workspace;
 
@@ -36,11 +38,12 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
         }
     }
 
-    // Try normal resolution first
-    if let Some(sym) = graph.find_symbol(name)? {
-        // Check if ambiguous
-        let all = graph.find_all_matching_symbols(name)?;
-        if all.len() > 1 {
+    // Single query: fetch all matches and decide based on count.
+    let all = graph.find_all_matching_symbols(name)?;
+    match all.len() {
+        0 => {}
+        1 => return Ok(all.into_iter().next().unwrap()),
+        _ => {
             let mut msg = format!(
                 "Ambiguous symbol '{}' matches {} definitions:\n",
                 name,
@@ -62,6 +65,10 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
             ));
             anyhow::bail!("{msg}");
         }
+    }
+
+    // No exact match — try qualified name (ClassName.methodName)
+    if let Some(sym) = graph.find_symbol(name)? {
         return Ok(sym);
     }
 
@@ -71,6 +78,19 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
         name,
         name,
     );
+}
+
+/// Emit a stderr warning if the index has stale files.
+///
+/// Runs a quick mtime check against `file_hashes.indexed_at`. Costs one
+/// table scan (~1ms for 100 files) so it's cheap enough to run on every
+/// query command.
+pub fn warn_if_stale(graph: &Graph, project_root: &std::path::Path) {
+    if let Ok(true) = graph.has_stale_files(project_root) {
+        eprintln!(
+            "Warning: file(s) changed since last index. Run `scope index` for accurate results."
+        );
+    }
 }
 
 /// Check if an input string looks like a file path rather than a symbol name.
