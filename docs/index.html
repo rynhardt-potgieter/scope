@@ -403,6 +403,7 @@
     .prob-grid { grid-template-columns: 1fr; gap: 2.5rem; }
     .setup-grid { grid-template-columns: 1fr; gap: 3rem; }
     .hero-metrics { gap: 1.5rem; }
+    #mcp .container > div { grid-template-columns: 1fr !important; gap: 2.5rem !important; }
   }
 
   /* ─── workspace visual: directory tree ─── */
@@ -783,30 +784,74 @@
 </section>
 
 <!-- MCP -->
-<section id="mcp" style="border-top: 1px solid var(--border);">
+<section id="mcp" style="background: var(--bg-raised); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
   <div class="container">
-    <div class="reveal">
-      <div class="eyebrow">// mcp server</div>
-      <h2 class="sec-h">structured tools.<br>no bash required.</h2>
-      <p class="sec-p">
-        <code style="color:var(--amber)">scope-mcp</code> wraps all commands as MCP tools over stdio.
-        agents get typed parameters and JSON results — no <code style="color:var(--cyan)">Bash(scope:*)</code> permissions needed.
-        works with Claude Desktop, Claude Code, Cursor, and any MCP-compatible client.
-      </p>
-    </div>
-    <div class="reveal" style="transition-delay:0.15s">
-      <div class="codeblock" style="max-width:520px; margin-top:2rem;">
-        <span class="cm">// add to your MCP client config</span><br>
-        {<br>
-        &nbsp;&nbsp;<span class="kw">"mcpServers"</span>: {<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;<span class="arg">"scope"</span>: { <span class="kw">"command"</span>: <span class="arg">"scope-mcp"</span> }<br>
-        &nbsp;&nbsp;}<br>
-        }
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5rem; align-items: center;">
+
+      <div class="reveal">
+        <div class="eyebrow">// mcp server</div>
+        <h2 class="sec-h">structured tools.<br>no bash required.</h2>
+        <p class="sec-p">
+          <code style="color:var(--amber)">scope-mcp</code> wraps 12 commands as typed MCP tools over stdio.
+          agents call scope directly — no shell permissions, no string parsing, no prompt approvals.
+        </p>
+
+        <div style="display: flex; gap: 0.7rem; margin-top: 2rem; flex-wrap: wrap;">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:0.65rem; padding:0.3rem 0.65rem; border:1px solid var(--border-hi); border-radius:3px; color:var(--text-2); letter-spacing:0.04em;">Claude Desktop</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:0.65rem; padding:0.3rem 0.65rem; border:1px solid var(--border-hi); border-radius:3px; color:var(--text-2); letter-spacing:0.04em;">Claude Code</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:0.65rem; padding:0.3rem 0.65rem; border:1px solid var(--border-hi); border-radius:3px; color:var(--text-2); letter-spacing:0.04em;">Cursor</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:0.65rem; padding:0.3rem 0.65rem; border:1px solid var(--border-hi); border-radius:3px; color:var(--text-2); letter-spacing:0.04em;">any MCP client</span>
+        </div>
+
+        <div class="codeblock" style="margin-top:1.5rem;">
+          <span class="cm">// one line in your MCP config</span><br>
+          { <span class="kw">"mcpServers"</span>: { <span class="arg">"scope"</span>: { <span class="kw">"command"</span>: <span class="arg">"scope-mcp"</span> } } }
+        </div>
       </div>
-      <p class="sec-p" style="margin-top:1.5rem;">
-        12 tools exposed — status, map, sketch, summary, source, find, refs, callers, deps, diff, trace, flow.
-        uses <code style="color:var(--cyan)">--compact</code> by default to minimize token cost.
-      </p>
+
+      <div class="reveal" style="transition-delay:0.15s">
+        <!-- before / after comparison -->
+        <div style="display:flex; flex-direction:column; gap:1.4rem;">
+
+          <!-- BEFORE -->
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:0.68rem; color:var(--text-2); letter-spacing:0.05em; margin-bottom:0.45rem;">// before — bash permissions + string parsing</div>
+            <div style="background:var(--bg-terminal); border:1px solid var(--border); border-radius:5px; padding:0.9rem 1rem; font-family:'IBM Plex Mono',monospace; font-size:0.74rem; line-height:1.75;">
+              <div style="color:var(--red); font-size:0.68rem; margin-bottom:0.4rem;">⚠ Allow Bash(scope sketch PaymentService --json)?</div>
+              <div style="color:var(--text-3);">agent → <span style="color:var(--text-2);">Bash</span> → <span style="color:var(--text-2);">shell</span> → <span style="color:var(--text-2);">scope</span> → <span style="color:var(--text-2);">stdout string</span> → <span style="color:var(--text-2);">parse JSON</span></div>
+              <div style="color:var(--text-3); font-size:0.66rem; margin-top:0.3rem;">requires Bash(scope:*) permission · every call needs approval or allowlist</div>
+            </div>
+          </div>
+
+          <!-- AFTER -->
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:0.68rem; color:var(--teal); letter-spacing:0.05em; margin-bottom:0.45rem;">// after — native MCP tool calls</div>
+            <div style="background:var(--bg-terminal); border:1px solid var(--teal-dim); border-radius:5px; padding:0.9rem 1rem; font-family:'IBM Plex Mono',monospace; font-size:0.74rem; line-height:1.75;">
+              <div style="color:var(--teal); font-size:0.68rem; margin-bottom:0.4rem;">✓ scope_sketch({ symbol: "PaymentService" })</div>
+              <div style="color:var(--teal-dim);">agent → <span style="color:var(--teal);">MCP tool call</span> → <span style="color:var(--teal);">typed JSON result</span></div>
+              <div style="color:var(--text-2); font-size:0.66rem; margin-top:0.3rem;">no permissions needed · typed parameters · --compact by default (57% smaller)</div>
+            </div>
+          </div>
+
+          <!-- tool grid -->
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-top:0.5rem;">
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">status</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">map</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">sketch</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">summary</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">source</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">find</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">refs</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">callers</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">deps</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">diff</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">trace</div>
+            <div style="background:var(--bg-raised); padding:0.45rem 0.6rem; font-family:'IBM Plex Mono',monospace; font-size:0.62rem; color:var(--amber);">flow</div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 </section>
