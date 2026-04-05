@@ -42,7 +42,11 @@ pub fn resolve_symbol(graph: &Graph, name: &str) -> anyhow::Result<Symbol> {
     let all = graph.find_all_matching_symbols(name)?;
     match all.len() {
         0 => {}
-        1 => return Ok(all.into_iter().next().unwrap()),
+        1 => {
+            if let Some(sym) = all.into_iter().next() {
+                return Ok(sym);
+            }
+        }
         _ => {
             let mut msg = format!(
                 "Ambiguous symbol '{}' matches {} definitions:\n",

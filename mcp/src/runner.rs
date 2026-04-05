@@ -30,8 +30,9 @@ pub fn find_scope_bin() -> Result<PathBuf, String> {
 
     // Check common install locations (cross-platform)
     if let Some(home) = dirs::home_dir() {
-        for suffix in &["bin/scope", ".cargo/bin/scope"] {
-            let path = home.join(suffix);
+        let bin_name = if cfg!(windows) { "scope.exe" } else { "scope" };
+        for dir in &["bin", ".cargo/bin"] {
+            let path = home.join(dir).join(bin_name);
             if path.exists() {
                 return Ok(path);
             }
