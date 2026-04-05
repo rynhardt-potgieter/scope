@@ -9,11 +9,33 @@
 ///   scope setup              — init + index + write CLAUDE.md snippet
 ///   scope setup --preload    — same, plus bake scope map into CLAUDE.md
 ///   scope setup --json       — machine-readable single JSON envelope
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Args;
 use std::path::Path;
 
 use crate::output::json::JsonOutput;
+
+/// Run a scope subcommand as a subprocess, suppressing its stdout.
+/// Used by --json mode to prevent child commands from polluting the
+/// JSON output stream. Stderr is inherited so warnings still appear.
+fn run_subprocess(project_root: &Path, args: &[&str]) -> Result<()> {
+    let scope_bin = std::env::current_exe()?;
+    let status = std::process::Command::new(scope_bin)
+        .args(args)
+        .current_dir(project_root)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .with_context(|| format!("Failed to run scope {}", args[0]))?;
+    if !status.success() {
+        anyhow::bail!(
+            "scope {} failed with exit code {:?}",
+            args[0],
+            status.code()
+        );
+    }
+    Ok(())
+}
 
 /// Arguments for the `scope setup` command.
 #[derive(Args, Debug)]
@@ -41,28 +63,32 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let mut did_skill = false;
 
     // Step 1: Init (skip if already done).
-    // Always pass json: false to children — setup emits one envelope at the end.
     if !scope_dir.exists() {
-        if !args.json {
+        if args.json {
+            // Subprocess with stdout suppressed so JSON stream stays clean.
+            run_subprocess(project_root, &["init"])?;
+        } else {
             println!("Initialising scope...");
+            let init_args = crate::commands::init::InitArgs { json: false };
+            crate::commands::init::run(&init_args, project_root)?;
         }
-        let init_args = crate::commands::init::InitArgs { json: false };
-        crate::commands::init::run(&init_args, project_root)?;
         did_init = true;
     } else if !args.json {
         println!("scope already initialised, skipping init.");
     }
 
-    // Step 2: Full index (always json: false — we emit our own envelope).
-    if !args.json {
+    // Step 2: Full index.
+    if args.json {
+        run_subprocess(project_root, &["index", "--full"])?;
+    } else {
         println!("Building index...");
+        let index_args = crate::commands::index::IndexArgs {
+            full: true,
+            json: false,
+            watch: false,
+        };
+        crate::commands::index::run(&index_args, project_root)?;
     }
-    let index_args = crate::commands::index::IndexArgs {
-        full: true,
-        json: false,
-        watch: false,
-    };
-    crate::commands::index::run(&index_args, project_root)?;
 
     // Step 3: Write CLAUDE.md snippet
     let claude_md_path = project_root.join("CLAUDE.md");

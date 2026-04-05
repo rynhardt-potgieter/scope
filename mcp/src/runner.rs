@@ -79,6 +79,7 @@ pub async fn run_scope(
         _ = tokio::time::sleep(Duration::from_secs(TIMEOUT_SECS)) => {
             if let Some(mut c) = child_opt.take() {
                 c.kill().await.ok();
+                c.wait().await.ok(); // reap to avoid zombie
             }
             return Err(format!("scope command timed out after {TIMEOUT_SECS}s"));
         }

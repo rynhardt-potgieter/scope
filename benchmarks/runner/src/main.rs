@@ -898,6 +898,30 @@ fn prepare_benchmarks(args: &PrepareArgs) -> Result<()> {
                 }
             }
 
+            // Handle MCP condition: install CLAUDE.md.with-mcp and write MCP config
+            if condition_label == "with-mcp" {
+                let mcp_variant = work_dir.join("CLAUDE.md.with-mcp");
+                if mcp_variant.is_file() {
+                    std::fs::copy(&mcp_variant, work_dir.join("CLAUDE.md"))?;
+                }
+                // Write MCP server config for manual runs
+                let scope_mcp_bin = which::which("scope-mcp")
+                    .unwrap_or_else(|_| std::path::PathBuf::from("scope-mcp"));
+                let mcp_config = serde_json::json!({
+                    "mcpServers": {
+                        "scope": {
+                            "command": scope_mcp_bin.to_string_lossy(),
+                            "args": [],
+                            "cwd": work_dir.to_string_lossy()
+                        }
+                    }
+                });
+                std::fs::write(
+                    work_dir.join(".mcp-config.json"),
+                    serde_json::to_string_pretty(&mcp_config)?,
+                )?;
+            }
+
             let entry = serde_json::json!({
                 "task_id": task_def.task.id,
                 "category": task_def.task.category,
@@ -1539,7 +1563,12 @@ fn verify_work_dir(args: &VerifyArgs) -> Result<()> {
 /// The task ID is everything before the condition suffix.
 fn extract_task_id_from_dir_name(dir_name: &str) -> Option<String> {
     // Check longest suffix first to avoid partial match
-    let suffixes = ["-with-scope-preloaded", "-without-scope", "-with-scope"];
+    let suffixes = [
+        "-with-scope-preloaded",
+        "-without-scope",
+        "-with-scope",
+        "-with-mcp",
+    ];
     for suffix in &suffixes {
         if let Some(idx) = dir_name.find(suffix) {
             return Some(dir_name[..idx].to_string());

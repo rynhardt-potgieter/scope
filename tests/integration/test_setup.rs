@@ -57,18 +57,9 @@ fn test_setup_json_output() {
         .stdout
         .clone();
 
-    // --json emits a pretty-printed JSON envelope. Child commands (init,
-    // index) may print human-readable lines before it. Extract the JSON
-    // block that starts with the last top-level '{'.
-    let text = String::from_utf8_lossy(&output);
-    let lines: Vec<&str> = text.lines().collect();
-    let json_start = lines
-        .iter()
-        .rposition(|l| *l == "{")
-        .expect("should contain a JSON object");
-    let json_text = lines[json_start..].join("\n");
-    let json: serde_json::Value =
-        serde_json::from_str(&json_text).expect("JSON block should parse");
+    // --json must emit exactly one parseable JSON document on stdout.
+    let json: serde_json::Value = serde_json::from_slice(&output)
+        .expect("setup --json should produce a single valid JSON document");
     assert_eq!(json["command"], "setup");
     assert!(json["data"]["indexed"].as_bool().unwrap_or(false));
 }
