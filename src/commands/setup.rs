@@ -53,6 +53,39 @@ pub struct SetupArgs {
     pub json: bool,
 }
 
+/// Build the preload architecture snippet from the index.
+fn build_preload_snippet(scope_dir: &Path) -> Result<Option<String>> {
+    let db_path = scope_dir.join("graph.db");
+    if !db_path.exists() {
+        return Ok(None);
+    }
+    let graph = crate::core::graph::Graph::open(&db_path)?;
+    let stats_line = format!(
+        "{} files, {} symbols, {} edges",
+        graph.file_count()?,
+        graph.symbol_count()?,
+        graph.edge_count()?,
+    );
+    let core = graph.get_symbols_by_importance(10)?;
+    let core_lines: Vec<String> = core
+        .iter()
+        .map(|(sym, count)| format!("  {} ({}) — {} callers", sym.name, sym.file_path, count))
+        .collect();
+    let dirs = graph.get_directory_stats()?;
+    let arch_lines: Vec<String> = dirs
+        .iter()
+        .map(|(dir, files, syms)| format!("  {dir} — {files} files, {syms} symbols"))
+        .collect();
+    Ok(Some(format!(
+        "\n### Preloaded Architecture (scope map)\n\n\
+         Stats: {stats_line}\n\n\
+         Core symbols:\n{}\n\n\
+         Architecture:\n{}\n",
+        core_lines.join("\n"),
+        arch_lines.join("\n"),
+    )))
+}
+
 /// Run the `scope setup` command.
 pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let scope_dir = project_root.join(".scope");
@@ -95,11 +128,27 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
     let snippet_marker = "## Code Navigation";
 
     let existing = std::fs::read_to_string(&claude_md_path).unwrap_or_default();
-    if existing.contains(snippet_marker) {
+    let has_section = existing.contains(snippet_marker);
+    let has_preload = existing.contains("### Preloaded Architecture");
+    let needs_preload_upgrade = has_section && args.preload && !has_preload;
+
+    if has_section && !needs_preload_upgrade {
         if !args.json {
             println!("CLAUDE.md already has Code Navigation section, skipping.");
         }
+    } else if needs_preload_upgrade {
+        // Upgrade: section exists but preload is missing. Append preload block.
+        if let Some(preload_snippet) = build_preload_snippet(&scope_dir)? {
+            let mut content = existing;
+            content.push_str(&preload_snippet);
+            std::fs::write(&claude_md_path, content)?;
+            did_claude_md = true;
+            if !args.json {
+                println!("Added preloaded architecture to existing CLAUDE.md");
+            }
+        }
     } else {
+        // Fresh install: write full section + optional preload.
         let mut snippet = format!(
             "\n\n{snippet_marker}\n\n\
              This project has [Scope](https://github.com/rynhardt-potgieter/scope) CLI installed.\n\
@@ -109,40 +158,9 @@ pub fn run(args: &SetupArgs, project_root: &Path) -> Result<()> {
              `.claude/skills/code-navigation/SKILL.md` before starting.\n"
         );
 
-        // Step 4: Preload map output if requested
         if args.preload {
-            let db_path = scope_dir.join("graph.db");
-            if db_path.exists() {
-                let graph = crate::core::graph::Graph::open(&db_path)?;
-                let stats_line = format!(
-                    "{} files, {} symbols, {} edges",
-                    graph.file_count()?,
-                    graph.symbol_count()?,
-                    graph.edge_count()?,
-                );
-
-                let core = graph.get_symbols_by_importance(10)?;
-                let core_lines: Vec<String> = core
-                    .iter()
-                    .map(|(sym, count)| {
-                        format!("  {} ({}) — {} callers", sym.name, sym.file_path, count)
-                    })
-                    .collect();
-
-                let dirs = graph.get_directory_stats()?;
-                let arch_lines: Vec<String> = dirs
-                    .iter()
-                    .map(|(dir, files, syms)| format!("  {dir} — {files} files, {syms} symbols"))
-                    .collect();
-
-                snippet.push_str(&format!(
-                    "\n### Preloaded Architecture (scope map)\n\n\
-                     Stats: {stats_line}\n\n\
-                     Core symbols:\n{}\n\n\
-                     Architecture:\n{}\n",
-                    core_lines.join("\n"),
-                    arch_lines.join("\n"),
-                ));
+            if let Some(preload_snippet) = build_preload_snippet(&scope_dir)? {
+                snippet.push_str(&preload_snippet);
             }
         }
 

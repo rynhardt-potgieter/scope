@@ -46,13 +46,25 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
 
     let callers = graph.get_caller_count(&sym.id)?;
 
-    // Count outgoing calls
-    let outgoing = graph.get_outgoing_calls(&sym.id)?;
-    let dep_count = outgoing.len();
+    // Count outgoing calls (for functions/methods this is meaningful;
+    // for classes, count unique deps from all child methods).
+    let dep_count = if matches!(sym.kind.as_str(), "class" | "struct" | "interface") {
+        // Use find_deps which aggregates across all methods
+        graph
+            .find_deps(&sym.name, 1)
+            .map(|deps| deps.len())
+            .unwrap_or(0)
+    } else {
+        graph.get_outgoing_calls(&sym.id)?.len()
+    };
 
-    // For classes/structs, count methods
+    // For classes/structs, count methods (excluding properties/fields)
     let method_count = if matches!(sym.kind.as_str(), "class" | "struct" | "interface") {
-        graph.get_methods(&sym.id)?.len()
+        graph
+            .get_methods(&sym.id)?
+            .iter()
+            .filter(|m| m.kind != "property")
+            .count()
     } else {
         0
     };

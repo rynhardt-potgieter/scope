@@ -116,3 +116,42 @@ fn test_setup_idempotent() {
         "Should have exactly one Code Navigation section"
     );
 }
+
+#[test]
+fn test_setup_preload_upgrade() {
+    let (_dir, root) = fresh_fixture();
+
+    // First: setup WITHOUT preload
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["setup"])
+        .current_dir(&root)
+        .assert()
+        .success();
+
+    let claude_md = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+    assert!(claude_md.contains("Code Navigation"));
+    assert!(
+        !claude_md.contains("Preloaded Architecture"),
+        "should not have preload yet"
+    );
+
+    // Second: setup WITH preload — should upgrade
+    Command::cargo_bin("scope")
+        .unwrap()
+        .args(["setup", "--preload"])
+        .current_dir(&root)
+        .assert()
+        .success();
+
+    let claude_md = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap();
+    assert!(
+        claude_md.contains("Preloaded Architecture"),
+        "preload section should be added on upgrade"
+    );
+    assert_eq!(
+        claude_md.matches("## Code Navigation").count(),
+        1,
+        "should still have exactly one Code Navigation section"
+    );
+}

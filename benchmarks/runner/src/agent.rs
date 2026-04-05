@@ -726,7 +726,7 @@ pub(crate) fn extract_argument_summary(
 
 /// Check if a tool name is a navigation/exploration tool.
 pub(crate) fn is_navigation_tool(name: &str) -> bool {
-    matches!(name, "Read" | "Grep" | "Glob" | "Bash")
+    matches!(name, "Read" | "Grep" | "Glob" | "Bash") || name.starts_with("scope_")
 }
 
 /// Check if a tool name is a file-editing tool.

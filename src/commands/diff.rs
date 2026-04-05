@@ -76,7 +76,29 @@ pub fn run(args: &DiffArgs, project_root: &Path) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("git diff failed: {}", stderr.trim());
+        let msg = stderr.trim();
+        // Handle repos with no commits gracefully
+        if msg.contains("bad revision") {
+            if args.json {
+                let out = DiffOutput {
+                    git_ref: args.r#ref.clone(),
+                    changed_files: vec![],
+                    symbols: vec![],
+                };
+                let envelope = JsonOutput {
+                    command: "diff",
+                    symbol: None,
+                    data: &out,
+                    truncated: false,
+                    total: 0,
+                };
+                println!("{}", serde_json::to_string_pretty(&envelope)?);
+            } else {
+                println!("No commits yet — nothing to diff.");
+            }
+            return Ok(());
+        }
+        bail!("git diff failed: {}", msg);
     }
 
     let changed_files: Vec<String> = String::from_utf8_lossy(&output.stdout)

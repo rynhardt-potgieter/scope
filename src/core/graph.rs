@@ -1504,6 +1504,7 @@ impl Graph {
         target_id: &str,
         target_name: &str,
         max_depth: usize,
+        max_paths: usize,
     ) -> Result<TraceResult> {
         // Extract bare name for flexible matching
         let bare_name = self.symbol_name_from_id(target_id);
@@ -1551,6 +1552,7 @@ impl Graph {
                   AND e2.kind = 'calls'
             )
             ORDER BY t.depth, t.path
+            LIMIT ?6
         ";
 
         let mut stmt = self.conn.prepare(sql)?;
@@ -1560,7 +1562,8 @@ impl Graph {
                 bare_name,
                 like_qualified,
                 like_member,
-                max_depth as i64
+                max_depth as i64,
+                max_paths as i64,
             ],
             |row| {
                 let path: String = row.get(0)?;
