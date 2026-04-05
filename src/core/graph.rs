@@ -1523,20 +1523,32 @@ impl Graph {
 
                 UNION ALL
 
-                -- Walk backward: find who calls the current head of the path
+                -- Walk backward: find who calls the current head of the path.
+                -- Use fuzzy matching on e.to_id since edges may store bare names,
+                -- qualified names (::Name), or member names (.Name) instead of full IDs.
                 SELECT e.from_id, t.depth + 1, e.from_id || '>' || t.path
                 FROM edges e
-                JOIN trace t ON e.to_id = t.id
+                JOIN trace t ON (
+                    e.to_id = t.id
+                    OR e.to_id = REPLACE(REPLACE(t.id, RTRIM(t.id, REPLACE(t.id, '::', '')), ''), '::', '')
+                    OR t.id LIKE '%::' || e.to_id || '::%'
+                    OR t.id LIKE '%.' || e.to_id
+                )
                 WHERE e.kind = 'calls'
                   AND t.depth < ?5
                   AND INSTR('>' || t.path || '>', '>' || e.from_id || '>') = 0
             )
-            -- Return paths that terminate at entry points (no incoming calls)
+            -- Return paths that terminate at entry points (no incoming calls).
+            -- Check both exact and bare-name matches for incoming edges.
             SELECT t.path, t.depth
             FROM trace t
             WHERE NOT EXISTS (
                 SELECT 1 FROM edges e2
-                WHERE e2.to_id = t.id AND e2.kind = 'calls'
+                WHERE (e2.to_id = t.id
+                    OR e2.to_id = REPLACE(REPLACE(t.id, RTRIM(t.id, REPLACE(t.id, '::', '')), ''), '::', '')
+                    OR t.id LIKE '%::' || e2.to_id || '::%'
+                    OR t.id LIKE '%.' || e2.to_id)
+                  AND e2.kind = 'calls'
             )
             ORDER BY t.depth, t.path
         ";

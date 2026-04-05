@@ -17,12 +17,14 @@ use crate::runner;
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SymbolParam {
     #[schemars(description = "Symbol name (e.g. PaymentService, Graph.find_symbol)")]
     pub symbol: String,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct FindParam {
     #[schemars(description = "Natural language search query")]
     pub query: String,
@@ -33,6 +35,7 @@ pub struct FindParam {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RefsParam {
     #[schemars(description = "Symbol name")]
     pub symbol: String,
@@ -41,6 +44,7 @@ pub struct RefsParam {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CallersParam {
     #[schemars(description = "Symbol name")]
     pub symbol: String,
@@ -49,6 +53,7 @@ pub struct CallersParam {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DepsParam {
     #[schemars(description = "Symbol name")]
     pub symbol: String,
@@ -57,18 +62,21 @@ pub struct DepsParam {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DiffParam {
     #[schemars(description = "Git ref to compare against (default: HEAD)")]
     pub git_ref: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct TraceParam {
     #[schemars(description = "Symbol name to trace entry paths to")]
     pub symbol: String,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct FlowParam {
     #[schemars(description = "Source symbol — where the path starts")]
     pub start: String,
@@ -79,6 +87,7 @@ pub struct FlowParam {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct MapParam {
     #[schemars(description = "Maximum core symbols to show (default: 10)")]
     pub limit: Option<usize>,

@@ -183,6 +183,14 @@ pub fn parse_ndjson_actions(ndjson_text: &str) -> NdjsonParseResult {
                         }
                     }
                 }
+                // MCP tool calls: scope_status, scope_map, scope_sketch, etc.
+                other if other.starts_with("scope_") => {
+                    is_scope_cmd = true;
+                    let scope_cmd = format!("scope {}", other.strip_prefix("scope_").unwrap_or(other));
+                    if !scope_commands_called.contains(&scope_cmd) {
+                        scope_commands_called.push(scope_cmd);
+                    }
+                }
                 _ => {}
             }
 
@@ -540,6 +548,14 @@ pub fn run_agent(
                                 scope_commands_called.push(scope_cmd);
                             }
                         }
+                    }
+                }
+                // MCP tool calls: scope_status, scope_map, etc.
+                other if other.starts_with("scope_") => {
+                    is_scope_cmd = true;
+                    let scope_cmd = format!("scope {}", other.strip_prefix("scope_").unwrap_or(other));
+                    if !scope_commands_called.contains(&scope_cmd) {
+                        scope_commands_called.push(scope_cmd);
                     }
                 }
                 _ => {}

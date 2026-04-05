@@ -134,8 +134,12 @@ fn sketch_class(
     let caller_counts = graph.get_caller_counts(&method_ids)?;
 
     if args.json || args.compact {
-        let (fields, actual_methods): (Vec<_>, Vec<_>) =
+        let (fields, all_methods): (Vec<_>, Vec<_>) =
             methods.iter().partition(|m| m.kind == "property");
+        let truncated = all_methods.len() > args.limit;
+        let total = all_methods.len();
+        let actual_methods: Vec<_> = all_methods.into_iter().take(args.limit).collect();
+
         let field_data: Vec<serde_json::Value> = fields
             .iter()
             .map(|f| {
@@ -167,8 +171,8 @@ fn sketch_class(
             command: "sketch",
             symbol: Some(symbol.name.clone()),
             data,
-            truncated: methods.len() > args.limit,
-            total: methods.len(),
+            truncated,
+            total,
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
@@ -235,10 +239,13 @@ fn sketch_interface(
         } else {
             serde_json::json!(symbol)
         };
+        let truncated = methods.len() > args.limit;
+        let total = methods.len();
+        let limited: Vec<_> = methods.iter().take(args.limit).collect();
         let meths = if args.compact {
-            serde_json::json!(compact_symbols(&methods.iter().collect::<Vec<_>>()))
+            serde_json::json!(compact_symbols(&limited))
         } else {
-            serde_json::json!(methods)
+            serde_json::json!(limited)
         };
         let data = serde_json::json!({
             "symbol": sym,
@@ -249,8 +256,8 @@ fn sketch_interface(
             command: "sketch",
             symbol: Some(symbol.name.clone()),
             data,
-            truncated: methods.len() > args.limit,
-            total: methods.len(),
+            truncated,
+            total,
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {

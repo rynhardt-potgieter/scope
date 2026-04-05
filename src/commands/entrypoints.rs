@@ -202,48 +202,27 @@ fn run_workspace(
         .collect();
 
     let wg = WorkspaceGraph::open(members)?;
-    let ws_entrypoints = wg.get_entrypoints();
 
-    // Build workspace-aware grouped output: group by project, then by type.
+    // Build workspace-aware grouped output using collapse_and_group per member
+    // so class entry points are collapsed consistently with single-project mode.
     let mut all_groups: Vec<(String, Vec<EntrypointInfo>)> = Vec::new();
     let mut total = 0usize;
     let mut file_count = 0usize;
 
-    for (project_name, entries) in &ws_entrypoints {
-        // Tag entrypoint names with project prefix
-        let infos: Vec<EntrypointInfo> = entries
-            .iter()
-            .map(|(sym, outgoing)| EntrypointInfo {
-                name: format!("{project_name}::{}", sym.name),
-                file_path: sym.file_path.clone(),
-                method_count: 0,
-                outgoing_call_count: *outgoing,
-                kind: sym.kind.clone(),
-            })
-            .collect();
+    for member in wg.members() {
+        let raw = member.graph.get_entrypoints().unwrap_or_default();
+        let (member_groups, member_total, member_files) = collapse_and_group(&raw, &member.graph);
 
-        let unique_files: std::collections::HashSet<&str> =
-            infos.iter().map(|e| e.file_path.as_str()).collect();
-        file_count += unique_files.len();
-        total += infos.len();
+        total += member_total;
+        file_count += member_files;
 
-        // Group by type within this project
-        let group_order = [
-            "API Controllers",
-            "Background Workers",
-            "Event Handlers",
-            "Other",
-        ];
-        for &group_name in &group_order {
-            let group_label = format!("{project_name} \u{2014} {group_name}");
-            let group_members: Vec<EntrypointInfo> = infos
-                .iter()
-                .filter(|e| classify_group(&e.file_path) == group_name)
-                .cloned()
-                .collect();
-            if !group_members.is_empty() {
-                all_groups.push((group_label, group_members));
+        for (group_name, mut entries) in member_groups {
+            // Prefix names with project name for workspace display
+            for info in &mut entries {
+                info.name = format!("{}::{}", member.name, info.name);
             }
+            let label = format!("{} \u{2014} {group_name}", member.name);
+            all_groups.push((label, entries));
         }
     }
 

@@ -80,7 +80,7 @@ pub fn run(args: &SummaryArgs, project_root: &Path) -> Result<()> {
     } else {
         let sig = sym.signature.as_deref().unwrap_or("");
         let sig_short = sig.lines().next().unwrap_or(sig);
-        let lines = sym.line_end - sym.line_start + 1;
+        let lines = sym.line_end.saturating_sub(sym.line_start) + 1;
         let mut parts = vec![format!(
             "{} ({})  {}:{}–{}  {} lines",
             sym.name, sym.kind, sym.file_path, sym.line_start, sym.line_end, lines,

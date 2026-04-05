@@ -239,6 +239,7 @@ impl WorkspaceGraph {
     /// Get entry points from all workspace members.
     ///
     /// Returns a vec of `(project_name, entrypoints)` for each member.
+    #[allow(dead_code)] // Part of workspace facade
     pub fn get_entrypoints(&self) -> Vec<(String, Vec<(Symbol, usize)>)> {
         let mut results = Vec::new();
 

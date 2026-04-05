@@ -91,6 +91,10 @@ fn test_setup_idempotent() {
         .assert()
         .success();
 
+    // Read CLAUDE.md after first run
+    let claude_md_first = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap_or_default();
+    let count_first = claude_md_first.matches("## Code Navigation").count();
+
     // Second run should skip init and not duplicate CLAUDE.md section
     Command::cargo_bin("scope")
         .unwrap()
@@ -99,4 +103,16 @@ fn test_setup_idempotent() {
         .assert()
         .success()
         .stdout(contains("already initialised"));
+
+    // Verify CLAUDE.md wasn't duplicated
+    let claude_md_second = std::fs::read_to_string(root.join("CLAUDE.md")).unwrap_or_default();
+    let count_second = claude_md_second.matches("## Code Navigation").count();
+    assert_eq!(
+        count_first, count_second,
+        "CLAUDE.md should not have duplicate Code Navigation sections"
+    );
+    assert_eq!(
+        count_second, 1,
+        "Should have exactly one Code Navigation section"
+    );
 }

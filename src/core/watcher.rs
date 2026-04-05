@@ -159,42 +159,65 @@ impl WatchLock {
     }
 
     /// Acquire the watch lock. Fails if another watcher is running.
+    ///
+    /// Uses atomic file creation (`create_new`) to prevent TOCTOU races
+    /// between concurrent `scope index --watch` processes.
     pub fn acquire(&self) -> Result<()> {
-        if self.lock_path.exists() {
-            let content = match std::fs::read_to_string(&self.lock_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!("Cannot read lock file: {e}. Treating as stale.");
-                    String::new()
-                }
-            };
-            let pid_str = content.trim();
-
-            if !pid_str.is_empty() {
-                match pid_str.parse::<u32>() {
-                    Ok(pid) => {
-                        if is_process_alive(pid) {
-                            bail!(
-                                "Another watcher is running (PID {pid}). \
-                                 Stop it first or remove .scope/.watch.lock"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Lock file contains invalid PID '{}': {e}. Treating as stale.",
-                            pid_str
-                        );
-                    }
-                }
-            }
-            // Stale lock file — remove it
-            tracing::warn!("Removing stale watch lock file");
-        }
+        use std::fs::OpenOptions;
+        use std::io::Write;
 
         let current_pid = std::process::id();
-        std::fs::write(&self.lock_path, current_pid.to_string())
-            .with_context(|| format!("Failed to write lock file: {}", self.lock_path.display()))?;
+
+        // Try atomic create — fails if file already exists.
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&self.lock_path)
+        {
+            Ok(mut f) => {
+                write!(f, "{current_pid}")?;
+                return Ok(());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // Lock file exists — check if the holder is still alive.
+            }
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("Failed to create lock: {}", self.lock_path.display())
+                });
+            }
+        }
+
+        // Lock file exists. Read PID and check liveness.
+        let content = match std::fs::read_to_string(&self.lock_path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Cannot read lock file: {e}. Treating as stale.");
+                String::new()
+            }
+        };
+        let pid_str = content.trim();
+
+        if !pid_str.is_empty() {
+            if let Ok(pid) = pid_str.parse::<u32>() {
+                if is_process_alive(pid) {
+                    bail!(
+                        "Another watcher is running (PID {pid}). \
+                         Stop it first or remove .scope/.watch.lock"
+                    );
+                }
+            }
+        }
+
+        // Stale lock — remove and retry atomically.
+        tracing::warn!("Removing stale watch lock file");
+        std::fs::remove_file(&self.lock_path).ok();
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&self.lock_path)
+            .with_context(|| "Failed to acquire lock after removing stale file")?;
+        write!(f, "{current_pid}")?;
 
         Ok(())
     }
