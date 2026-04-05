@@ -22,8 +22,10 @@ impl ServerHandler for ScopeMcp {
             instructions: Some(
                 "Scope provides code intelligence for LLM agents. \
                  Use scope_status first to check index health. \
-                 Use scope_map for repo overview, scope_sketch before editing, \
-                 scope_find for search, scope_callers for blast radius."
+                 Use scope_map for repo overview, scope_summary for a quick \
+                 'what is this?' (~30 tokens), scope_sketch for full structure \
+                 before editing (~200 tokens), scope_find for search, \
+                 scope_callers for blast radius."
                     .to_string(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
