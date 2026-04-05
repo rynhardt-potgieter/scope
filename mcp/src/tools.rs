@@ -64,7 +64,10 @@ pub struct DepsParam {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DiffParam {
-    #[schemars(description = "Git ref to compare against (default: HEAD)")]
+    #[serde(alias = "ref")]
+    #[schemars(
+        description = "Git ref to compare against (default: HEAD). Accepts both 'git_ref' and 'ref' as field names."
+    )]
     pub git_ref: Option<String>,
 }
 
