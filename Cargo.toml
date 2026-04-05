@@ -13,7 +13,7 @@ homepage = "https://github.com/rynhardt-potgieter/scope"
 readme = "README.md"
 keywords = ["cli", "code-intelligence", "tree-sitter", "llm", "code-navigation"]
 categories = ["command-line-utilities", "development-tools"]
-exclude = ["benchmarks/", "docs/", "skills/", ".claude/", ".github/", "overview/", "project.md"]
+exclude = ["benchmarks/", "docs/", ".claude/", ".github/", "overview/", "project.md"]
 
 [[bin]]
 name = "scope"
